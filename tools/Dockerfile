@@ -3,6 +3,10 @@
 # =======================================================================================
 FROM ros:humble
 
+RUN sed -i 's/archive.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list && \
+    sed -i 's/security.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
+
+
 ENV DEBIAN_FRONTEND noninteractive
 ARG USER_UID=1000
 ARG USER_GID=1000

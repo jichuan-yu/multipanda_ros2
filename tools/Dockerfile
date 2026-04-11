@@ -38,7 +38,7 @@ RUN apt-get update && apt-get install -y python3-pip && \
 # Remove pip warning update messages
 ENV PIP_DISABLE_PIP_VERSION_CHECK 1
 
-RUN python3 -m pip install -U \
+RUN apt-get install -y python3.10-venv && python3 -m venv /home/developer/myenv && . /home/developer/myenv/bin/activate && pip install -U \
     argcomplete pyserial \
     matplotlib scipy playsound panda-python pytest
 
@@ -48,6 +48,8 @@ RUN python3 -m pip install -U \
 
 # Switch to root to install dependencies and system-level libraries
 USER root
+RUN git config --global http.proxy http://172.17.0.1:7897 && \
+    git config --global https.proxy http://172.17.0.1:7897
 RUN mkdir -p $HOME_DIR/Libraries $HOME_DIR/source_code
 WORKDIR $HOME_DIR/source_code
 

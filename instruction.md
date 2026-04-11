@@ -1,0 +1,6 @@
+我是需要利用这个项目的工程师
+现在franka_bringup/config/sim/dual_sim_controllers.yaml中没有subscriber下的控制器
+我希望你为我修改此yaml文件并添加
+（如果dual_sim_controllers.yaml环境与subcriber下的控制器不匹配，则改为修改franka_bringup/config/sim/single_sim_controllers.yaml）
+接着，为我写一个自动化脚本以持续pub msg控制机械臂运动
+添加控制器后，请告诉我从进入docker容器到机械臂开始运动所需要的全部指令执行指南

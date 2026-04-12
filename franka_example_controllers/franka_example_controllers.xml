@@ -87,4 +87,9 @@
             The franka model example controller evaluates and prints the dynamic model ofFranka Robotics Robots.
         </description>
     </class>
+    <class name="franka_example_controllers/MultiCartesianImpedanceController" type="franka_example_controllers::MultiCartesianImpedanceController" base_class_type="controller_interface::ControllerInterface">
+        <description>
+            A controller that allows to command multiple arms in cartesian space
+        </description>
+    </class>
 </library>

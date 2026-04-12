@@ -25,6 +25,8 @@ controller_manager:
       type: franka_robot_state_broadcaster/FrankaRobotStateBroadcaster
     franka_left_robot_model_broadcaster:
       type: franka_robot_state_broadcaster/FrankaRobotModelBroadcaster
+    multi_cartesian_impedance_controller:
+      type: franka_example_controllers/MultiCartesianImpedanceController
     dual_joint_impedance_controller:
       type: franka_example_controllers/MultiJointImpedanceController
     franka_right_robot_model_broadcaster:
@@ -166,3 +168,15 @@ dual_joint_impedance_controller:
         - 1.0
         - 1.0
         - 0.5
+
+multi_cartesian_impedance_controller:
+  ros__parameters:
+    arm_count: 2
+    arm_1:
+      arm_id: mj_left
+      pos_stiff: 100.0
+      rot_stiff: 10.0
+    arm_2:
+      arm_id: mj_right
+      pos_stiff: 100.0
+      rot_stiff: 10.0

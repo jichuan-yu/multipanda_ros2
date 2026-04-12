@@ -43,6 +43,7 @@ add_library(
         src/subscriber/cartesian_impedance_controller.cpp
         src/subscriber/joint_impedance_controller.cpp
         src/subscriber/multi_joint_impedance_controller.cpp
+        src/subscriber/multi_cartesian_impedance_controller.cpp
         )
         
 

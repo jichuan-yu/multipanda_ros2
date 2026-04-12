@@ -1,5 +1,11 @@
 <library path="franka_example_controllers">
     <!-- Subscriber controllers - They provide a basic subscriber to move the robot to a desired pose. -->
+    <class name="franka_example_controllers/MultiJointImpedanceController"
+           type="franka_example_controllers::MultiJointImpedanceController" base_class_type="controller_interface::ControllerInterface">
+        <description>
+            The multi joint impedance controller subscribes to desired joint position for dual arms.
+        </description>
+    </class>
     <class name="franka_example_controllers/JointImpedanceController"
            type="franka_example_controllers::JointImpedanceController" base_class_type="controller_interface::ControllerInterface">
         <description>

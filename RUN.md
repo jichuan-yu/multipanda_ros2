@@ -14,6 +14,7 @@
 ```bash
 # 1. 编译工作空间下的包
 colcon build
+或者 colcon build --packages-select franka_bringup
 
 # 2. Source 环境变量
 source install/setup.bash

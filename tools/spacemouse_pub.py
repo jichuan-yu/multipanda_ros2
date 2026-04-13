@@ -1,0 +1,194 @@
+#!/usr/bin/env python3
+
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import Float64MultiArray
+import numpy as np
+import math
+import time
+import threading
+
+import socket
+import struct
+import pyspacemouse
+
+def euler_to_matrix(rx, ry, rz):
+    cz, sz = math.cos(rz), math.sin(rz)
+    cy, sy = math.cos(ry), math.sin(ry)
+    cx, sx = math.cos(rx), math.sin(rx)
+    Rx = np.array([[1,  0,   0],
+                   [0, cx, -sx],
+                   [0, sx,  cx]])
+    Ry = np.array([[cy,  0, sy],
+                   [ 0,  1,  0],
+                   [-sy, 0, cy]])
+    Rz = np.array([[cz, -sz, 0],
+                   [sz,  cz, 0],
+                   [ 0,   0, 1]])
+    return Rz @ Ry @ Rx
+
+class SpaceMouseTeleopNode(Node):
+    def __init__(self):
+        super().__init__('spacemouse_teleop')
+        self.set_parameters([rclpy.Parameter('use_sim_time', rclpy.Parameter.Type.BOOL, True)])
+        
+        self.publisher = self.create_publisher(
+            Float64MultiArray, 
+            '/multi_cartesian_impedance/pose_desired', 
+            10
+        )
+        
+        T_left = np.eye(4)
+        T_left[0:3, 0:3] = euler_to_matrix(math.pi, 0.0, 0.0)
+        T_left[0:3, 3] = [0.3, 0.2, 0.5]
+        
+        T_right = np.eye(4)
+        T_right[0:3, 0:3] = euler_to_matrix(math.pi, 0.0, 0.0)
+        T_right[0:3, 3] = [0.3, -0.2, 0.5]
+        
+        self.poses = {
+            'left': T_left,
+            'right': T_right
+        }
+        self.selected_arm = 'left'
+        
+        # Scale pos correctly (using pyspacemouse processed scaling, similar range -1 to 1) 
+        self.scale_pos = 0.007
+        self.scale_rot = 0.035
+        self.deadzone = 0.05
+        
+        # We manually instantiate a dummy device from pyspacemouse so we can use its process(data) method.
+        # In this case we just use SpaceNavigator spec to interpret our raw bytes later.
+        self.dev_spec = pyspacemouse.device_specs["SpaceMouse Compact"]
+        
+        # Initialize internal state of dev_spec
+        self.dev_spec.dict_state = {
+            "t": -1,
+            "x": 0, "y": 0, "z": 0,
+            "roll": 0, "pitch": 0, "yaw": 0,
+            "buttons": pyspacemouse.ButtonState([0] * len(self.dev_spec.button_mapping)),
+        }
+        self.dev_spec.tuple_state = pyspacemouse.SpaceNavigator(**self.dev_spec.dict_state)
+        
+        # Raw UNIX socket setup to talk to spacenavd directly
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            self.sock.connect('/var/run/spnav.sock')
+        except Exception as e:
+            self.get_logger().error(f"Could not connect to spacenavd. Ensure /var/run/spnav.sock is mounted! Error: {e}")
+            exit(1)
+
+        self.get_logger().info('SpaceMouse publisher (via direct socket -> pyspacemouse) initialized!')
+        self.get_logger().info('Button 0 (Left) -> Select Left Arm')
+        self.get_logger().info('Button 1 (Right) -> Select Right Arm')
+        
+        self.prev_left_pressed = False
+        self.prev_right_pressed = False
+
+    def process_raw_data(self, data):
+        if len(data) == 0: return
+        
+        # feed raw data to the pyspacemouse spec to convert it
+        self.dev_spec.process(data)
+        
+        state = self.dev_spec.tuple_state
+        if not state:
+            return
+
+        try:
+            is_left_pressed = bool(state.buttons[0])
+        except IndexError:
+            is_left_pressed = False
+            
+        try:
+            is_right_pressed = bool(state.buttons[1])
+        except IndexError:
+            is_right_pressed = False
+        
+        if is_left_pressed and not self.prev_left_pressed:
+            self.selected_arm = 'left'
+            self.get_logger().info('Switched to LEFT arm')
+        elif is_right_pressed and not self.prev_right_pressed:
+            self.selected_arm = 'right'
+            self.get_logger().info('Switched to RIGHT arm')
+            
+        self.prev_left_pressed = is_left_pressed
+        self.prev_right_pressed = is_right_pressed
+
+        def apply_dz(val):
+            return val if abs(val) > self.deadzone else 0.0
+
+        # Mapping to robot cartesian offsets 
+        dx = apply_dz(state.y) * self.scale_pos
+        dy = apply_dz(state.x) * self.scale_pos
+        dz = apply_dz(-state.z) * self.scale_pos
+        
+        drx = apply_dz(state.pitch) * self.scale_rot
+        dry = apply_dz(-state.roll) * self.scale_rot
+        drz = apply_dz(-state.yaw) * self.scale_rot
+        
+        if any([dx, dy, dz, drx, dry, drz]):
+            dT = np.eye(4)
+            dT[0:3, 0:3] = euler_to_matrix(drx, dry, drz)
+            dT[0:3, 3] = [dx, dy, dz]
+            self.poses[self.selected_arm] = self.poses[self.selected_arm] @ dT
+
+    def get_pose_array(self, arm_name):
+        arr = []
+        arm_T = self.poses[arm_name]
+        arr.extend(arm_T[0:3, 3].tolist())
+        arr.extend(arm_T[0:3, 0:3].flatten().tolist())
+        return arr
+
+    def timer_callback(self):
+        msg = Float64MultiArray()
+        data = []
+        data.extend(self.get_pose_array('left'))
+        data.extend(self.get_pose_array('right'))
+        if data[0] == 0.0: data[0] = 0.001
+        msg.data = data
+        self.publisher.publish(msg)
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = SpaceMouseTeleopNode()
+    
+    node.create_timer(0.02, node.timer_callback)
+    
+    stop_event = threading.Event()
+    def spacemouse_loop():
+        # Process chunks of exactly 32 bytes (which is the mapping format expected for raw custom byte arrays)
+        while not stop_event.is_set():
+            try:
+                data = node.sock.recv(1024)
+                if not data:
+                    time.sleep(0.01)
+                    continue
+                # Assuming the incoming data is the 32 bytes matching pyspacemouse HID specification
+                # Note: If it's pure 32 bytes, chunks size might need adjusting to match length exactly.
+                # However, if it's the raw USB HID byte sequences being read via socat, we should pass them dynamically
+                # Let's pass the 32 byte chunks just like original "instruction.md" method if that's what was happening.
+                chunks = [data[i:i+32] for i in range(0, len(data), 32)]
+                for chunk in chunks:
+                    if len(chunk) == 32:
+                        node.process_raw_data(chunk)
+            except Exception:
+                time.sleep(0.01)
+            
+    sm_thread = threading.Thread(target=spacemouse_loop, daemon=True)
+    sm_thread.start()
+    
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        stop_event.set()
+        sm_thread.join(timeout=1.0)
+        node.sock.close()
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()

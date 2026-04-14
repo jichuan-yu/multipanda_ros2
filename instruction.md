@@ -1,2 +1,0 @@
-我在docker外部人工测试tools/spacemouse_test.py确定得到了我想要的结果
-请为我修改tools/spacemouse_pub.py，其在docker外部运行，利用pyspacemouse解析数据并向docker内的topic发送msg

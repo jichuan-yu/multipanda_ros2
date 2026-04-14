@@ -51,7 +51,7 @@ class SpaceMouseTeleopNode(Node):
         self.selected_arm = 'left'
         
         # Scale pos correctly (using pyspacemouse processed scaling, similar range -1 to 1) 
-        self.scale_pos = 0.0000035
+        self.scale_pos = 0.0000007
         self.scale_rot = 0.0000035
         self.deadzone = 0.05
         
@@ -104,17 +104,22 @@ class SpaceMouseTeleopNode(Node):
         # Mapping to robot cartesian offsets 
         dx = apply_dz(state.y) * self.scale_pos
         dy = apply_dz(state.x) * self.scale_pos
-        dz = apply_dz(-state.z) * self.scale_pos
+        dz = apply_dz(state.z) * self.scale_pos
         
         drx = apply_dz(state.pitch) * self.scale_rot
         dry = apply_dz(-state.roll) * self.scale_rot
         drz = apply_dz(-state.yaw) * self.scale_rot
         
         if any([dx, dy, dz, drx, dry, drz]):
-            dT = np.eye(4)
-            dT[0:3, 0:3] = euler_to_matrix(drx, dry, drz)
-            dT[0:3, 3] = [dx, dy, dz]
-            self.poses[self.selected_arm] = self.poses[self.selected_arm] @ dT
+            R_delta = euler_to_matrix(drx, dry, drz)
+            
+            # 基于基座坐标系（全局坐标系）进行平移
+            self.poses[self.selected_arm][0, 3] += dx
+            self.poses[self.selected_arm][1, 3] += dy
+            self.poses[self.selected_arm][2, 3] += dz
+            
+            # 基于基座坐标系（以当前末端位置为旋转中心）进行旋转
+            self.poses[self.selected_arm][0:3, 0:3] = R_delta @ self.poses[self.selected_arm][0:3, 0:3]
 
     def get_pose_array(self, arm_name):
         arr = []
@@ -136,7 +141,7 @@ def main(args=None):
     rclpy.init(args=args)
     node = SpaceMouseTeleopNode()
     
-    node.create_timer(0.02, node.timer_callback)
+    node.create_timer(0.01, node.timer_callback)
     
     stop_event = threading.Event()
     def spacemouse_loop():

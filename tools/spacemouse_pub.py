@@ -8,8 +8,6 @@ import math
 import time
 import threading
 
-import socket
-import struct
 import pyspacemouse
 
 def euler_to_matrix(rx, ry, rz):
@@ -53,47 +51,32 @@ class SpaceMouseTeleopNode(Node):
         self.selected_arm = 'left'
         
         # Scale pos correctly (using pyspacemouse processed scaling, similar range -1 to 1) 
-        self.scale_pos = 0.007
-        self.scale_rot = 0.035
+        self.scale_pos = 0.0000035
+        self.scale_rot = 0.0000035
         self.deadzone = 0.05
         
-        # We manually instantiate a dummy device from pyspacemouse so we can use its process(data) method.
-        # In this case we just use SpaceNavigator spec to interpret our raw bytes later.
-        self.dev_spec = pyspacemouse.device_specs["SpaceMouse Compact"]
-        
-        # Initialize internal state of dev_spec
-        self.dev_spec.dict_state = {
-            "t": -1,
-            "x": 0, "y": 0, "z": 0,
-            "roll": 0, "pitch": 0, "yaw": 0,
-            "buttons": pyspacemouse.ButtonState([0] * len(self.dev_spec.button_mapping)),
-        }
-        self.dev_spec.tuple_state = pyspacemouse.SpaceNavigator(**self.dev_spec.dict_state)
-        
-        # Raw UNIX socket setup to talk to spacenavd directly
-        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        try:
-            self.sock.connect('/var/run/spnav.sock')
-        except Exception as e:
-            self.get_logger().error(f"Could not connect to spacenavd. Ensure /var/run/spnav.sock is mounted! Error: {e}")
+        success = pyspacemouse.open()
+        if not success:
+            self.get_logger().error("Could not connect to spacemouse. Ensure HID access!")
             exit(1)
 
-        self.get_logger().info('SpaceMouse publisher (via direct socket -> pyspacemouse) initialized!')
+        self.get_logger().info('SpaceMouse publisher (via native pyspacemouse) initialized!')
         self.get_logger().info('Button 0 (Left) -> Select Left Arm')
         self.get_logger().info('Button 1 (Right) -> Select Right Arm')
         
         self.prev_left_pressed = False
         self.prev_right_pressed = False
 
-    def process_raw_data(self, data):
-        if len(data) == 0: return
-        
-        # feed raw data to the pyspacemouse spec to convert it
-        self.dev_spec.process(data)
-        
-        state = self.dev_spec.tuple_state
+    def process_state(self, state):
         if not state:
             return
+
+        is_idle = (state.x == 0.0 and state.y == 0.0 and state.z == 0.0 and 
+                   state.roll == 0.0 and state.pitch == 0.0 and state.yaw == 0.0 and 
+                   not any(state.buttons))
+        
+        if not is_idle:
+            print(f"[Pyspacemouse State] x: {state.x:.3f}, y: {state.y:.3f}, z: {state.z:.3f}, roll: {state.roll:.3f}, pitch: {state.pitch:.3f}, yaw: {state.yaw:.3f}, buttons: {state.buttons}")
 
         try:
             is_left_pressed = bool(state.buttons[0])
@@ -157,23 +140,15 @@ def main(args=None):
     
     stop_event = threading.Event()
     def spacemouse_loop():
-        # Process chunks of exactly 32 bytes (which is the mapping format expected for raw custom byte arrays)
         while not stop_event.is_set():
             try:
-                data = node.sock.recv(1024)
-                if not data:
-                    time.sleep(0.01)
-                    continue
-                # Assuming the incoming data is the 32 bytes matching pyspacemouse HID specification
-                # Note: If it's pure 32 bytes, chunks size might need adjusting to match length exactly.
-                # However, if it's the raw USB HID byte sequences being read via socat, we should pass them dynamically
-                # Let's pass the 32 byte chunks just like original "instruction.md" method if that's what was happening.
-                chunks = [data[i:i+32] for i in range(0, len(data), 32)]
-                for chunk in chunks:
-                    if len(chunk) == 32:
-                        node.process_raw_data(chunk)
+                state = pyspacemouse.read()
+                if state:
+                    node.process_state(state)
+                else:
+                    time.sleep(0.001)
             except Exception:
-                time.sleep(0.01)
+                time.sleep(0.001)
             
     sm_thread = threading.Thread(target=spacemouse_loop, daemon=True)
     sm_thread.start()
@@ -185,7 +160,7 @@ def main(args=None):
     finally:
         stop_event.set()
         sm_thread.join(timeout=1.0)
-        node.sock.close()
+        pyspacemouse.close()
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

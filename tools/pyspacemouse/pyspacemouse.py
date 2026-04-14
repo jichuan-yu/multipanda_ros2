@@ -1,3 +1,4 @@
+from easyhid import Enumeration, HIDException
 from collections import namedtuple
 import timeit
 import copy

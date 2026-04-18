@@ -60,10 +60,32 @@ def generate_launch_description():
     except:
         pass
 
+    import re
+    with open(mj_dual_path, 'r') as f:
+        mj_dual_text = f.read()
+    
+    # Inject left arm camera into mj_left_hand
+    mj_dual_text = re.sub(
+        r'(<body name="mj_left_hand"[^>]*>)', 
+        r'\1\n                        <camera name="left_arm_cam" pos="0.05 0 0.05" xyaxes="0 -1 0 1 0 0" fovy="60"/>', 
+        mj_dual_text
+    )
+    # Inject right arm camera into mj_right_hand
+    mj_dual_text = re.sub(
+        r'(<body name="mj_right_hand"[^>]*>)', 
+        r'\1\n                        <camera name="right_arm_cam" pos="0.05 0 0.05" xyaxes="0 -1 0 1 0 0" fovy="60"/>', 
+        mj_dual_text
+    )
+    
+    dynamic_mj_dual_path = os.path.join(task_run_dir, 'mj_dual_dynamic.xml')
+    with open(dynamic_mj_dual_path, 'w') as f:
+        f.write(mj_dual_text)
+
     # Generate custom mujoco xml
     xml_content = f"""<mujoco model="my_task_scene">
-  <!-- Load the original models directly via absolute path -->
-  <include file="{mj_dual_path}"/>
+
+  <!-- Load the dynamically modified mj_dual model with tracking cameras -->
+  <include file="{dynamic_mj_dual_path}"/>
   <include file="{objects_path}"/>
 
   <!-- Visual/Environment Settings -->
@@ -92,6 +114,9 @@ def generate_launch_description():
   <worldbody>
     <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
     <geom name="floor" size="0 0 0.05" pos="0 0 0" type="plane" material="groundplane"/>
+    
+    <!-- World cameras -->
+    <camera name="fixed_cam" pos="1.5 0.0 0.5" xyaxes="0 1 0 -0.5 0 1" fovy="60"/>
     
     <!-- Custom Camera Parts (example positions) -->
     <body name="camera_part1" pos="0.5 0.0 0.05">

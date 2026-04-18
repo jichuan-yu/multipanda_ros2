@@ -21,8 +21,8 @@ class CameraViewerNode(Node):
         # Use an ApproximateTimeSynchronizer to sync messages from all three cameras
         self.ts = message_filters.ApproximateTimeSynchronizer(
             [self.sub_left, self.sub_fixed, self.sub_right], 
-            queue_size=10, 
-            slop=0.1
+            queue_size=2, 
+            slop=0.5
         )
         self.ts.registerCallback(self.sync_callback)
 
@@ -37,7 +37,7 @@ class CameraViewerNode(Node):
             
             # Make sure they have the same height for hstack
             # Assuming they are the same size, but let's resize to fixed height if needed
-            target_height = 480
+            target_height = 240
             def resize_img(img):
                 h, w = img.shape[:2]
                 new_w = int((target_height / h) * w)

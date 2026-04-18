@@ -67,13 +67,13 @@ def generate_launch_description():
     # Inject left arm camera into mj_left_hand
     mj_dual_text = re.sub(
         r'(<body name="mj_left_hand"[^>]*>)', 
-        r'\1\n                        <camera name="left_arm_cam" pos="0.05 0 0.05" xyaxes="0 -1 0 1 0 0" fovy="60"/>', 
+        r'\1\n                        <camera name="left_arm_cam" pos="0.08 0 0.03" xyaxes="0 -1 0 -0.676 0 -0.736" fovy="60"/>', 
         mj_dual_text
     )
     # Inject right arm camera into mj_right_hand
     mj_dual_text = re.sub(
         r'(<body name="mj_right_hand"[^>]*>)', 
-        r'\1\n                        <camera name="right_arm_cam" pos="0.05 0 0.05" xyaxes="0 -1 0 1 0 0" fovy="60"/>', 
+        r'\1\n                        <camera name="right_arm_cam" pos="0.08 0 0.03" xyaxes="0 -1 0 -0.676 0 -0.736" fovy="60"/>', 
         mj_dual_text
     )
     
@@ -93,7 +93,7 @@ def generate_launch_description():
   <visual>
     <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0"/>
     <rgba haze="0.15 0.25 0.35 1"/>
-    <global azimuth="120" elevation="-20"/>
+    <global azimuth="120" elevation="-20" offwidth="640" offheight="480"/>
   </visual>
 
   <!-- Ground plane & Skybox -->
@@ -116,7 +116,7 @@ def generate_launch_description():
     <geom name="floor" size="0 0 0.05" pos="0 0 0" type="plane" material="groundplane"/>
     
     <!-- World cameras -->
-    <camera name="fixed_cam" pos="1.5 0.0 0.5" xyaxes="0 1 0 -0.5 0 1" fovy="60"/>
+    <camera name="fixed_cam" pos="1.3 0.0 0.8" xyaxes="0 1 0 -0.5 0 1" fovy="60"/>
     
     <!-- Custom Camera Parts (example positions) -->
     <body name="camera_part1" pos="0.5 0.0 0.05">
@@ -138,8 +138,34 @@ def generate_launch_description():
     xml_file = temp_xml_path
 
     franka_xacro_file = os.path.join(franka_desc_dir, 'robots', 'sim', "dual_panda_arm_sim.urdf.xacro")
+
     mjros_config_file = os.path.join(franka_bringup_path, 'config', 'sim', 'dual_sim_controllers.yaml')
+
+
+    import yaml
+    with open(mjros_config_file, 'r') as f:
+        merged_config = yaml.safe_load(f)
+    
+    if 'mujoco_server' not in merged_config:
+        merged_config['mujoco_server'] = {'ros__parameters': {}}
+    if 'ros__parameters' not in merged_config['mujoco_server']:
+        merged_config['mujoco_server']['ros__parameters'] = {}
+        
+    merged_config['mujoco_server']['ros__parameters']['cam_config'] = {
+        'fixed_cam': {'stream_type': 1, 'frequency': 5.0, 'width': 160, 'height': 120},
+        'left_arm_cam': {'stream_type': 1, 'frequency': 5.0, 'width': 160, 'height': 120},
+        'right_arm_cam': {'stream_type': 1, 'frequency': 5.0, 'width': 160, 'height': 120}
+    }
+    
+    merged_mjros_config_file = os.path.join(task_run_dir, 'merged_sim_controllers.yaml')
+    with open(merged_mjros_config_file, 'w') as f:
+        yaml.dump(merged_config, f)
+
+
     ns=""
+
+
+
 
     robot_description = Command(
         [FindExecutable(name='xacro'), ' ', franka_xacro_file, 
@@ -191,9 +217,9 @@ def generate_launch_description():
             launch_arguments={
                 'use_sim_time': "true",
                 'modelfile': xml_file,
-                'verbose': "true",
+                'verbose': "false",
                 'ns': ns,
-                'mujoco_plugin_config': mjros_config_file
+                'mujoco_plugin_config': merged_mjros_config_file
             }.items()
         ),
 

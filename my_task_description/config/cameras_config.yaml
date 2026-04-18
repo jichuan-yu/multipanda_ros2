@@ -1,0 +1,12 @@
+mujoco_server:
+  ros__parameters:
+    cam_config:
+      fixed_cam:
+        stream_type: 1
+        frequency: 5
+      left_arm_cam:
+        stream_type: 1
+        frequency: 5
+      right_arm_cam:
+        stream_type: 1
+        frequency: 5

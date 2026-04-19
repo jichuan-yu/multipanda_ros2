@@ -20,24 +20,38 @@ docker run -it -d --name multipanda-container \
 ```bash
 docker start multipanda-container
 ```
-请打开 **3个独立的终端** 均通过 `docker exec -it multipanda-container bash` 进入容器，确保每个终端都处于项目工作空间目录下。
+请打开 **4个独立的终端** 均通过 `docker exec -it multipanda-container bash` 进入容器，确保每个终端都处于项目工作空间目录下。
 
 ---
 
-## 终端 1：启动仿真
+## 终端 1：启动带相机的自定义仿真
 
 在第一个终端中，进入容器并启动双臂 MuJoCo 仿真。
 
 ```bash
 docker exec -it multipanda-container bash
 source install/setup.bash
-ros2 launch franka_bringup dual_franka_sim.launch.py
+# 启动带有自定义环境和多相机渲染的任务仿真
+ros2 launch my_task_description my_task_sim.launch.py
 ```
-*启动后，你应该能看到 MuJoCo 仿真器界面弹开，并且机器人加载在里面。此时默认启动的是内置的、无通信的例程控制器。*
+*启动后，你应该能看到包含两个相机零件(STL)的 MuJoCo 环境弹开，并且机器人加载在里面。同时 MuJoCo 会通过离屏渲染持续向 ROS 2 发布 `fixed_cam`, `left_arm_cam`, `right_arm_cam` 三路图像。*
 
 ---
 
-## 终端 2：切换控制器
+## 终端 2：渲染查看图像 (新功能)
+
+在第二个终端中，为了不因为 OpenCV 与 Python 绑定导致同步卡顿，你可以直接调用 ROS 2 的高性能图像展示工具查看特定视角：
+
+```bash
+docker exec -it multipanda-container bash
+source install/setup.bash
+ros2 run rqt_image_view rqt_image_view
+```
+*启动后，在弹出的窗口左上角下拉菜单选择 `/mujoco_server/cameras/left_arm_cam/rgb/image_raw` 等话题即可观察夹爪视角的视频流。*
+
+---
+
+## 终端 3：切换控制器
 
 在第二个终端中，加载控制器并使其激活。
 
@@ -52,9 +66,9 @@ ros2 control set_controller_state multi_cartesian_impedance_controller active
 
 ---
 
-## 终端 3：运行控制脚本
+## 终端 4：运行控制脚本
 
-在第三个终端中，运行自动/交互式控制脚本。
+在第四个终端中，运行自动/交互式控制脚本。
 
 ```bash
 cd python_code/multipanda_ros2

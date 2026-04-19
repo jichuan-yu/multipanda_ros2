@@ -5,66 +5,54 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 import cv2
-import message_filters
-import numpy as np
 
-class CameraViewerNode(Node):
+class IndependentCameraViewer(Node):
     def __init__(self):
         super().__init__('camera_viewer_node')
         self.bridge = CvBridge()
         
-        # Subscribe to the three camera topics
-        self.sub_left = message_filters.Subscriber(self, Image, '/mujoco_server/cameras/left_arm_cam/rgb/image_raw')
-        self.sub_fixed = message_filters.Subscriber(self, Image, '/mujoco_server/cameras/fixed_cam/rgb/image_raw')
-        self.sub_right = message_filters.Subscriber(self, Image, '/mujoco_server/cameras/right_arm_cam/rgb/image_raw')
-
-        # Use an ApproximateTimeSynchronizer to sync messages from all three cameras
-        self.ts = message_filters.ApproximateTimeSynchronizer(
-            [self.sub_left, self.sub_fixed, self.sub_right], 
-            queue_size=2, 
-            slop=0.5
+        # 独立订阅，放弃时间同步（消除等待带来的卡顿）
+        self.sub_left = self.create_subscription(
+            Image, 
+            '/mujoco_server/cameras/left_arm_cam/rgb/image_raw',
+            self.left_callback,
+            10
         )
-        self.ts.registerCallback(self.sync_callback)
+        self.sub_fixed = self.create_subscription(
+            Image, 
+            '/mujoco_server/cameras/fixed_cam/rgb/image_raw',
+            self.fixed_callback,
+            10
+        )
+        self.sub_right = self.create_subscription(
+            Image, 
+            '/mujoco_server/cameras/right_arm_cam/rgb/image_raw',
+            self.right_callback,
+            10
+        )
 
-        self.get_logger().info('Camera Viewer Node has been started, waiting for images...')
+        self.get_logger().info('Independent Camera Viewer started. Displaying separate windows...')
 
-    def sync_callback(self, msg_left, msg_fixed, msg_right):
+    def left_callback(self, msg):
+        self.show_image("Left Arm Cam", msg)
+
+    def fixed_callback(self, msg):
+        self.show_image("Fixed Global Cam", msg)
+
+    def right_callback(self, msg):
+        self.show_image("Right Arm Cam", msg)
+
+    def show_image(self, window_name, msg):
         try:
-            # Convert ROS Image messages to OpenCV images
-            cv_img_left = self.bridge.imgmsg_to_cv2(msg_left, "bgr8")
-            cv_img_fixed = self.bridge.imgmsg_to_cv2(msg_fixed, "bgr8")
-            cv_img_right = self.bridge.imgmsg_to_cv2(msg_right, "bgr8")
-            
-            # Make sure they have the same height for hstack
-            # Assuming they are the same size, but let's resize to fixed height if needed
-            target_height = 240
-            def resize_img(img):
-                h, w = img.shape[:2]
-                new_w = int((target_height / h) * w)
-                return cv2.resize(img, (new_w, target_height))
-            
-            img_l = resize_img(cv_img_left)
-            img_f = resize_img(cv_img_fixed)
-            img_r = resize_img(cv_img_right)
-            
-            # Add text labels
-            cv2.putText(img_l, "Left Arm Cam", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            cv2.putText(img_f, "Fixed Global Cam", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            cv2.putText(img_r, "Right Arm Cam", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-
-            # Concatenate images horizontally
-            combined_img = np.hstack((img_l, img_f, img_r))
-            
-            # Display the image
-            cv2.imshow("MuJoCo Multi-Camera Monitor", combined_img)
+            cv_img = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+            cv2.imshow(window_name, cv_img)
             cv2.waitKey(1)
-            
         except Exception as e:
-            self.get_logger().error(f"Error processing images: {e}")
+            self.get_logger().error(f"Error processing image for {window_name}: {e}")
 
 def main(args=None):
     rclpy.init(args=args)
-    node = CameraViewerNode()
+    node = IndependentCameraViewer()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

@@ -152,9 +152,9 @@ def generate_launch_description():
         merged_config['mujoco_server']['ros__parameters'] = {}
         
     merged_config['mujoco_server']['ros__parameters']['cam_config'] = {
-        'fixed_cam': {'stream_type': 1, 'frequency': 5.0, 'width': 160, 'height': 120},
-        'left_arm_cam': {'stream_type': 1, 'frequency': 5.0, 'width': 160, 'height': 120},
-        'right_arm_cam': {'stream_type': 1, 'frequency': 5.0, 'width': 160, 'height': 120}
+        'fixed_cam': {'stream_type': 1, 'frequency': 30.0, 'width': 320, 'height': 240},
+        'left_arm_cam': {'stream_type': 1, 'frequency': 30.0, 'width': 320, 'height': 240},
+        'right_arm_cam': {'stream_type': 1, 'frequency': 30.0, 'width': 320, 'height': 240}
     }
     
     merged_mjros_config_file = os.path.join(task_run_dir, 'merged_sim_controllers.yaml')

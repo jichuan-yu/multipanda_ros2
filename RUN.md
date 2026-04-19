@@ -7,6 +7,8 @@
 启动 Docker 容器时，为了确保能看到仿真界面并与容器外进行 ROS 2 通信，请运行以下完整的 Docker 启动命令（如果已有容器在运行请先停止并删除旧的，然后重启）：
 ```bash
 docker run -it -d --name multipanda-container \
+  --gpus all \
+  -e NVIDIA_DRIVER_CAPABILITIES=all \
   --net=host \
   --ipc=host \
   -e DISPLAY=$DISPLAY \
@@ -38,22 +40,24 @@ ros2 launch my_task_description my_task_sim.launch.py
 
 ---
 
-## 终端 2：渲染查看图像 (新功能)
+## 终端 2：流畅查看相机视频流 (Web 服务方案)
 
-在第二个终端中，为了不因为 OpenCV 与 Python 绑定导致同步卡顿，你可以直接调用 ROS 2 的高性能图像展示工具查看特定视角：
+由于跨 Docker 容器向宿主机进行 X11 图形界面转发（如 OpenCV、rqt）会死锁带宽，导致高帧率图片产生极其严重的卡顿，因此我们采用将本网络变为网页视频流的大方向硬件解耦方案：
 
 ```bash
 docker exec -it multipanda-container bash
 source install/setup.bash
-ros2 run rqt_image_view rqt_image_view
+# 如果尚未安装，请运行: sudo apt-get update && sudo apt-get install -y ros-humble-web-video-server
+ros2 run web_video_server web_video_server
 ```
-*启动后，在弹出的窗口左上角下拉菜单选择 `/mujoco_server/cameras/left_arm_cam/rgb/image_raw` 等话题即可观察夹爪视角的视频流。*
+*启动服务后，请打开宿主机上的浏览器（Chrome/Edge 等），在地址栏输入：**http://localhost:8080***
+*网页中会自动汇总出当前 MuJoCo 发布的所有图像话题。您只需点击 `/mujoco_server/cameras/left_arm_cam/rgb/image_raw` 等名称链接，即可在浏览器页卡中获得极度丝滑无阻滞的相机推流画面！*
 
 ---
 
 ## 终端 3：切换控制器
 
-在第二个终端中，加载控制器并使其激活。
+在第三个终端中，加载控制器并使其激活。
 
 ```bash
 docker exec -it multipanda-container bash

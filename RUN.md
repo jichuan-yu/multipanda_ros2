@@ -81,3 +81,14 @@ python3 tools/spacemouse_pub.py
 ```
 
 执行后，切回 MuJoCo 仿真界面，你将可以通过外部设备或者代码定义的轨迹直接驱动 Panda 机械臂阵列！
+
+
+## Real Robot
+
+``` bash
+ros2 launch franka_bringup franka.launch.py robot_ip:=172.16.0.2
+
+ros2 control load_controller cartesian_impedance_controller 
+ros2 control set_controller_state cartesian_impedance_controller active 
+
+```

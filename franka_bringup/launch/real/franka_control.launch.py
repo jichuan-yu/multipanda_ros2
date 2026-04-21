@@ -14,7 +14,6 @@
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -27,14 +26,14 @@ def generate_launch_description():
     use_fake_hardware_parameter_name = 'use_fake_hardware'
     fake_sensor_commands_parameter_name = 'fake_sensor_commands'
     use_rviz_parameter_name = 'use_rviz'
-    start_cartesian_impedance_parameter_name = 'start_cartesian_impedance_controller'
+    controller_name_parameter_name = 'controller_name'
 
     robot_ip = LaunchConfiguration(robot_ip_parameter_name)
     load_gripper = LaunchConfiguration(load_gripper_parameter_name)
     use_fake_hardware = LaunchConfiguration(use_fake_hardware_parameter_name)
     fake_sensor_commands = LaunchConfiguration(fake_sensor_commands_parameter_name)
     use_rviz = LaunchConfiguration(use_rviz_parameter_name)
-    start_cartesian_impedance = LaunchConfiguration(start_cartesian_impedance_parameter_name)
+    controller_name = LaunchConfiguration(controller_name_parameter_name)
 
     base_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -53,12 +52,11 @@ def generate_launch_description():
         }.items(),
     )
 
-    cartesian_impedance_spawner = Node(
+    controller_spawner = Node(
         package='controller_manager',
         executable='spawner',
-        arguments=['cartesian_impedance_controller'],
+        arguments=[controller_name],
         output='screen',
-        condition=IfCondition(start_cartesian_impedance),
     )
 
     return LaunchDescription(
@@ -91,11 +89,11 @@ def generate_launch_description():
                 'without an end-effector.',
             ),
             DeclareLaunchArgument(
-                start_cartesian_impedance_parameter_name,
-                default_value='true',
-                description='Spawn cartesian_impedance_controller after base bringup.',
+                controller_name_parameter_name,
+                default_value='cartesian_impedance_controller',
+                description='Controller name to spawn after base bringup.',
             ),
             base_launch,
-            cartesian_impedance_spawner,
+            controller_spawner,
         ]
     )

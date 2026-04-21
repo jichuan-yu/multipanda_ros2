@@ -93,8 +93,8 @@ CallbackReturn CartesianImpedanceController::on_init() {
     auto_declare<std::string>("arm_id", "panda");
     auto_declare<double>("pos_stiff", 100);
     auto_declare<double>("rot_stiff", 10);
-    sub_desired_cartesian_ = get_node()->create_subscription<std_msgs::msg::Float64MultiArray>(
-      "/cartesian_impedance/pose_desired", 1,
+    sub_desired_cartesian_ = get_node()->create_subscription<geometry_msgs::msg::PoseStamped>(
+      "/cartesian_impedance/cartesian_target", 1,
       std::bind(&CartesianImpedanceController::desiredCartesianCallback, this, std::placeholders::_1)
     );
   } catch (const std::exception& e) {
@@ -143,22 +143,15 @@ CallbackReturn CartesianImpedanceController::on_deactivate(
 }
 
 void CartesianImpedanceController::desiredCartesianCallback(
-  const std_msgs::msg::Float64MultiArray& msg) {
-  if (msg.data[0]){
-    for (auto i = 0; i < 3; ++i) {
-      desired_position[i] = msg.data[i];
-    }
-    if (msg.data[11]){ // for orientation matrix
-      Matrix3d desired_orientation_mat;
-      for (auto i = 0; i < 3; ++i) {
-        for (auto j = 0; j < 3; ++j) {
-          desired_orientation_mat(i, j) = msg.data[3+3*i+j];
-        }
-      }
-      desired_orientation = Eigen::Quaterniond(desired_orientation_mat);
-    }
-
-  }
+  const geometry_msgs::msg::PoseStamped& msg) {
+  desired_position << msg.pose.position.x,
+                      msg.pose.position.y,
+                      msg.pose.position.z;
+  desired_orientation = Eigen::Quaterniond(
+      msg.pose.orientation.w,
+      msg.pose.orientation.x,
+      msg.pose.orientation.y,
+      msg.pose.orientation.z);
 }
 
 }  // namespace franka_example_controllers

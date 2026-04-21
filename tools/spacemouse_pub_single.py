@@ -2,8 +2,7 @@
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float64MultiArray
-from franka_msgs.msg import FrankaState
+from geometry_msgs.msg import PoseStamped
 import numpy as np
 import math
 import time
@@ -26,39 +25,56 @@ def euler_to_matrix(rx, ry, rz):
                    [ 0,   0, 1]])
     return Rz @ Ry @ Rx
 
+
+def quaternion_to_matrix(qx, qy, qz, qw):
+    xx = qx * qx
+    yy = qy * qy
+    zz = qz * qz
+    xy = qx * qy
+    xz = qx * qz
+    yz = qy * qz
+    wx = qw * qx
+    wy = qw * qy
+    wz = qw * qz
+
+    return np.array([
+        [1.0 - 2.0 * (yy + zz), 2.0 * (xy - wz), 2.0 * (xz + wy)],
+        [2.0 * (xy + wz), 1.0 - 2.0 * (xx + zz), 2.0 * (yz - wx)],
+        [2.0 * (xz - wy), 2.0 * (yz + wx), 1.0 - 2.0 * (xx + yy)],
+    ])
+
 class SpaceMouseTeleopNode(Node):
     def __init__(self):
         super().__init__('spacemouse_teleop')
-        self.set_parameters([rclpy.Parameter('use_sim_time', rclpy.Parameter.Type.BOOL, True)])
-        
+
         self.publisher = self.create_publisher(
-            Float64MultiArray, 
-            '/cartesian_impedance/pose_desired', 
+            PoseStamped,
+            '/cartesian_impedance/target_pose', 
             10
         )
 
         self.pose = np.eye(4)
         
-        self.pose_initialized_from_robot_state = False
+        self.pose_initialized_from_ee_pose = False
 
-        self.robot_state_sub = self.create_subscription(
-            FrankaState,
-            '/franka_robot_state_broadcaster/robot_state',
-            self.robot_state_callback,
+        self.ee_pose_sub = self.create_subscription(
+            PoseStamped,
+            '/cartesian_impedance/ee_pose',
+            self.ee_pose_callback,
             10,
         )
 
         # Initialize target pose from current robot EE pose if available.
         init_timeout_sec = 1.0
         init_start = time.monotonic()
-        while (not self.pose_initialized_from_robot_state and
+        while (not self.pose_initialized_from_ee_pose and
                (time.monotonic() - init_start) < init_timeout_sec):
             rclpy.spin_once(self, timeout_sec=0.05)
 
-        if not self.pose_initialized_from_robot_state:
+        if not self.pose_initialized_from_ee_pose:
             raise RuntimeError(
-                f"Timeout waiting for /franka_robot_state_broadcaster/robot_state "
-                f"(>{init_timeout_sec:.1f}s). Cannot initialize self.pose from o_t_ee."
+                f"Timeout waiting for /cartesian_impedance/ee_pose (>{init_timeout_sec:.1f}s). "
+                f"Cannot initialize self.pose from current end-effector pose."
             )
         
         # Scale pos correctly (using pyspacemouse processed scaling, similar range -1 to 1) 
@@ -73,15 +89,24 @@ class SpaceMouseTeleopNode(Node):
 
         self.get_logger().info('SpaceMouse publisher (single arm) initialized!')
 
-    def robot_state_callback(self, msg: FrankaState):
-        if self.pose_initialized_from_robot_state:
+    def ee_pose_callback(self, msg: PoseStamped):
+        if self.pose_initialized_from_ee_pose:
             return
-        if len(msg.o_t_ee) != 16:
-            self.get_logger().warn('Received robot_state with invalid o_t_ee size, ignoring message.')
-            return
-        self.pose = np.array(msg.o_t_ee, dtype=float).reshape(4, 4)
-        self.pose_initialized_from_robot_state = True
-        self.get_logger().info('Initialized target pose from /franka_robot_state_broadcaster/robot_state o_t_ee.')
+        rotation = quaternion_to_matrix(
+            msg.pose.orientation.x,
+            msg.pose.orientation.y,
+            msg.pose.orientation.z,
+            msg.pose.orientation.w,
+        )
+        self.pose = np.eye(4)
+        self.pose[0:3, 0:3] = rotation
+        self.pose[0:3, 3] = np.array([
+            msg.pose.position.x,
+            msg.pose.position.y,
+            msg.pose.position.z,
+        ], dtype=float)
+        self.pose_initialized_from_ee_pose = True
+        self.get_logger().info('Initialized target pose from /cartesian_impedance/ee_pose.')
 
     def process_state(self, state):
         if not state:
@@ -117,19 +142,48 @@ class SpaceMouseTeleopNode(Node):
             # 基于基座坐标系（以当前末端位置为旋转中心）进行旋转
             self.pose[0:3, 0:3] = R_delta @ self.pose[0:3, 0:3]
 
-    def get_pose_array(self):
-        arr = []
+    def get_pose_msg(self):
+        pose_msg = PoseStamped()
+        pose_msg.header.stamp = self.get_clock().now().to_msg()
+        pose_msg.header.frame_id = 'panda_link0'
+
         arm_T = self.pose
-        arr.extend(arm_T[0:3, 3].tolist())
-        arr.extend(arm_T[0:3, 0:3].flatten().tolist())
-        return arr
+        pose_msg.pose.position.x = float(arm_T[0, 3])
+        pose_msg.pose.position.y = float(arm_T[1, 3])
+        pose_msg.pose.position.z = float(arm_T[2, 3])
+
+        rotation = arm_T[0:3, 0:3]
+        trace = float(np.trace(rotation))
+        if trace > 0.0:
+            s = math.sqrt(trace + 1.0) * 2.0
+            pose_msg.pose.orientation.w = 0.25 * s
+            pose_msg.pose.orientation.x = float((rotation[2, 1] - rotation[1, 2]) / s)
+            pose_msg.pose.orientation.y = float((rotation[0, 2] - rotation[2, 0]) / s)
+            pose_msg.pose.orientation.z = float((rotation[1, 0] - rotation[0, 1]) / s)
+        else:
+            if rotation[0, 0] > rotation[1, 1] and rotation[0, 0] > rotation[2, 2]:
+                s = math.sqrt(1.0 + float(rotation[0, 0]) - float(rotation[1, 1]) - float(rotation[2, 2])) * 2.0
+                pose_msg.pose.orientation.w = float((rotation[2, 1] - rotation[1, 2]) / s)
+                pose_msg.pose.orientation.x = 0.25 * s
+                pose_msg.pose.orientation.y = float((rotation[0, 1] + rotation[1, 0]) / s)
+                pose_msg.pose.orientation.z = float((rotation[0, 2] + rotation[2, 0]) / s)
+            elif rotation[1, 1] > rotation[2, 2]:
+                s = math.sqrt(1.0 + float(rotation[1, 1]) - float(rotation[0, 0]) - float(rotation[2, 2])) * 2.0
+                pose_msg.pose.orientation.w = float((rotation[0, 2] - rotation[2, 0]) / s)
+                pose_msg.pose.orientation.x = float((rotation[0, 1] + rotation[1, 0]) / s)
+                pose_msg.pose.orientation.y = 0.25 * s
+                pose_msg.pose.orientation.z = float((rotation[1, 2] + rotation[2, 1]) / s)
+            else:
+                s = math.sqrt(1.0 + float(rotation[2, 2]) - float(rotation[0, 0]) - float(rotation[1, 1])) * 2.0
+                pose_msg.pose.orientation.w = float((rotation[1, 0] - rotation[0, 1]) / s)
+                pose_msg.pose.orientation.x = float((rotation[0, 2] + rotation[2, 0]) / s)
+                pose_msg.pose.orientation.y = float((rotation[1, 2] + rotation[2, 1]) / s)
+                pose_msg.pose.orientation.z = 0.25 * s
+
+        return pose_msg
 
     def timer_callback(self):
-        msg = Float64MultiArray()
-        data = self.get_pose_array()
-        if data[0] == 0.0: data[0] = 0.001
-        msg.data = data
-        self.publisher.publish(msg)
+        self.publisher.publish(self.get_pose_msg())
 
 def main(args=None):
     rclpy.init(args=args)

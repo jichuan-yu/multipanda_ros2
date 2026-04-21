@@ -54,6 +54,8 @@ class CartesianImpedanceController : public controller_interface::ControllerInte
   double n_stiffness;
 
   void desiredCartesianCallback(const geometry_msgs::msg::PoseStamped& msg);
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr ee_pose_publisher_;
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr external_wrench_publisher_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_desired_cartesian_; 
 };
 

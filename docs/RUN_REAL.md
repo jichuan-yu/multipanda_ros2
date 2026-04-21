@@ -19,7 +19,7 @@ Ruturn to home position:
 Launch robot controller:
 ``` bash
 ros2 launch franka_bringup franka_control.launch.py \
-  robot_ip:=172.16.0.3 \
+  robot_ip:=172.16.0.2 \
   load_gripper:=true \
   controller_name:=cartesian_impedance_controller \
   use_rviz:=false
@@ -28,8 +28,9 @@ ros2 launch franka_bringup franka_control.launch.py \
 
 
 
-
-
+```bash
+python3 tools/spacemouse_pub_single.py
+```
 
 
 

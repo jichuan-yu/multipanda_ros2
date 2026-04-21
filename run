@@ -69,7 +69,6 @@ else
     
     docker run -d \
         --name "$CONTAINER_NAME" \
-        --user "$(id -u):$(id -g)" \
         --network host \
         --ipc host \
         --pid host \
@@ -93,4 +92,4 @@ fi
 
 # Enter the container
 echo "➡ Entering environment..."
-docker exec -it --user developer "$CONTAINER_NAME" /bin/bash -c "source /home/developer/.bashrc && bash"
+docker exec -it "$CONTAINER_NAME" /bin/bash

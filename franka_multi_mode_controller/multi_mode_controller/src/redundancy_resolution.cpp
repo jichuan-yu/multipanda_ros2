@@ -443,7 +443,7 @@ VectorXd ManipulabilityGradient(const VectorXd& Q, bool isRightArm) {
                                            ? k_manipulability*std::pow(manipulability_at_Q - manipulability_zero, 2)
                                            : 0;
 
-    double starting_index = (isRightArm == 1) ? 3 : 10;  // starting index for left or right arm elements
+    int starting_index = (isRightArm == 1) ? 3 : 10;  // starting index for left or right arm elements
 
     for (int i = 0; i < 7; ++i) {   // count for all joint number of the right or left arm. 
         // Perturb joint angle by epsilon
@@ -480,7 +480,7 @@ VectorXd JointLimitPotentialGradient(const VectorXd& Q, bool isRightArm) {
     VectorXd gradient = VectorXd::Zero(7);
     VectorXd qtilda = VectorXd::Zero(7);
 
-    double starting_index = (isRightArm == 1) ? 3 : 10;  // starting index for left or right arm elements
+    int starting_index = (isRightArm == 1) ? 3 : 10;  // starting index for left or right arm elements
 
     // Calculate qtilda for the current q
     for (int i = 0; i <  7; ++i) {
@@ -540,7 +540,7 @@ VectorXd CollisionAvoidanceGradient(const VectorXd& Q, const bool isRightArm) {
         }
     }
 
-    double starting_index = (isRightArm == 1) ? 3 : 10;  // starting index for left or right arm elements
+    int starting_index = (isRightArm == 1) ? 3 : 10;  // starting index for left or right arm elements
     // Numerically derive the gradient
     for (int i = 0; i < 7; ++i) {
         VectorXd Q_epsilon = Q;

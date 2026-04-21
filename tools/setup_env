@@ -122,7 +122,7 @@ fi
 if ! $DRY_RUN; then
     if ! docker info >/dev/null 2>&1; then
         echo "Docker daemon not running. Starting..."
-        sudo systemctl start docker
+        sudo snap start docker
         sleep 2
     fi
 fi
@@ -145,7 +145,7 @@ fi
 IMAGE_TAG="build-env:${REPO_NAME}-${TAG_ARCH}"
 echo "Building image: $IMAGE_TAG"
 
-run_cmd docker build \
+run_cmd sudo docker build \
     -t "$IMAGE_TAG" \
     "${DOCKER_ARGS[@]}" \
     -f "$DOCKERFILE" \

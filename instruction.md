@@ -1,3 +1,3 @@
-对于相机渲染，我现在有以下问题：
-1. 将3个画面拼接是否会影响运行效率,如果会，放弃拼接并单独展示
-2. 使用opencv会导致卡顿，可不可以通过ros2 topic的形式将渲染的图片发出去，在另一个进程visualize
+我新增了oscbf控制器的源码src/oscbf
+现在我希望在我的src/multipanda_ros2/tools/key_pub.py生成msg之后
+通过oscbf对pub的msg进行处理，成为safe_msg再进行pub（如果oscbf脚本未启动，请直接发送msg，后续会使用对比收集实验数据）

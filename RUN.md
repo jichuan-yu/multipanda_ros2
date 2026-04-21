@@ -4,7 +4,7 @@
 
 ## 前置准备
 
-启动 Docker 容器时，为了确保能看到仿真界面并与容器外进行 ROS 2 通信，请运行以下完整的 Docker 启动命令（如果已有容器在运行请先停止并删除旧的，然后重启）：
+启动 Docker 容器时，为了确保能看到仿真界面并与容器外进行 ROS 2 通信，请运行以下完整的 Docker 启动命令（运行前请在宿主机执行 `xhost +` 放开界面显示权限，如果已有容器在运行请先停止并删除旧的，然后重启）：
 ```bash
 docker run -it -d --name multipanda-container \
   --gpus all \
@@ -13,8 +13,8 @@ docker run -it -d --name multipanda-container \
   --ipc=host \
   -e DISPLAY=$DISPLAY \
   -v /tmp/.X11-unix:/tmp/.X11-unix \
-  -v /home/xiaozy24/python_code/multipanda_ros2:/home/xiaozy24/python_code/multipanda_ros2 \
-  -w /home/xiaozy24/python_code/multipanda_ros2 \
+  -v /home/xiaozy24/dual_panda_ws:/home/xiaozy24/dual_panda_ws \
+  -w /home/xiaozy24/dual_panda_ws \
   build-env:multipanda_ros2-amd64 bash
 ```
 
@@ -32,6 +32,7 @@ docker start multipanda-container
 
 ```bash
 docker exec -it multipanda-container bash
+colcon build
 source install/setup.bash
 # 启动带有自定义环境和多相机渲染的任务仿真
 ros2 launch my_task_description my_task_sim.launch.py
@@ -75,9 +76,24 @@ ros2 control set_controller_state multi_cartesian_impedance_controller active
 在第四个终端中，运行自动/交互式控制脚本。
 
 ```bash
-cd python_code/multipanda_ros2
+cd /home/xiaozy24/dual_panda_ws/src/multipanda_ros2
 source ~/myenv/bin/activate #进入你的虚拟环境
-python3 tools/spacemouse_pub.py
+python3 tools/key_pub.py
 ```
 
-执行后，切回 MuJoCo 仿真界面，你将可以通过外部设备或者代码定义的轨迹直接驱动 Panda 机械臂阵列！
+执行后，切回 MuJoCo 仿真界面，你将可以通过键盘控制左/右臂的目标。
+
+---
+
+## 终端 5：运行 OSCBF 控制器安全目标点滤波器 (可选)
+
+为了对 `key_pub.py` 发布的期望末端姿态（Cartesian Poses）进行位置边界过滤，您可以启动本 Python 节点。
+*如果不启动本节点，`key_pub.py` 则会自动检测并安全降级，将未处理的目标点直接发布给底层控制器仿真端，这便于您收集控制对比实验数据。*
+
+您可以新开一个终端（第5个）：
+```bash
+docker exec -it multipanda-container bash
+cd /home/xiaozy24/dual_panda_ws/src/multipanda_ros2
+source ~/myenv/bin/activate
+python3 tools/oscbf_node.py
+```

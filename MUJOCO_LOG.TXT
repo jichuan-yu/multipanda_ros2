@@ -1,3 +1,9 @@
 Sat Apr 18 00:56:33 2026
 WARNING: Nan, Inf or huge value in QACC at DOF 27. The simulation is unstable. Time = 513.5220.
 
+Mon Apr 20 15:06:59 2026
+ERROR: Failed to create GLFW window
+
+Mon Apr 20 15:07:29 2026
+ERROR: Failed to create GLFW window
+

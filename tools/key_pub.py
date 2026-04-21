@@ -42,6 +42,11 @@ class KeyTeleopNode(Node):
             '/multi_cartesian_impedance/pose_desired', 
             10
         )
+        self.publisher_oscbf = self.create_publisher(
+            Float64MultiArray, 
+            '/multi_cartesian_impedance/oscbf_request', 
+            10
+        )
         
         # Initial positions and rotations (Euler angles for simplicity)
         # Assuming initial standard pose for panda 
@@ -154,7 +159,11 @@ Ctrl-C to quit
             data[0] = 0.001
             
         msg.data = data
-        self.publisher.publish(msg)
+        
+        if self.publisher_oscbf.get_subscription_count() > 0:
+            self.publisher_oscbf.publish(msg)
+        else:
+            self.publisher.publish(msg)
 
 def get_key(settings):
     tty.setraw(sys.stdin.fileno())

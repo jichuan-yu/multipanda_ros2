@@ -73,6 +73,53 @@ colcon build
     rosdep update && \
     rosdep install --from-paths src --ignore-src -y -r
     ```
+* 如果遇到SSL证书验证失败的错误（如 `SSL: CERTIFICATE_VERIFY_FAILED`），可以尝试以下解决方案：
+    ```bash
+    # 方案1：更新CA证书
+    sudo apt update && sudo apt install -y ca-certificates
+    
+    # 方案2：如果方案1无效，可以临时禁用SSL验证（不推荐用于生产环境）
+    export PYTHONHTTPSVERIFY=0
+    rosdep update
+    rosdep install --from-paths src --ignore-src -y -r
+    ```
+* 如果仍然无法解决，可以尝试手动安装缺失的依赖包，而不是使用rosdep。
+* 如果遇到"Build step for lodepng failed"错误，说明MuJoCo无法下载lodepng依赖。我们提供了一个修复脚本：
+```bash
+chmod +x fix_mujoco_lodepng.sh
+./fix_mujoco_lodepng.sh
+```
+
+或者，您可以手动安装lodepng：
+```bash
+# 安装lodepng依赖
+sudo apt install -y libpng-dev
+
+# 创建临时目录
+mkdir -p ~/tmp
+cd ~/tmp
+
+# 下载lodepng
+git clone https://github.com/lvandeve/lodepng.git
+cd lodepng
+git checkout 17d08dd26cac4d63f43af217ebd70318bfb8189c
+
+# 编译lodepng
+gcc -c lodepng.cpp -o lodepng.o
+ar rcs liblodepng.a lodepng.o
+
+# 安装lodepng
+sudo mkdir -p /usr/local/include/lodepng
+sudo cp lodepng.h /usr/local/include/lodepng/
+sudo cp liblodepng.a /usr/local/lib/
+
+# 更新动态链接库缓存
+sudo ldconfig
+
+# 清理临时目录
+cd ~
+rm -rf ~/tmp
+```
 6. 要验证安装是否成功，运行:
 ```
 source ~/multipanda_ws/install/setup.bash && \

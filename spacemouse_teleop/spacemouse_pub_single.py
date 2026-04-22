@@ -7,41 +7,15 @@ import numpy as np
 import math
 import time
 import threading
-
+from scipy.spatial.transform import Rotation
 import pyspacemouse
 
-def euler_to_matrix(rx, ry, rz):
-    cz, sz = math.cos(rz), math.sin(rz)
-    cy, sy = math.cos(ry), math.sin(ry)
-    cx, sx = math.cos(rx), math.sin(rx)
-    Rx = np.array([[1,  0,   0],
-                   [0, cx, -sx],
-                   [0, sx,  cx]])
-    Ry = np.array([[cy,  0, sy],
-                   [ 0,  1,  0],
-                   [-sy, 0, cy]])
-    Rz = np.array([[cz, -sz, 0],
-                   [sz,  cz, 0],
-                   [ 0,   0, 1]])
-    return Rz @ Ry @ Rx
 
 
-def quaternion_to_matrix(qx, qy, qz, qw):
-    xx = qx * qx
-    yy = qy * qy
-    zz = qz * qz
-    xy = qx * qy
-    xz = qx * qz
-    yz = qy * qz
-    wx = qw * qx
-    wy = qw * qy
-    wz = qw * qz
 
-    return np.array([
-        [1.0 - 2.0 * (yy + zz), 2.0 * (xy - wz), 2.0 * (xz + wy)],
-        [2.0 * (xy + wz), 1.0 - 2.0 * (xx + zz), 2.0 * (yz - wx)],
-        [2.0 * (xz - wy), 2.0 * (yz + wx), 1.0 - 2.0 * (xx + yy)],
-    ])
+
+
+
 
 class SpaceMouseTeleopNode(Node):
     def __init__(self):
@@ -92,12 +66,12 @@ class SpaceMouseTeleopNode(Node):
     def ee_pose_callback(self, msg: PoseStamped):
         if self.pose_initialized_from_ee_pose:
             return
-        rotation = quaternion_to_matrix(
+        rotation = Rotation.from_quat([
             msg.pose.orientation.x,
             msg.pose.orientation.y,
             msg.pose.orientation.z,
             msg.pose.orientation.w,
-        )
+        ]).as_matrix()
         self.pose = np.eye(4)
         self.pose[0:3, 0:3] = rotation
         self.pose[0:3, 3] = np.array([
@@ -132,7 +106,10 @@ class SpaceMouseTeleopNode(Node):
         drz = apply_dz(-state.yaw) * self.scale_rot
         
         if any([dx, dy, dz, drx, dry, drz]):
-            R_delta = euler_to_matrix(drx, dry, drz)
+            rot_x = Rotation.from_rotvec([drx, 0.0, 0.0])
+            rot_y = Rotation.from_rotvec([0.0, dry, 0.0])
+            rot_z = Rotation.from_rotvec([0.0, 0.0, drz])
+            R_delta = (rot_z * rot_y * rot_x).as_matrix()
             
             # 基于基座坐标系（全局坐标系）进行平移
             self.pose[0, 3] += dx

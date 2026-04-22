@@ -103,7 +103,7 @@ def generate_launch_description():
     <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
   </asset>
 
-  <!-- My Custom Objects -->
+ <!-- My Custom Objects -->
   <asset>
     <!-- Use absolute path so MuJoCo finds them from anywhere -->
     <mesh name="cam1" file="{stl_cam1}" scale="0.001 0.001 0.001"/>
@@ -119,15 +119,15 @@ def generate_launch_description():
     <camera name="fixed_cam" pos="1.3 0.0 0.8" xyaxes="0 1 0 -0.5 0 1" fovy="60"/>
     
     <!-- Custom Camera Parts (example positions) -->
-    <body name="camera_part1" pos="0.5 0.0 0.05">
-      <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.5" contype="1" conaffinity="1"/>
+    <body name="camera_part1" pos="1.0 0 1.0">                                      
+      <geom type="mesh" mesh="cam1" material="cam_mat" mass="0" contype="1" conaffinity="1"/>
       <freejoint/> <!-- Add physical physics so robot can interact with it -->
     </body>
     <body name="camera_part2" pos="-0.5 0.0 0.05">
-      <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.5" contype="1" conaffinity="1"/>
+      <geom type="mesh" mesh="cam2" material="cam_mat" mass="0" contype="1" conaffinity="1"/>
       <freejoint/>
     </body>
-  </worldbody>
+  </worldbody> 
 </mujoco>
 """
 

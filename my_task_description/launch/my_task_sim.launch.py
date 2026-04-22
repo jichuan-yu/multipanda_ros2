@@ -232,6 +232,26 @@ def generate_launch_description():
             arguments=['joint_state_broadcaster', '-c', concatenate_ns(ns, 'controller_manager', True)],
             output='screen',
         ),
+        Node(
+            package='controller_manager',
+            executable='spawner',
+            arguments=['multi_cartesian_impedance_controller', '-c', concatenate_ns(ns, 'controller_manager', True)],
+            output='screen',
+        ),
+        Node(
+            package='franka_example_controllers',
+            executable='gripper_action_bridge',
+            name='left_gripper_action_bridge',
+            output='screen',
+            parameters=[{'arm_id': 'left'}]
+        ),
+        Node(
+            package='franka_example_controllers',
+            executable='gripper_action_bridge',
+            name='right_gripper_action_bridge',
+            output='screen',
+            parameters=[{'arm_id': 'right'}]
+        ),
         Node(package='rviz2',
              executable='rviz2',
              name='rviz2',

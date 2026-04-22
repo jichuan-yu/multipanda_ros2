@@ -22,7 +22,7 @@ docker run -it -d --name multipanda-container \
 ```bash
 docker start multipanda-container
 ```
-请打开 **4个独立的终端** 均通过 `docker exec -it multipanda-container bash` 进入容器，确保每个终端都处于项目工作空间目录下。
+请打开 **3个独立的终端** 均通过 `docker exec -it multipanda-container bash` 进入容器，确保每个终端都处于项目工作空间目录下。
 
 ---
 
@@ -37,7 +37,7 @@ source install/setup.bash
 # 启动带有自定义环境和多相机渲染的任务仿真
 ros2 launch my_task_description my_task_sim.launch.py
 ```
-*启动后，你应该能看到包含两个相机零件(STL)的 MuJoCo 环境弹开，并且机器人加载在里面。同时 MuJoCo 会通过离屏渲染持续向 ROS 2 发布 `fixed_cam`, `left_arm_cam`, `right_arm_cam` 三路图像。*
+*启动后，你应该能看到包含两个相机零件(STL)的 MuJoCo 环境弹开，并且机器人加载在里面。同时 MuJoCo 会通过离屏渲染持续向 ROS 2 发布 `fixed_cam`, `left_arm_cam`, `right_arm_cam` 三路图像。此外，底层控制器 `multi_cartesian_impedance_controller` 也会被自动加载和激活，这说明机器人现在已经准备好接收目标笛卡尔空间指令。*
 
 ---
 
@@ -56,24 +56,9 @@ ros2 run web_video_server web_video_server
 
 ---
 
-## 终端 3：切换控制器
+## 终端 3：运行控制脚本
 
-在第三个终端中，加载控制器并使其激活。
-
-```bash
-docker exec -it multipanda-container bash
-source install/setup.bash
-ros2 control load_controller multi_cartesian_impedance_controller 
-ros2 control set_controller_state multi_cartesian_impedance_controller inactive 
-ros2 control set_controller_state multi_cartesian_impedance_controller active 
-```
-*激活成功后，你可以通过 `ros2 topic list` 看到相关对话。这说明机器人现在正在等待外部发送目标笛卡尔空间指令。*
-
----
-
-## 终端 4：运行控制脚本
-
-在第四个终端中，运行自动/交互式控制脚本。
+在第三个终端中，运行自动/交互式控制脚本。
 
 ```bash
 cd /home/xiaozy24/dual_panda_ws/src/multipanda_ros2
@@ -85,15 +70,17 @@ python3 tools/key_pub.py
 
 ---
 
-## 终端 5：运行 OSCBF 控制器安全目标点滤波器 (可选)
+## 终端 4：运行 OSCBF 控制器安全目标点滤波器 (可选)
 
 为了对 `key_pub.py` 发布的期望末端姿态（Cartesian Poses）进行位置边界过滤，您可以启动本 Python 节点。
 *如果不启动本节点，`key_pub.py` 则会自动检测并安全降级，将未处理的目标点直接发布给底层控制器仿真端，这便于您收集控制对比实验数据。*
 
-您可以新开一个终端（第5个）：
+您可以新开一个宿主机终端（第4个）：
 ```bash
-docker exec -it multipanda-container bash
+# 在宿主机直接运行
+source /opt/ros/humble/setup.bash
+source /home/xiaozy24/dual_panda_ws/install/setup.bash
 cd /home/xiaozy24/dual_panda_ws/src/multipanda_ros2
-source ~/myenv/bin/activate
+source ~/myenv/bin/activate # 如有虚拟环境需要激活
 python3 tools/oscbf_node.py
 ```

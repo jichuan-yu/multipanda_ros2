@@ -2,8 +2,9 @@
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import Float64MultiArray, Float64
 import sys
+
 import select
 import termios
 import tty
@@ -68,12 +69,15 @@ class KeyTeleopNode(Node):
         self.step_pos = 0.01
         self.step_rot = 0.05
         
+        self.left_gripper_pub = self.create_publisher(Float64, '/mj_left_gripper/width_desired', 10)
+        self.right_gripper_pub = self.create_publisher(Float64, '/mj_right_gripper/width_desired', 10)
+
         self.timer = self.create_timer(0.02, self.timer_callback) # 50Hz
         self.get_logger().info('Key publisher initialized.')
         self.print_usage()
 
     def print_usage(self):
-        print("""
+        msg = """
 ----------------------------------------
 Keyboard Teleop for Dual Cartesian Arm
 ----------------------------------------
@@ -84,9 +88,19 @@ Q/E : Up/Down (Z)
 J/L : Rotate around X (-/+)
 I/K : Rotate around Y (-/+)
 U/O : Rotate around Z (-/+)
+C/V : Close/Open Gripper
 Ctrl-C to quit
 ----------------------------------------
-""".format(self.selected_arm.upper()))
+""".format(self.selected_arm.upper()).replace('\n', '\r\n')
+        print(msg, flush=True)
+
+    def move_gripper(self, arm_name, width):
+        msg = Float64()
+        msg.data = float(width)
+        if arm_name == 'left':
+            self.left_gripper_pub.publish(msg)
+        else:
+            self.right_gripper_pub.publish(msg)
 
     def update_pose(self, key):
         redraw = False
@@ -127,6 +141,13 @@ Ctrl-C to quit
         elif key == 'o':
             arm['rot'][2] += self.step_rot
             
+        elif key == 'c':
+            self.move_gripper(self.selected_arm, 0.0)
+            redraw = True
+        elif key == 'v':
+            self.move_gripper(self.selected_arm, 0.08)
+            redraw = True
+
         if redraw:
             self.print_usage()
 

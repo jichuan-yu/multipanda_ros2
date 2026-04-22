@@ -140,8 +140,8 @@ cartesian_velocity_example_controller:
 cartesian_impedance_controller:
   ros__parameters:
     arm_id: panda
-    pos_stiff: 100.0
-    rot_stiff: 10.0
+    pos_stiff: 500.0    # high-stiffness cartesian tracking
+    rot_stiff: 50.0     # high-stiffness cartesian tracking
 
 joint_impedance_controller:
   ros__parameters:

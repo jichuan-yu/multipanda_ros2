@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+from dataclasses import dataclass, field
+
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
@@ -12,18 +14,55 @@ import pyspacemouse
 
 
 
+@dataclass
+class SpacemouseConfig:
+    target_pose_topic: str = '/cartesian_impedance/target_pose' # target pose topic to publish to
+    ee_pose_topic: str = '/cartesian_impedance/ee_pose' # robot end-effector pose feedback
+    base_frame: str = 'panda_link0'
+    publish_hz: float = 100.0
+    scale_pos: float = 0.00001
+    scale_rot: float = 0.00001
+    deadzone: float = 0.05 # 5% deadzone by default
+    motion_mapping: np.ndarray = field(
+        default_factory=lambda: np.array(
+            [
+                [1, 0, 0, 0],
+                [0, 1, 0, 0],
+                [0, 0, 1, 0],
+                [0, 0, 0, 1],
+            ],
+            dtype=float,
+        )
+    )
+
 
 
 
 
 
 class SpaceMouseTeleopNode(Node):
-    def __init__(self):
+    INIT_TIMEOUT_SEC = 1.0
+
+    def __init__(self, config: SpacemouseConfig = None):
         super().__init__('spacemouse_teleop')
+
+        self.config = config if config is not None else SpacemouseConfig()
+
+        self.target_pose_topic = self.config.target_pose_topic
+        self.ee_pose_topic = self.config.ee_pose_topic
+        self.frame_id = self.config.base_frame
+        self.publish_hz = float(self.config.publish_hz)
+        self.scale_pos = float(self.config.scale_pos)
+        self.scale_rot = float(self.config.scale_rot)
+        self.deadzone = float(self.config.deadzone)
+        self.motion_mapping = np.asarray(self.config.motion_mapping, dtype=float)
+
+        if self.motion_mapping.shape != (4, 4):
+            raise ValueError("SpacemouseConfig.motion_mapping must be a 4x4 matrix")
 
         self.publisher = self.create_publisher(
             PoseStamped,
-            '/cartesian_impedance/target_pose', 
+            self.target_pose_topic,
             10
         )
 
@@ -33,28 +72,22 @@ class SpaceMouseTeleopNode(Node):
 
         self.ee_pose_sub = self.create_subscription(
             PoseStamped,
-            '/cartesian_impedance/ee_pose',
+            self.ee_pose_topic,
             self.ee_pose_callback,
             10,
         )
 
         # Initialize target pose from current robot EE pose if available.
-        init_timeout_sec = 1.0
         init_start = time.monotonic()
         while (not self.pose_initialized_from_ee_pose and
-               (time.monotonic() - init_start) < init_timeout_sec):
+             (time.monotonic() - init_start) < self.INIT_TIMEOUT_SEC):
             rclpy.spin_once(self, timeout_sec=0.05)
 
         if not self.pose_initialized_from_ee_pose:
             raise RuntimeError(
-                f"Timeout waiting for /cartesian_impedance/ee_pose (>{init_timeout_sec:.1f}s). "
+                f"Timeout waiting for {self.ee_pose_topic} (>{self.INIT_TIMEOUT_SEC:.1f}s). "
                 f"Cannot initialize self.pose from current end-effector pose."
             )
-        
-        # Scale pos correctly (using pyspacemouse processed scaling, similar range -1 to 1) 
-        self.scale_pos = 0.0000007
-        self.scale_rot = 0.0000035
-        self.deadzone = 0.05
         
         success = pyspacemouse.open()
         if not success:
@@ -80,7 +113,7 @@ class SpaceMouseTeleopNode(Node):
             msg.pose.position.z,
         ], dtype=float)
         self.pose_initialized_from_ee_pose = True
-        self.get_logger().info('Initialized target pose from /cartesian_impedance/ee_pose.')
+        self.get_logger().info(f'Initialized target pose from {self.ee_pose_topic}.')
 
     def process_state(self, state):
         if not state:
@@ -104,6 +137,10 @@ class SpaceMouseTeleopNode(Node):
         drx = apply_dz(state.pitch) * self.scale_rot
         dry = apply_dz(-state.roll) * self.scale_rot
         drz = apply_dz(-state.yaw) * self.scale_rot
+
+        raw_motion = np.array([dx, dy, dz, 1.0], dtype=float)
+        mapped_motion = self.motion_mapping @ raw_motion
+        dx, dy, dz = mapped_motion[0], mapped_motion[1], mapped_motion[2]
         
         if any([dx, dy, dz, drx, dry, drz]):
             rot_x = Rotation.from_rotvec([drx, 0.0, 0.0])
@@ -122,7 +159,7 @@ class SpaceMouseTeleopNode(Node):
     def get_pose_msg(self):
         pose_msg = PoseStamped()
         pose_msg.header.stamp = self.get_clock().now().to_msg()
-        pose_msg.header.frame_id = 'panda_link0'
+        pose_msg.header.frame_id = self.frame_id
 
         arm_T = self.pose
         pose_msg.pose.position.x = float(arm_T[0, 3])
@@ -165,8 +202,8 @@ class SpaceMouseTeleopNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = SpaceMouseTeleopNode()
-    
-    node.create_timer(0.01, node.timer_callback)
+
+    node.create_timer(1.0 / max(node.publish_hz, 1.0), node.timer_callback)
     
     stop_event = threading.Event()
     def spacemouse_loop():

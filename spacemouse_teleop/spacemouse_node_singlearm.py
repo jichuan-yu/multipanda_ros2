@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 from dataclasses import dataclass, field
-
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
@@ -20,22 +19,29 @@ class SpacemouseConfig:
     ee_pose_topic: str = '/cartesian_impedance/ee_pose' # robot end-effector pose feedback
     base_frame: str = 'panda_link0'
     publish_hz: float = 100.0
-    scale_pos: float = 0.00001
-    scale_rot: float = 0.00001
+    '''
+        Essentially the scales are the maximum translation/rotation velocity in m/s or rad/s
+        delta_pos = scale_pos / publish_hz * mouse_state ([0,1]) in each control cycle.
+    '''
+    scale_pos: float = 0.1 #  0.1 m/s 
+    scale_rot: float = 0.2 # 0.2 rad/s
+
     deadzone: float = 0.05 # 5% deadzone by default
+    # 6x6 mapping from normalized SpaceMouse input [tx, ty, tz, rx, ry, rz]
+    # to robot command axes [dx, dy, dz, drx, dry, drz].
     motion_mapping: np.ndarray = field(
         default_factory=lambda: np.array(
             [
-                [1, 0, 0, 0],
-                [0, 1, 0, 0],
-                [0, 0, 1, 0],
-                [0, 0, 0, 1],
+                [1, 0, 0, 0, 0, 0],
+                [0, 1, 0, 0, 0, 0],
+                [0, 0, 1, 0, 0, 0],
+                [0, 0, 0, 0, 1, 0],
+                [0, 0, 0, 1, 0, 0],
+                [0, 0, 0, 0, 0, -1],
             ],
             dtype=float,
         )
     )
-
-
 
 
 
@@ -57,19 +63,19 @@ class SpaceMouseTeleopNode(Node):
         self.deadzone = float(self.config.deadzone)
         self.motion_mapping = np.asarray(self.config.motion_mapping, dtype=float)
 
-        if self.motion_mapping.shape != (4, 4):
-            raise ValueError("SpacemouseConfig.motion_mapping must be a 4x4 matrix")
+        if self.motion_mapping.shape != (6, 6):
+            raise ValueError("SpacemouseConfig.motion_mapping must be a 6x6 matrix")
 
         self.publisher = self.create_publisher(
             PoseStamped,
             self.target_pose_topic,
             10
         )
-
+        self.pose_lock = threading.Lock()
+        self.mouse_state_lock = threading.Lock()
+        self.mouse_state = None
         self.pose = np.eye(4)
-        
         self.pose_initialized_from_ee_pose = False
-
         self.ee_pose_sub = self.create_subscription(
             PoseStamped,
             self.ee_pose_topic,
@@ -94,6 +100,8 @@ class SpaceMouseTeleopNode(Node):
             self.get_logger().error("Could not connect to spacemouse. Ensure HID access!")
             exit(1)
 
+        self._last_pose_log_time = 0.0
+
         self.get_logger().info('SpaceMouse publisher (single arm) initialized!')
 
     def ee_pose_callback(self, msg: PoseStamped):
@@ -105,42 +113,55 @@ class SpaceMouseTeleopNode(Node):
             msg.pose.orientation.z,
             msg.pose.orientation.w,
         ]).as_matrix()
-        self.pose = np.eye(4)
-        self.pose[0:3, 0:3] = rotation
-        self.pose[0:3, 3] = np.array([
-            msg.pose.position.x,
-            msg.pose.position.y,
-            msg.pose.position.z,
-        ], dtype=float)
+        with self.pose_lock:
+            self.pose = np.eye(4)
+            self.pose[0:3, 0:3] = rotation
+            self.pose[0:3, 3] = np.array([
+                msg.pose.position.x,
+                msg.pose.position.y,
+                msg.pose.position.z,
+            ], dtype=float)
         self.pose_initialized_from_ee_pose = True
         self.get_logger().info(f'Initialized target pose from {self.ee_pose_topic}.')
 
-    def process_state(self, state):
+    def step(self, state):
         if not state:
             return
 
-        is_idle = (state.x == 0.0 and state.y == 0.0 and state.z == 0.0 and 
-                   state.roll == 0.0 and state.pitch == 0.0 and state.yaw == 0.0 and 
-                   not any(state.buttons))
-        
-        if not is_idle:
-            print(f"[Pyspacemouse State] x: {state.x:.3f}, y: {state.y:.3f}, z: {state.z:.3f}, roll: {state.roll:.3f}, pitch: {state.pitch:.3f}, yaw: {state.yaw:.3f}, buttons: {state.buttons}")
+        # Normalized SpaceMouse axes in [-1, 1].
+        raw_input = np.array(
+            [
+                state.x,
+                state.y,
+                state.z,
+                state.roll,
+                state.pitch,
+                state.yaw,
+            ],
+            dtype=float,
+        )
 
-        def apply_dz(val):
-            return val if abs(val) > self.deadzone else 0.0
+        # Apply deadzone per axis.
+        raw_input[np.abs(raw_input) < self.deadzone] = 0.0
 
-        # Mapping to robot cartesian offsets 
-        dx = apply_dz(state.y) * self.scale_pos
-        dy = apply_dz(state.x) * self.scale_pos
-        dz = apply_dz(state.z) * self.scale_pos
-        
-        drx = apply_dz(state.pitch) * self.scale_rot
-        dry = apply_dz(-state.roll) * self.scale_rot
-        drz = apply_dz(-state.yaw) * self.scale_rot
+        # Map device axes to robot command axes.
+        mapped_input = self.motion_mapping @ raw_input
 
-        raw_motion = np.array([dx, dy, dz, 1.0], dtype=float)
-        mapped_motion = self.motion_mapping @ raw_motion
-        dx, dy, dz = mapped_motion[0], mapped_motion[1], mapped_motion[2]
+        # Convert velocity limits (m/s, rad/s) to per-cycle increments.
+        dt = 1.0 / max(self.publish_hz, 1.0)
+        gain = np.array(
+            [
+                self.scale_pos * dt,
+                self.scale_pos * dt,
+                self.scale_pos * dt,
+                self.scale_rot * dt,
+                self.scale_rot * dt,
+                self.scale_rot * dt,
+            ],
+            dtype=float,
+        )
+        delta = mapped_input * gain
+        dx, dy, dz, drx, dry, drz = delta.tolist()
         
         if any([dx, dy, dz, drx, dry, drz]):
             rot_x = Rotation.from_rotvec([drx, 0.0, 0.0])
@@ -148,56 +169,56 @@ class SpaceMouseTeleopNode(Node):
             rot_z = Rotation.from_rotvec([0.0, 0.0, drz])
             R_delta = (rot_z * rot_y * rot_x).as_matrix()
             
-            # 基于基座坐标系（全局坐标系）进行平移
-            self.pose[0, 3] += dx
-            self.pose[1, 3] += dy
-            self.pose[2, 3] += dz
-            
-            # 基于基座坐标系（以当前末端位置为旋转中心）进行旋转
-            self.pose[0:3, 0:3] = R_delta @ self.pose[0:3, 0:3]
+            with self.pose_lock:
+                self.pose[0, 3] += dx
+                self.pose[1, 3] += dy
+                self.pose[2, 3] += dz
+                self.pose[0:3, 0:3] = R_delta @ self.pose[0:3, 0:3]
+
+    def update_mouse_state(self, state):
+        with self.mouse_state_lock:
+            self.mouse_state = state
+
+    def consume_mouse_state(self):
+        with self.mouse_state_lock:
+            state = self.mouse_state
+            self.mouse_state = None
+        return state
 
     def get_pose_msg(self):
         pose_msg = PoseStamped()
         pose_msg.header.stamp = self.get_clock().now().to_msg()
         pose_msg.header.frame_id = self.frame_id
 
-        arm_T = self.pose
+        with self.pose_lock:
+            arm_T = self.pose.copy()
         pose_msg.pose.position.x = float(arm_T[0, 3])
         pose_msg.pose.position.y = float(arm_T[1, 3])
         pose_msg.pose.position.z = float(arm_T[2, 3])
 
-        rotation = arm_T[0:3, 0:3]
-        trace = float(np.trace(rotation))
-        if trace > 0.0:
-            s = math.sqrt(trace + 1.0) * 2.0
-            pose_msg.pose.orientation.w = 0.25 * s
-            pose_msg.pose.orientation.x = float((rotation[2, 1] - rotation[1, 2]) / s)
-            pose_msg.pose.orientation.y = float((rotation[0, 2] - rotation[2, 0]) / s)
-            pose_msg.pose.orientation.z = float((rotation[1, 0] - rotation[0, 1]) / s)
-        else:
-            if rotation[0, 0] > rotation[1, 1] and rotation[0, 0] > rotation[2, 2]:
-                s = math.sqrt(1.0 + float(rotation[0, 0]) - float(rotation[1, 1]) - float(rotation[2, 2])) * 2.0
-                pose_msg.pose.orientation.w = float((rotation[2, 1] - rotation[1, 2]) / s)
-                pose_msg.pose.orientation.x = 0.25 * s
-                pose_msg.pose.orientation.y = float((rotation[0, 1] + rotation[1, 0]) / s)
-                pose_msg.pose.orientation.z = float((rotation[0, 2] + rotation[2, 0]) / s)
-            elif rotation[1, 1] > rotation[2, 2]:
-                s = math.sqrt(1.0 + float(rotation[1, 1]) - float(rotation[0, 0]) - float(rotation[2, 2])) * 2.0
-                pose_msg.pose.orientation.w = float((rotation[0, 2] - rotation[2, 0]) / s)
-                pose_msg.pose.orientation.x = float((rotation[0, 1] + rotation[1, 0]) / s)
-                pose_msg.pose.orientation.y = 0.25 * s
-                pose_msg.pose.orientation.z = float((rotation[1, 2] + rotation[2, 1]) / s)
-            else:
-                s = math.sqrt(1.0 + float(rotation[2, 2]) - float(rotation[0, 0]) - float(rotation[1, 1])) * 2.0
-                pose_msg.pose.orientation.w = float((rotation[1, 0] - rotation[0, 1]) / s)
-                pose_msg.pose.orientation.x = float((rotation[0, 2] + rotation[2, 0]) / s)
-                pose_msg.pose.orientation.y = float((rotation[1, 2] + rotation[2, 1]) / s)
-                pose_msg.pose.orientation.z = 0.25 * s
+        quat = Rotation.from_matrix(arm_T[0:3, 0:3]).as_quat()
+        pose_msg.pose.orientation.x = float(quat[0])
+        pose_msg.pose.orientation.y = float(quat[1])
+        pose_msg.pose.orientation.z = float(quat[2])
+        pose_msg.pose.orientation.w = float(quat[3])
 
         return pose_msg
 
     def timer_callback(self):
+        state = self.consume_mouse_state()
+        if state is not None:
+            self.step(state)
         self.publisher.publish(self.get_pose_msg())
+        now = time.monotonic()
+        if now - self._last_pose_log_time >= 2.0:
+            with self.pose_lock:
+                pose_snapshot = self.pose.copy()
+            self.get_logger().info(
+                f'Current cartesian pose:\n{np.array2string(pose_snapshot, precision=4, suppress_small=True)}'
+            )
+            self._last_pose_log_time = now
+
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -206,16 +227,18 @@ def main(args=None):
     node.create_timer(1.0 / max(node.publish_hz, 1.0), node.timer_callback)
     
     stop_event = threading.Event()
+
     def spacemouse_loop():
         while not stop_event.is_set():
             try:
                 state = pyspacemouse.read()
-                if state:
-                    node.process_state(state)
+                if not state:
+                    node.get_logger().warning('Empty state received from SpaceMouse')
                 else:
-                    time.sleep(0.001)
-            except Exception:
-                time.sleep(0.001)
+                    node.update_mouse_state(state)
+            except Exception as exc:
+                node.get_logger().warning(f'SpaceMouse read loop exception: {exc}')
+
             
     sm_thread = threading.Thread(target=spacemouse_loop, daemon=True)
     sm_thread.start()

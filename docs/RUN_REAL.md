@@ -31,7 +31,8 @@ ros2 launch franka_bringup franka_control.launch.py \
 3. Start spacemouse teleoperation:
 
 ```bash
-python3 tools/spacemouse_pub_single.py
+cd src/multipanda_ros2
+python3 spacemouse_teleop/spacemouse_node_singlearm.py
 ```
 
 

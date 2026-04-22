@@ -8,6 +8,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <Eigen/Dense>
 #include "geometry_msgs/msg/pose_stamped.hpp"
+#include "geometry_msgs/msg/wrench_stamped.hpp"
 
 using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
@@ -55,7 +56,7 @@ class CartesianImpedanceController : public controller_interface::ControllerInte
 
   void desiredCartesianCallback(const geometry_msgs::msg::PoseStamped& msg);
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr ee_pose_publisher_;
-  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr external_wrench_publisher_;
+  rclcpp::Publisher<geometry_msgs::msg::WrenchStamped>::SharedPtr external_wrench_publisher_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_desired_cartesian_; 
 };
 

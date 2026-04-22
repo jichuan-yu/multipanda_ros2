@@ -102,16 +102,15 @@ controller_interface::return_type CartesianImpedanceController::update(
   }
 
   if (external_wrench_publisher_) {
-    geometry_msgs::msg::PoseStamped external_wrench_msg;
+    geometry_msgs::msg::WrenchStamped external_wrench_msg;
     external_wrench_msg.header.stamp = time;
     external_wrench_msg.header.frame_id = arm_id_ + "_link0";
-    external_wrench_msg.pose.position.x = robot_state.O_F_ext_hat_K[0];
-    external_wrench_msg.pose.position.y = robot_state.O_F_ext_hat_K[1];
-    external_wrench_msg.pose.position.z = robot_state.O_F_ext_hat_K[2];
-    external_wrench_msg.pose.orientation.x = robot_state.O_F_ext_hat_K[3];
-    external_wrench_msg.pose.orientation.y = robot_state.O_F_ext_hat_K[4];
-    external_wrench_msg.pose.orientation.z = robot_state.O_F_ext_hat_K[5];
-    external_wrench_msg.pose.orientation.w = 0.0;
+    external_wrench_msg.wrench.force.x = robot_state.O_F_ext_hat_K[0];
+    external_wrench_msg.wrench.force.y = robot_state.O_F_ext_hat_K[1];
+    external_wrench_msg.wrench.force.z = robot_state.O_F_ext_hat_K[2];
+    external_wrench_msg.wrench.torque.x = robot_state.O_F_ext_hat_K[3];
+    external_wrench_msg.wrench.torque.y = robot_state.O_F_ext_hat_K[4];
+    external_wrench_msg.wrench.torque.z = robot_state.O_F_ext_hat_K[5];
     external_wrench_publisher_->publish(external_wrench_msg);
   }
 
@@ -144,7 +143,7 @@ CallbackReturn CartesianImpedanceController::on_configure(
                                                    arm_id_));
   ee_pose_publisher_ = get_node()->create_publisher<geometry_msgs::msg::PoseStamped>(
       "/cartesian_impedance/ee_pose", 1);
-    external_wrench_publisher_ = get_node()->create_publisher<geometry_msgs::msg::PoseStamped>(
+    external_wrench_publisher_ = get_node()->create_publisher<geometry_msgs::msg::WrenchStamped>(
       "/cartesian_impedance/external_wrench", 1);
   auto parameters = get_node()->list_parameters({}, 10);
   return CallbackReturn::SUCCESS;

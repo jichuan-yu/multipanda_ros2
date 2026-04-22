@@ -103,13 +103,12 @@ Ctrl-C to quit
             self.right_gripper_pub.publish(msg)
 
     def update_pose(self, key):
-        redraw = False
         if key == 'z':
-            self.selected_arm = 'left'
-            redraw = True
+            if self.selected_arm != 'left':
+                self.selected_arm = 'left'
         elif key == 'x':
-            self.selected_arm = 'right'
-            redraw = True
+            if self.selected_arm != 'right':
+                self.selected_arm = 'right'
             
         arm = self.poses[self.selected_arm]
         
@@ -143,13 +142,8 @@ Ctrl-C to quit
             
         elif key == 'c':
             self.move_gripper(self.selected_arm, 0.0)
-            redraw = True
         elif key == 'v':
             self.move_gripper(self.selected_arm, 0.08)
-            redraw = True
-
-        if redraw:
-            self.print_usage()
 
     def get_pose_array(self, arm_name):
         arr = []

@@ -15,6 +15,7 @@
   <depend>rclcpp_lifecycle</depend>
   <depend>std_msgs</depend>
   <depend>rclcpp_action</depend>
+  <depend>std_srvs</depend>
   <depend>franka_msgs</depend>
   <depend>franka_semantic_components</depend>
   <depend>multi_mode_control_msgs</depend>

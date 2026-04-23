@@ -1,3 +1,3 @@
-我新增了oscbf控制器的源码src/oscbf
-现在我希望在我的src/multipanda_ros2/tools/key_pub.py生成msg之后
-通过oscbf对pub的msg进行处理，成为safe_msg再进行pub（如果oscbf脚本未启动，请直接发送msg，后续会使用对比收集实验数据）
+本instruction.md作为给AI的提示词，应该被添加进入gitignore中
+在src/multipanda_ros2下说明性质的markdown文件应该被整理到src/multipanda_ros2/docs目录下并统一规范命名
+在src/multipanda_ros2下，代码在开发过程中遗留的一些零散文件应该被规范存在合适目录下，已经失去作用的文件可以删除

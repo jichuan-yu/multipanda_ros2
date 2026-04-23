@@ -9,3 +9,4 @@ log/*
 build/*
 install/*
 test/*
+instruction.md

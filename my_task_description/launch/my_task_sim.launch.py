@@ -64,6 +64,19 @@ def generate_launch_description():
     with open(mj_dual_path, 'r') as f:
         mj_dual_text = f.read()
     
+    # Inject left arm virtual camera into the left hand body
+    mj_dual_text = re.sub(
+        r'(<body name="mj_left_hand"[^>]*>)',
+        r'\1\n                        <camera name="left_arm_cam" pos="0 0.104765 0.053574" xyaxes="0 -1 0 -0.676 0 -0.736" fovy="58"/>',
+        mj_dual_text
+    )
+    # Inject right arm virtual camera into the right hand body
+    mj_dual_text = re.sub(
+        r'(<body name="mj_right_hand"[^>]*>)',
+        r'\1\n                        <camera name="right_arm_cam" pos="0 0.104765 0.053574" xyaxes="0 -1 0 -0.676 0 -0.736" fovy="58"/>',
+        mj_dual_text
+    )
+
     # Mount camera_part1 with identity transform w.r.t. left flange frame
     mj_dual_text = re.sub(
         r'(<site name="mj_left_flange_site"[^>]*/>)',

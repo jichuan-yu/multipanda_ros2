@@ -7,7 +7,8 @@
 #include "franka_semantic_components/franka_robot_model.hpp"
 #include <rclcpp/rclcpp.hpp>
 #include <Eigen/Dense>
-#include "std_msgs/msg/float64_multi_array.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
+#include "geometry_msgs/msg/wrench_stamped.hpp"
 
 using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
@@ -53,8 +54,10 @@ class CartesianImpedanceController : public controller_interface::ControllerInte
   double rot_stiff;
   double n_stiffness;
 
-  void desiredCartesianCallback(const std_msgs::msg::Float64MultiArray& msg);
-  rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr sub_desired_cartesian_; 
+  void desiredCartesianCallback(const geometry_msgs::msg::PoseStamped& msg);
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr ee_pose_publisher_;
+  rclcpp::Publisher<geometry_msgs::msg::WrenchStamped>::SharedPtr external_wrench_publisher_;
+  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_desired_cartesian_; 
 };
 
 }  // namespace franka_example_controllers

@@ -11,6 +11,9 @@ controller_manager:
     cartesian_impedance_example_controller:
       type: franka_example_controllers/CartesianImpedanceExampleController
 
+    cartesian_impedance_controller:
+      type: franka_controllers/CartesianImpedanceController
+
     joint_position_example_controller:
       type: franka_example_controllers/JointPositionExampleController
 
@@ -35,6 +38,11 @@ controller_manager:
     model_example_controller:
       type: franka_example_controllers/ModelExampleController
     
+    cartesian_impedance_controller:
+      type: franka_example_controllers/CartesianImpedanceController
+
+    joint_impedance_controller:
+      type: franka_example_controllers/JointImpedanceController
 
 franka_robot_state_broadcaster:
   ros__parameters:
@@ -72,6 +80,12 @@ cartesian_impedance_example_controller:
   ros__parameters:
     arm_id: panda
 
+cartesian_impedance_controller:
+  ros__parameters:
+    arm_id: panda
+    pos_stiff: 100.0
+    rot_stiff: 10.0
+
 joint_impedance_example_controller:
   ros__parameters:
     arm_id: panda
@@ -91,6 +105,7 @@ joint_impedance_example_controller:
       - 1.0
       - 1.0
       - 0.5
+
 move_to_start_example_controller:
   ros__parameters:
     arm_id: panda
@@ -121,3 +136,29 @@ joint_velocity_example_controller:
 cartesian_velocity_example_controller:
   ros__parameters:
     arm_id: panda
+
+cartesian_impedance_controller:
+  ros__parameters:
+    arm_id: panda
+    pos_stiff: 500.0    # high-stiffness cartesian tracking
+    rot_stiff: 50.0     # high-stiffness cartesian tracking
+
+joint_impedance_controller:
+  ros__parameters:
+    arm_id: panda
+    k_gains:
+      - 24.0
+      - 24.0
+      - 24.0
+      - 24.0
+      - 10.0
+      - 6.0
+      - 2.0
+    d_gains:
+      - 2.0
+      - 2.0
+      - 2.0
+      - 1.0
+      - 1.0
+      - 1.0
+      - 0.5

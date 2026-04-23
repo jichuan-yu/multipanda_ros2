@@ -46,17 +46,18 @@ CartesianImpedanceController::state_interface_configuration() const {
 }
 
 controller_interface::return_type CartesianImpedanceController::update(
-    const rclcpp::Time& /*time*/,
-    const rclcpp::Duration& /*period*/) {
+  const rclcpp::Time& time,
+  const rclcpp::Duration& /*period*/) {
   Eigen::Map<const Matrix4d> current(franka_robot_model_->getPoseMatrix(franka::Frame::kEndEffector).data());
   Eigen::Vector3d current_position(current.block<3,1>(0,3));
   Eigen::Quaterniond current_orientation(current.block<3,3>(0,0));
+  const auto& robot_state = *franka_robot_model_->getRobotState();
   Eigen::Map<const Matrix7d> inertia(franka_robot_model_->getMassMatrix().data());
   Eigen::Map<const Vector7d> coriolis(franka_robot_model_->getCoriolisForceVector().data());
   Eigen::Matrix<double, 6, 7> jacobian(
       franka_robot_model_->getZeroJacobian(franka::Frame::kEndEffector).data());
-  Eigen::Map<const Vector7d> qD(franka_robot_model_->getRobotState()->dq.data());
-  Eigen::Map<const Vector7d> q(franka_robot_model_->getRobotState()->q.data());
+  Eigen::Map<const Vector7d> qD(robot_state.dq.data());
+  Eigen::Map<const Vector7d> q(robot_state.q.data());
   Vector6d error;
 
   auto desired_position_cur = desired_position;
@@ -85,6 +86,34 @@ controller_interface::return_type CartesianImpedanceController::update(
   for (int i = 0; i < num_joints; ++i) {
     command_interfaces_[i].set_value(tau_d(i));
   }
+
+  if (ee_pose_publisher_) {
+    geometry_msgs::msg::PoseStamped ee_pose_msg;
+    ee_pose_msg.header.stamp = time;
+    ee_pose_msg.header.frame_id = arm_id_ + "_link0";
+    ee_pose_msg.pose.position.x = current_position.x();
+    ee_pose_msg.pose.position.y = current_position.y();
+    ee_pose_msg.pose.position.z = current_position.z();
+    ee_pose_msg.pose.orientation.w = current_orientation.w();
+    ee_pose_msg.pose.orientation.x = current_orientation.x();
+    ee_pose_msg.pose.orientation.y = current_orientation.y();
+    ee_pose_msg.pose.orientation.z = current_orientation.z();
+    ee_pose_publisher_->publish(ee_pose_msg);
+  }
+
+  if (external_wrench_publisher_) {
+    geometry_msgs::msg::WrenchStamped external_wrench_msg;
+    external_wrench_msg.header.stamp = time;
+    external_wrench_msg.header.frame_id = arm_id_ + "_link0";
+    external_wrench_msg.wrench.force.x = robot_state.O_F_ext_hat_K[0];
+    external_wrench_msg.wrench.force.y = robot_state.O_F_ext_hat_K[1];
+    external_wrench_msg.wrench.force.z = robot_state.O_F_ext_hat_K[2];
+    external_wrench_msg.wrench.torque.x = robot_state.O_F_ext_hat_K[3];
+    external_wrench_msg.wrench.torque.y = robot_state.O_F_ext_hat_K[4];
+    external_wrench_msg.wrench.torque.z = robot_state.O_F_ext_hat_K[5];
+    external_wrench_publisher_->publish(external_wrench_msg);
+  }
+
   return controller_interface::return_type::OK;
 }
 
@@ -93,8 +122,8 @@ CallbackReturn CartesianImpedanceController::on_init() {
     auto_declare<std::string>("arm_id", "panda");
     auto_declare<double>("pos_stiff", 100);
     auto_declare<double>("rot_stiff", 10);
-    sub_desired_cartesian_ = get_node()->create_subscription<std_msgs::msg::Float64MultiArray>(
-      "/cartesian_impedance/pose_desired", 1,
+    sub_desired_cartesian_ = get_node()->create_subscription<geometry_msgs::msg::PoseStamped>(
+      "/cartesian_impedance/target_pose", 1,
       std::bind(&CartesianImpedanceController::desiredCartesianCallback, this, std::placeholders::_1)
     );
   } catch (const std::exception& e) {
@@ -112,6 +141,10 @@ CallbackReturn CartesianImpedanceController::on_configure(
   franka_robot_model_ = std::make_unique<franka_semantic_components::FrankaRobotModel>(
       franka_semantic_components::FrankaRobotModel(arm_id_ + "/robot_model",
                                                    arm_id_));
+  ee_pose_publisher_ = get_node()->create_publisher<geometry_msgs::msg::PoseStamped>(
+      "/cartesian_impedance/ee_pose", 1);
+    external_wrench_publisher_ = get_node()->create_publisher<geometry_msgs::msg::WrenchStamped>(
+      "/cartesian_impedance/external_wrench", 1);
   auto parameters = get_node()->list_parameters({}, 10);
   return CallbackReturn::SUCCESS;
 }
@@ -143,22 +176,15 @@ CallbackReturn CartesianImpedanceController::on_deactivate(
 }
 
 void CartesianImpedanceController::desiredCartesianCallback(
-  const std_msgs::msg::Float64MultiArray& msg) {
-  if (msg.data[0]){
-    for (auto i = 0; i < 3; ++i) {
-      desired_position[i] = msg.data[i];
-    }
-    if (msg.data[11]){ // for orientation matrix
-      Matrix3d desired_orientation_mat;
-      for (auto i = 0; i < 3; ++i) {
-        for (auto j = 0; j < 3; ++j) {
-          desired_orientation_mat(i, j) = msg.data[3+3*i+j];
-        }
-      }
-      desired_orientation = Eigen::Quaterniond(desired_orientation_mat);
-    }
-
-  }
+  const geometry_msgs::msg::PoseStamped& msg) {
+  desired_position << msg.pose.position.x,
+                      msg.pose.position.y,
+                      msg.pose.position.z;
+  desired_orientation = Eigen::Quaterniond(
+      msg.pose.orientation.w,
+      msg.pose.orientation.x,
+      msg.pose.orientation.y,
+      msg.pose.orientation.z);
 }
 
 }  // namespace franka_example_controllers

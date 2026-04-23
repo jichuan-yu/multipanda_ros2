@@ -67,13 +67,13 @@ def generate_launch_description():
     # Mount camera_part1 with identity transform w.r.t. left flange frame
     mj_dual_text = re.sub(
         r'(<site name="mj_left_flange_site"[^>]*/>)',
-        r'\1\n                        <body name="camera_part1" pos="0 0 0" quat="1 0 0 0">\n                          <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.5" contype="0" conaffinity="0"/>\n                        </body>',
+        r'\1\n                        <body name="camera_part1" pos="0 0 0" quat="0 0.93969262 0.34202014 0">\n                          <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.5" contype="0" conaffinity="0"/>\n                        </body>',
         mj_dual_text
     )
     # Mount camera_part2 with identity transform w.r.t. right flange frame
     mj_dual_text = re.sub(
         r'(<site name="mj_right_flange_site"[^>]*/>)',
-        r'\1\n                        <body name="camera_part2" pos="0 0 0" quat="1 0 0 0">\n                          <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.5" contype="0" conaffinity="0"/>\n                        </body>',
+        r'\1\n                        <body name="camera_part2" pos="0 0 0" quat="0 0.93969262 0.34202014 0">\n                          <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.5" contype="0" conaffinity="0"/>\n                        </body>',
         mj_dual_text
     )
     

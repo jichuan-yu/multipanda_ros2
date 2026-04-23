@@ -6,45 +6,53 @@
 
 当需要修改相机位置、模型位置、控制器参数或其他仿真配置时，请按以下流程操作：
 
-1. **修改源码中的参数**
-   - 优先修改工作区源码目录中的文件，而不是 `install/` 目录。
-   - 常见修改位置包括：
-     - `my_task_description/launch/my_task_sim.launch.py`
-     - 控制器配置文件
-     - 机器人模型 XML / 生成 XML 的逻辑
+### 1. 启动容器
+先启动容器，然后按如下指令运行：
+```bash
+docker start multipanda-container
+```
+通过 `docker exec -it multipanda-container bash` 进入容器，确保每个终端都处于项目工作空间目录下（multipanda_ws）
 
-2. **确认修改的是当前实际运行的工作区**
-   - 当前仿真使用的是：
-     - `/home/developer/multipanda_ws/install/my_task_description`
-   - 如果源码不在该工作区内，需要先同步到对应 workspace。
+### 2. 修改源码中的参数
+- 优先修改工作区源码目录中的文件，而不是 `install/` 目录。
+- 常见修改位置包括：
+  - `my_task_description/launch/my_task_sim.launch.py`
+  - 控制器配置文件
+  - 机器人模型 XML / 生成 XML 的逻辑
 
-3. **重新编译工作区**
-   ```bash
-   cd /home/developer/multipanda_ws
-   colcon build --packages-select my_task_description --symlink-install
-   ```
+### 3. 确认修改的是当前实际运行的工作区
+- 当前仿真使用的是：
+  - `/home/developer/multipanda_ws/install/my_task_description`
+- 如果源码不在该工作区内，需要先同步到对应 workspace。
 
-4. **重新加载环境**
-   ```bash
-   source install/setup.bash
-   ```
+### 4. 重新编译工作区
+```bash
+cd /home/developer/multipanda_ws
+colcon build --packages-select my_task_description --symlink-install
+```（注意选择对应的packages,不需要全部编译，这里一my_task_description为例子）
 
-5. **重新启动仿真**
-   - 先停止旧的 `ros2 launch` 进程
-   - 再执行新的启动命令
-   - 修改后的 XML、相机位置、物体位置等才会生效
+### 5. 重新加载环境
+```bash
+source install/setup.bash
+```
 
-6. **检查是否真正生效**
-   ```bash
-   ros2 pkg prefix my_task_description
-   ```
-   如果输出仍然是 `/home/developer/multipanda_ws/install/...`，说明当前运行的就是这个工作区。
+### 6. 重新启动仿真
+- 先停止旧的 `ros2 launch` 进程
+- 再执行新的启动命令
+- 修改后的 XML、相机位置、物体位置等才会生效
 
-7. **如果改动后没有变化**
-   - 检查是否改到了错误的源码目录
-   - 检查是否忘记重新 `colcon build`
-   - 检查是否忘记重新 `source install/setup.bash`
-   - 检查是否还在运行旧的 launch 进程
+### 7. 检查是否真正生效
+```bash
+ros2 pkg prefix my_task_description
+ros2 launch my_task_description my_task_sim.launch.py
+```
+如果输出仍然是 `/home/developer/multipanda_ws/install/...`，说明当前运行的就是这个工作区。
+
+### 8. 如果改动后没有变化
+- 检查是否改到了错误的源码目录
+- 检查是否忘记重新 `colcon build`
+- 检查是否忘记重新 `source install/setup.bash`
+- 检查是否还在运行旧的 launch 进程## 调整参数时的工作流
 
 
 

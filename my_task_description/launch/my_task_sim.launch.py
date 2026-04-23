@@ -64,16 +64,16 @@ def generate_launch_description():
     with open(mj_dual_path, 'r') as f:
         mj_dual_text = f.read()
     
-    # Inject left arm camera into mj_left_hand
+    # Mount camera_part1 with identity transform w.r.t. left flange frame
     mj_dual_text = re.sub(
-        r'(<body name="mj_left_hand"[^>]*>)', 
-        r'\1\n                        <camera name="left_arm_cam" pos="0.08 0 0.03" xyaxes="0 -1 0 -0.676 0 -0.736" fovy="60"/>', 
+        r'(<site name="mj_left_flange_site"[^>]*/>)',
+        r'\1\n                        <body name="camera_part1" pos="0 0 0" quat="1 0 0 0">\n                          <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.5" contype="0" conaffinity="0"/>\n                        </body>',
         mj_dual_text
     )
-    # Inject right arm camera into mj_right_hand
+    # Mount camera_part2 with identity transform w.r.t. right flange frame
     mj_dual_text = re.sub(
-        r'(<body name="mj_right_hand"[^>]*>)', 
-        r'\1\n                        <camera name="right_arm_cam" pos="0.08 0 0.03" xyaxes="0 -1 0 -0.676 0 -0.736" fovy="60"/>', 
+        r'(<site name="mj_right_flange_site"[^>]*/>)',
+        r'\1\n                        <body name="camera_part2" pos="0 0 0" quat="1 0 0 0">\n                          <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.5" contype="0" conaffinity="0"/>\n                        </body>',
         mj_dual_text
     )
     
@@ -118,15 +118,6 @@ def generate_launch_description():
     <!-- World cameras -->
     <camera name="fixed_cam" pos="1.3 0.0 0.8" xyaxes="0 1 0 -0.5 0 1" fovy="60"/>
     
-    <!-- Custom Camera Parts (example positions) -->
-    <body name="camera_part1" pos="1.0 0 0">                                      
-      <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.5" contype="1" conaffinity="1"/>
-      <freejoint/> <!-- Add physical physics so robot can interact with it -->
-    </body>
-    <body name="camera_part2" pos="-0.5 0.0 0.05">
-      <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.5" contype="1" conaffinity="1"/>
-      <freejoint/>
-    </body>
   </worldbody> 
 </mujoco>
 """

@@ -77,7 +77,7 @@ docker exec -it multipanda-container bash -c "cd /home/xiaozy24/dual_panda_ws &&
 
 ```bash
 cd dual_panda_ws
-source install/setup.bash
+source ~/myenv/bin/activate
 python3 src/multipanda_ros2/spacemouse_teleop/key_safe_pub.py
 ```
 

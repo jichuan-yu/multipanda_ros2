@@ -79,8 +79,9 @@ add_library(multi_mode_controller SHARED
 
 target_include_directories(
   multi_mode_controller
-    PRIVATE
-    include
+    PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
     ${EIGEN3_INCLUDE_DIRS}
 )
 
@@ -135,5 +136,6 @@ ament_export_libraries(
 ament_export_dependencies(
         franka_semantic_components
         rclcpp
+        multi_mode_control_msgs
 )
 ament_package()

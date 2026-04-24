@@ -1,3 +1,2 @@
-本instruction.md作为给AI的提示词，应该被添加进入gitignore中
-在src/multipanda_ros2下说明性质的markdown文件应该被整理到src/multipanda_ros2/docs目录下并统一规范命名
-在src/multipanda_ros2下，代码在开发过程中遗留的一些零散文件应该被规范存在合适目录下，已经失去作用的文件可以删除
+我需要为我的multipanda_ros2接入dualarm_mprc控制器
+目前已经完成了一部分工作，请你从工作停止的位置继续

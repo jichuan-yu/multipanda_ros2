@@ -38,7 +38,7 @@ source install/setup.bash
 # 启动带有自定义环境和多相机渲染的任务仿真
 ros2 launch my_task_description my_task_sim.launch.py
 ```
-*启动后，你应该能看到包含两个相机零件(STL)的 MuJoCo 环境弹开，并且机器人加载在里面。同时 MuJoCo 会通过离屏渲染持续向 ROS 2 发布 `fixed_cam`, `left_arm_cam`, `right_arm_cam` 三路图像。此外，底层控制器 `multi_cartesian_impedance_controller` 也会被自动加载和激活，这说明机器人现在已经准备好接收目标笛卡尔空间指令。*
+*启动后，你应该能看到包含两个相机零件(STL)的 MuJoCo 环境弹开，并且机器人加载在里面。同时 MuJoCo 会通过离屏渲染持续向 ROS 2 发布 `fixed_cam`, `left_arm_cam`, `right_arm_cam` 三路图像。此外，底层控制器 `dual_joint_impedance_controller` 也会被自动加载和激活，这说明机器人现在已经准备好接收关节目标指令。*
 
 ---
 
@@ -57,36 +57,37 @@ ros2 run web_video_server web_video_server
 
 ---
 
-## 终端 3：运行控制脚本
+## 终端 3：运行安全控制脚本
 
-在第三个终端中，运行自动/交互式控制脚本。
+在第三个终端中，运行安全控制 ROS2 节点
 
 ```bash
-cd src/multipanda_ros2
-source ~/myenv/bin/activate #进入你的虚拟环境
-python3 spacemouse_teleop/key_pub.py
+docker exec -it multipanda-container bash
+source install/setup.bash
+ros2 run dual_arm_reactive_control dualarm_mprc_node
 ```
 
-执行后，切回 MuJoCo 仿真界面，你将可以通过键盘控制左/右臂的目标。
+如果 `ros2 run` 找不到可执行文件，可以直接运行安装路径：
+
+```bash
+docker exec -it multipanda-container bash -c "cd /home/xiaozy24/dual_panda_ws && source install/setup.bash && ./install/dual_arm_reactive_control/lib/dual_arm_reactive_control/dualarm_mprc_node"
+```
+
+## 终端 4：运行安全键盘发布器
+
+```bash
+cd dual_panda_ws
+source install/setup.bash
+python3 src/multipanda_ros2/spacemouse_teleop/key_safe_pub.py
+```
 
 ---
-
-## 终端 4：运行 OSCBF 控制器安全目标点滤波器 (可选)
-
-为了对 `key_pub.py` 发布的期望末端姿态（Cartesian Poses）进行位置边界过滤，您可以启动本 Python 节点。
-*如果不启动本节点，`key_pub.py` 则会自动检测并安全降级，将未处理的目标点直接发布给底层控制器仿真端，这便于您收集控制对比实验数据。*
-
-您可以新开一个宿主机终端（第4个）：
-```bash
-# 在宿主机直接运行
-cd src/multipanda_ros2
-source ~/myenv/bin/activate # 如有虚拟环境需要激活
-python3 tools/oscbf_node.py
-```
 
 ## Real Robot
 
 ``` bash
+docker exec -it multipanda-container bash
+cd /home/xiaozy24/dual_panda_ws
 ros2 launch franka_bringup franka.launch.py robot_ip:=172.16.0.2
 
 ros2 control load_controller cartesian_impedance_controller 

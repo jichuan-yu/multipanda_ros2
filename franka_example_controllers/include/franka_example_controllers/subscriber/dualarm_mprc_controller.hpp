@@ -11,9 +11,11 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 #include "franka_example_controllers/utils/robot_kinematics.hpp"
+#include "franka_example_controllers/utils/collision_env.h"
 #include "franka_semantic_components/franka_robot_model.hpp"
 #include "std_msgs/msg/float64_multi_array.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
+#include "dual_arm_reactive_control/msg/collision_object.hpp"
 
 using CallbackReturn =
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
@@ -97,6 +99,23 @@ class DualArmMprcController : public controller_interface::ControllerInterface {
   // Publisher: collision markers for visualization
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_collision_markers_;
 
+  // Subscriber: dynamic obstacles from environment
+  rclcpp::Subscription<dual_arm_reactive_control::msg::CollisionObject>::SharedPtr sub_dynamic_obstacle_;
+
+  // Collision environment for static and dynamic obstacles
+  std::shared_ptr<CollisionEnv> collision_env_;
+
+  // ── CBF Safety Parameters ───────────────────────────────────────────────────
+  double cbf_gamma_{0.1};          // CBF correction gain
+  double collision_d_min_{0.05};   // Minimum safe distance (m)
+
+  // Joint limit hard constraints
+  const Vector7d q_max_{
+    (Vector7d() << 2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973).finished()};
+  const Vector7d q_min_{
+    (Vector7d() << -2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973).finished()};
+  const Vector7d dq_max_{Vector7d::Constant(2.0)};  // Max joint velocity (rad/s)
+
   // ── Thread-safety ─────────────────────────────────────────────────────────
   std::mutex target_mutex_;
   bool has_target_{false};   // Have we received at least one goal?
@@ -111,6 +130,7 @@ class DualArmMprcController : public controller_interface::ControllerInterface {
 
   // ── Callback ──────────────────────────────────────────────────────────────
   void desiredPoseCallback(const std_msgs::msg::Float64MultiArray& msg);
+  void dynamicObstacleCallback(const dual_arm_reactive_control::msg::CollisionObject& msg);
 
   // ── Safety helpers ────────────────────────────────────────────────────────
   /**

@@ -27,13 +27,16 @@ find_package(franka_msgs REQUIRED)
 find_package(multi_mode_control_msgs REQUIRED)
 find_package(multi_mode_controller REQUIRED)
 find_package(visualization_msgs REQUIRED)
+find_package(dual_arm_reactive_control REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(yaml-cpp REQUIRED)
+find_package(fcl REQUIRED)
 
 add_library(
         ${PROJECT_NAME}
         SHARED
         src/utils/robot_kinematics.cpp
+        src/utils/collision_env.cpp
         src/comless/gravity_compensation_example_controller.cpp
         src/comless/joint_impedance_example_controller.cpp
         src/comless/cartesian_impedance_example_controller.cpp
@@ -59,6 +62,10 @@ target_include_directories(
         PUBLIC
         include
         ${EIGEN3_INCLUDE_DIRS}
+        /usr/local/include
+        /usr/local/include/osqp
+        /usr/local/share/osqp/codegen_files/inc/public
+        /usr/local/share/osqp/codegen_files/inc/private
 )
 
 ament_target_dependencies(
@@ -73,6 +80,14 @@ ament_target_dependencies(
         multi_mode_controller
         std_msgs
         visualization_msgs
+        dual_arm_reactive_control
+        yaml-cpp
+        fcl
+)
+
+# Link external libraries manually
+target_link_libraries(${PROJECT_NAME}
+        fcl
         yaml-cpp
 )
 

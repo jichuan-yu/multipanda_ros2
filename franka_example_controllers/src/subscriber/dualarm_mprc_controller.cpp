@@ -82,6 +82,12 @@ CallbackReturn DualArmMprcController::on_init() {
     pub_collision_markers_ = get_node()->create_publisher<visualization_msgs::msg::MarkerArray>(
         "/mprc/collision_spheres", 1);
 
+    // Subscriber: dynamic obstacles from environment
+    sub_dynamic_obstacle_ = get_node()->create_subscription<dual_arm_reactive_control::msg::CollisionObject>(
+        "/dynamic_obstacle", 10,
+        std::bind(&DualArmMprcController::dynamicObstacleCallback, this,
+                  std::placeholders::_1));
+
   } catch (const std::exception& e) {
     RCLCPP_ERROR(get_node()->get_logger(), "DualArmMprcController::on_init exception: %s", e.what());
     return CallbackReturn::ERROR;
@@ -136,9 +142,9 @@ CallbackReturn DualArmMprcController::on_configure(
 
     // Set base positions (these could also be retrieved from parameters)
     if (arm.arm_id_ == "mj_left") {
-      arm.panda_robot_model_->setBase(Vector3d(0, 0.45, 0), Vector3d(0, 0, 0));
+      arm.panda_robot_model_->setBase(Vector3d(0, 0.26, 0), Vector3d(0, 0, 0));
     } else if (arm.arm_id_ == "mj_right") {
-      arm.panda_robot_model_->setBase(Vector3d(0, -0.45, 0), Vector3d(0, 0, 0));
+      arm.panda_robot_model_->setBase(Vector3d(0, -0.26, 0), Vector3d(0, 0, 0));
     }
   }
 
@@ -150,6 +156,13 @@ CallbackReturn DualArmMprcController::on_configure(
   // Initialise cached gradients to zero
   for (auto& g : grad_coll_) g.setZero();
   for (auto& g : grad_qlim_) g.setZero();
+
+  // ── Initialize Collision Environment ──
+  collision_env_ = std::make_shared<CollisionEnv>();
+  std::string collision_env_config = "/home/xiaozy24/dual_panda_ws/src/dualarm_mprc/dualarm_reactive_control/config/collision_env_sim.yaml";
+  collision_env_->loadCollisionObjects(collision_env_config);
+  RCLCPP_INFO(get_node()->get_logger(), "Collision environment initialized with %s",
+              collision_env_->isEmpty() ? "no objects" : "static objects");
 
   return CallbackReturn::SUCCESS;
 }
@@ -227,6 +240,16 @@ void DualArmMprcController::desiredPoseCallback(
     offset += 12;
   }
   has_target_ = true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// dynamicObstacleCallback  — handle dynamic obstacle updates
+// ─────────────────────────────────────────────────────────────────────────────
+void DualArmMprcController::dynamicObstacleCallback(
+    const dual_arm_reactive_control::msg::CollisionObject& msg) {
+  if (collision_env_) {
+    collision_env_->dynamicObstacleHandler(msg);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -320,32 +343,48 @@ controller_interface::return_type DualArmMprcController::update(
     Eigen::Map<const Eigen::Matrix<double, 6, 7>> J(
         arm.franka_robot_model_->getZeroJacobian(franka::Frame::kEndEffector).data());
 
-    // ── Damped pseudo-inverse ──────────────────────────────────────────────
+    // ── Null-Space Control with CBF Safety Check ─────────────────────────────
+    // Original null-space control
     Eigen::MatrixXd J_pinv;
     dampedPseudoInverse(J, J_pinv);
 
-    // ── Task-space contribution: delta_q = J† * gain * delta_x ───────────
-    const double k_task = 1.0;   // proportional gain
+    const double k_task = 1.0;
     Vector7d delta_q_task = k_task * J_pinv * delta_x;
 
-    // ── Null-space safety contribution ─────────────────────────────────────
-    //    N = I - J† J  (null-space projector)
-    //    delta_q_null = N * (-grad_coll - grad_qlim)
+    // Null-space safety contribution
     Eigen::Matrix<double, 7, 7> N =
         Eigen::Matrix<double, 7, 7>::Identity() - J_pinv * J;
     const double k_null = 0.5;
     Vector7d safe_gradient = -(grad_coll_[arm_idx] + grad_qlim_[arm_idx]);
     Vector7d delta_q_null = k_null * N * safe_gradient;
 
-    // ── Integrate: q_desired = q_current + delta_q ─────────────────────────
-    q_desired_list[arm_idx] = q_cur + delta_q_task + delta_q_null;
+    // Compute desired joint position
+    Vector7d q_desired_raw = q_cur + delta_q_task + delta_q_null;
 
-    // ── Joint-limit saturation ─────────────────────────────────────────────
-    const static Vector7d q_max =
-        (Vector7d() << 2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973).finished();
-    const static Vector7d q_min =
-        (Vector7d() << -2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973).finished();
-    q_desired_list[arm_idx] = q_desired_list[arm_idx].cwiseMax(q_min).cwiseMin(q_max);
+    // ── CBF Safety Check ─────────────────────────────────────────────────────
+    bool cbf_violated = false;
+    if (!collision_env_->isEmpty()) {
+      // Compute distance to environment
+      double distance;
+      Vector7d grad;
+      collision_env_->robot2EnvDistanceGradient(*arm.panda_robot_model_, q_desired_raw,
+                                                distance, grad);
+
+      // CBF constraint: h(q) = distance - d_min ≥ 0
+      if (distance < collision_d_min_) {
+        cbf_violated = true;
+        RCLCPP_WARN(get_node()->get_logger(), "CBF violated for %s: distance=%.3f < d_min=%.3f",
+                    arm.arm_id_.c_str(), distance, collision_d_min_);
+
+        // Project q_desired back to safe region using gradient projection
+        double correction = cbf_gamma_ * (collision_d_min_ - distance);
+        Vector7d q_correction = correction * grad / (grad.norm() + 1e-6);
+        q_desired_raw = q_desired_raw + q_correction;
+      }
+    }
+
+    // Joint-limit saturation
+    q_desired_list[arm_idx] = q_desired_raw.cwiseMax(q_min_).cwiseMin(q_max_);
 
     // Store for next cycle
     arm.q_desired = q_desired_list[arm_idx];

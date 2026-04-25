@@ -80,13 +80,13 @@ def generate_launch_description():
  
     mj_dual_text = re.sub(
         r'(<site name="mj_left_flange_site"[^>]*/>)',
-        r'\1\n                        <body name="camera_part1" pos="0 0 0" quat="0 0.93969262 0.34202014 0">\n                          <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.5" contype="0" conaffinity="0"/>\n                        </body>',
+        r'\1\n                        <body name="camera_part1" pos="0 0 0" quat="0 0.93969262 0.34202014 0">\n                          <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.5" contype="1" conaffinity="1"/>\n                        </body>',
         mj_dual_text
     )
   
     mj_dual_text = re.sub(
         r'(<site name="mj_right_flange_site"[^>]*/>)',
-        r'\1\n                        <body name="camera_part2" pos="0 0 0" quat="0 0.93969262 0.34202014 0">\n                          <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.5" contype="0" conaffinity="0"/>\n                        </body>',
+        r'\1\n                        <body name="camera_part2" pos="0 0 0" quat="0 0.93969262 0.34202014 0">\n                          <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.5" contype="1" conaffinity="1"/>\n                        </body>',
         mj_dual_text
     )
     

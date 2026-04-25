@@ -78,6 +78,10 @@ CallbackReturn DualArmMprcController::on_init() {
     pub_joint_desired_ = get_node()->create_publisher<std_msgs::msg::Float64MultiArray>(
         "/dual_joint_impedance/joints_desired", 1);
 
+    // Publisher: collision markers
+    pub_collision_markers_ = get_node()->create_publisher<visualization_msgs::msg::MarkerArray>(
+        "/mprc/collision_spheres", 1);
+
   } catch (const std::exception& e) {
     RCLCPP_ERROR(get_node()->get_logger(), "DualArmMprcController::on_init exception: %s", e.what());
     return CallbackReturn::ERROR;
@@ -346,6 +350,35 @@ controller_interface::return_type DualArmMprcController::update(
     joint_msg.data[kNumJoints + j] = q_desired_list[1](j);  // right
   }
   pub_joint_desired_->publish(joint_msg);
+
+  // ── Visualization of Component B Collision Model ────────────────────────
+  // We use redundancy_resolution's getJointsPositions to visualize the joints
+  // since this controller uses that library for safety.
+  visualization_msgs::msg::MarkerArray markers;
+  Eigen::VectorXd Q = buildQvector(q_left, q_right);
+
+  auto add_arm_markers = [&](bool is_right, int start_id, float r, float g, float b) {
+    Eigen::MatrixXd pos = redundancy_resolution::getJointsPositions(Q, is_right);
+    for (int i = 0; i < pos.cols(); ++i) {
+      visualization_msgs::msg::Marker m;
+      m.header.frame_id = "world";
+      m.header.stamp = get_node()->now();
+      m.ns = is_right ? "right_arm_joints" : "left_arm_joints";
+      m.id = start_id + i;
+      m.type = visualization_msgs::msg::Marker::SPHERE;
+      m.action = visualization_msgs::msg::Marker::ADD;
+      m.pose.position.x = pos(0, i);
+      m.pose.position.y = pos(1, i);
+      m.pose.position.z = pos(2, i);
+      m.scale.x = m.scale.y = m.scale.z = 0.08; // Representative size for joint spheres
+      m.color.r = r; m.color.g = g; m.color.b = b; m.color.a = 0.6;
+      markers.markers.push_back(m);
+    }
+  };
+
+  add_arm_markers(false, 0, 0.0, 1.0, 0.0); // Left Green
+  add_arm_markers(true, 10, 1.0, 1.0, 0.0); // Right Yellow
+  pub_collision_markers_->publish(markers);
 
   return controller_interface::return_type::OK;
 }

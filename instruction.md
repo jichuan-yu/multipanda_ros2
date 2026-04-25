@@ -1,2 +1,0 @@
-我需要为我的multipanda_ros2接入dualarm_mprc控制器
-目前已经完成了一部分工作，请你从工作停止的位置继续

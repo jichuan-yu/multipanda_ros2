@@ -12,6 +12,7 @@
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 #include "franka_semantic_components/franka_robot_model.hpp"
 #include "std_msgs/msg/float64_multi_array.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
 
 using CallbackReturn =
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
@@ -89,6 +90,9 @@ class DualArmMprcController : public controller_interface::ControllerInterface {
 
   // Publisher: sends joint targets to MultiJointImpedanceController
   rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr pub_joint_desired_;
+
+  // Publisher: collision markers for visualization
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_collision_markers_;
 
   // ── Thread-safety ─────────────────────────────────────────────────────────
   std::mutex target_mutex_;

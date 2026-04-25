@@ -64,16 +64,29 @@ def generate_launch_description():
     with open(mj_dual_path, 'r') as f:
         mj_dual_text = f.read()
     
-    # Inject left arm camera into mj_left_hand
+
     mj_dual_text = re.sub(
-        r'(<body name="mj_left_hand"[^>]*>)', 
-        r'\1\n                        <camera name="left_arm_cam" pos="0.08 0 0.03" xyaxes="0 -1 0 -0.676 0 -0.736" fovy="60"/>', 
+        r'(<body name="mj_left_hand"[^>]*>)',
+        r'\1\n                        <camera name="left_arm_cam" pos="0 0.104765 0.053574" xyaxes="0 -1 0 -0.676 0 -0.736" fovy="58"/>',
         mj_dual_text
     )
-    # Inject right arm camera into mj_right_hand
+
     mj_dual_text = re.sub(
-        r'(<body name="mj_right_hand"[^>]*>)', 
-        r'\1\n                        <camera name="right_arm_cam" pos="0.08 0 0.03" xyaxes="0 -1 0 -0.676 0 -0.736" fovy="60"/>', 
+        r'(<body name="mj_right_hand"[^>]*>)',
+        r'\1\n                        <camera name="right_arm_cam" pos="0 0.104765 0.053574" xyaxes="0 -1 0 -0.676 0 -0.736" fovy="58"/>',
+        mj_dual_text
+    )
+
+ 
+    mj_dual_text = re.sub(
+        r'(<site name="mj_left_flange_site"[^>]*/>)',
+        r'\1\n                        <body name="camera_part1" pos="0 0 0" quat="0 0.93969262 0.34202014 0">\n                          <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.5" contype="0" conaffinity="0"/>\n                        </body>',
+        mj_dual_text
+    )
+  
+    mj_dual_text = re.sub(
+        r'(<site name="mj_right_flange_site"[^>]*/>)',
+        r'\1\n                        <body name="camera_part2" pos="0 0 0" quat="0 0.93969262 0.34202014 0">\n                          <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.5" contype="0" conaffinity="0"/>\n                        </body>',
         mj_dual_text
     )
     
@@ -103,7 +116,7 @@ def generate_launch_description():
     <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
   </asset>
 
-  <!-- My Custom Objects -->
+ <!-- My Custom Objects -->
   <asset>
     <!-- Use absolute path so MuJoCo finds them from anywhere -->
     <mesh name="cam1" file="{stl_cam1}" scale="0.001 0.001 0.001"/>
@@ -118,16 +131,7 @@ def generate_launch_description():
     <!-- World cameras -->
     <camera name="fixed_cam" pos="1.3 0.0 0.8" xyaxes="0 1 0 -0.5 0 1" fovy="60"/>
     
-    <!-- Custom Camera Parts (example positions) -->
-    <body name="camera_part1" pos="0.5 0.0 0.05">
-      <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.5" contype="1" conaffinity="1"/>
-      <freejoint/> <!-- Add physical physics so robot can interact with it -->
-    </body>
-    <body name="camera_part2" pos="-0.5 0.0 0.05">
-      <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.5" contype="1" conaffinity="1"/>
-      <freejoint/>
-    </body>
-  </worldbody>
+  </worldbody> 
 </mujoco>
 """
 

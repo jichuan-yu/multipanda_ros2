@@ -10,6 +10,7 @@
 #include <controller_interface/controller_interface.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
+#include "franka_example_controllers/utils/robot_kinematics.hpp"
 #include "franka_semantic_components/franka_robot_model.hpp"
 #include "std_msgs/msg/float64_multi_array.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
@@ -59,6 +60,8 @@ class DualArmMprcController : public controller_interface::ControllerInterface {
 
     double pos_stiff{100.0};   // Cartesian position stiffness [N/m]
     double rot_stiff{10.0};    // Cartesian rotation stiffness [Nm/rad]
+
+    std::shared_ptr<PandaRobot> panda_robot_model_;
   };
 
   // ── ControllerInterface overrides ─────────────────────────────────────────

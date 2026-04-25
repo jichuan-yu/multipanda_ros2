@@ -129,6 +129,17 @@ CallbackReturn DualArmMprcController::on_configure(
     }
     arm.pos_stiff = get_node()->get_parameter(prefix + ".pos_stiff").as_double();
     arm.rot_stiff = get_node()->get_parameter(prefix + ".rot_stiff").as_double();
+
+    // ── Initialize PandaRobot model for 27-sphere logic ──
+    std::string collision_yaml = "/home/xiaozy24/dual_panda_ws/src/dualarm_mprc/dualarm_reactive_control/config/panda_collision_spheres_nohand.yaml";
+    arm.panda_robot_model_ = std::make_shared<PandaRobot>(i, collision_yaml);
+
+    // Set base positions (these could also be retrieved from parameters)
+    if (arm.arm_id_ == "mj_left") {
+      arm.panda_robot_model_->setBase(Vector3d(0, 0.45, 0), Vector3d(0, 0, 0));
+    } else if (arm.arm_id_ == "mj_right") {
+      arm.panda_robot_model_->setBase(Vector3d(0, -0.45, 0), Vector3d(0, 0, 0));
+    }
   }
 
   if (static_cast<int>(arms_.size()) != num_robots_) {
@@ -351,33 +362,33 @@ controller_interface::return_type DualArmMprcController::update(
   }
   pub_joint_desired_->publish(joint_msg);
 
-  // ── Visualization of Component B Collision Model ────────────────────────
-  // We use redundancy_resolution's getJointsPositions to visualize the joints
-  // since this controller uses that library for safety.
+  // ── Visualization of Upgrade: 27 SPHERES PER ARM ─────────────────────────
   visualization_msgs::msg::MarkerArray markers;
-  Eigen::VectorXd Q = buildQvector(q_left, q_right);
 
-  auto add_arm_markers = [&](bool is_right, int start_id, float r, float g, float b) {
-    Eigen::MatrixXd pos = redundancy_resolution::getJointsPositions(Q, is_right);
-    for (int i = 0; i < pos.cols(); ++i) {
+  auto add_robot_spheres = [&](ArmContainer& arm, int start_id, float r, float g, float b, const Vector7d& q) {
+    if (!arm.panda_robot_model_) return;
+    std::vector<CollisionSphere> spheres;
+    arm.panda_robot_model_->getCollisionSpheres(q, spheres);
+
+    for (size_t i = 0; i < spheres.size(); ++i) {
       visualization_msgs::msg::Marker m;
       m.header.frame_id = "world";
       m.header.stamp = get_node()->now();
-      m.ns = is_right ? "right_arm_joints" : "left_arm_joints";
+      m.ns = arm.arm_id_ + "_spheres";
       m.id = start_id + i;
       m.type = visualization_msgs::msg::Marker::SPHERE;
       m.action = visualization_msgs::msg::Marker::ADD;
-      m.pose.position.x = pos(0, i);
-      m.pose.position.y = pos(1, i);
-      m.pose.position.z = pos(2, i);
-      m.scale.x = m.scale.y = m.scale.z = 0.08; // Representative size for joint spheres
-      m.color.r = r; m.color.g = g; m.color.b = b; m.color.a = 0.6;
+      m.pose.position.x = spheres[i].first.x();
+      m.pose.position.y = spheres[i].first.y();
+      m.pose.position.z = spheres[i].first.z();
+      m.scale.x = m.scale.y = m.scale.z = spheres[i].second * 2.0; // scale is diameter
+      m.color.r = r; m.color.g = g; m.color.b = b; m.color.a = 0.5;
       markers.markers.push_back(m);
     }
   };
 
-  add_arm_markers(false, 0, 0.0, 1.0, 0.0); // Left Green
-  add_arm_markers(true, 10, 1.0, 1.0, 0.0); // Right Yellow
+  add_robot_spheres(left_arm, 100, 0.0, 0.8, 1.0, q_left);  // Cyan for left
+  add_robot_spheres(right_arm, 200, 1.0, 0.5, 0.0, q_right); // Orange for right
   pub_collision_markers_->publish(markers);
 
   return controller_interface::return_type::OK;

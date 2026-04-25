@@ -28,10 +28,12 @@ find_package(multi_mode_control_msgs REQUIRED)
 find_package(multi_mode_controller REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 add_library(
         ${PROJECT_NAME}
         SHARED
+        src/utils/robot_kinematics.cpp
         src/comless/gravity_compensation_example_controller.cpp
         src/comless/joint_impedance_example_controller.cpp
         src/comless/cartesian_impedance_example_controller.cpp
@@ -71,6 +73,7 @@ ament_target_dependencies(
         multi_mode_controller
         std_msgs
         visualization_msgs
+        yaml-cpp
 )
 
 generate_parameter_library(franka_example_controllers_parameters src/comless/model_example_controller_parameters.yaml)

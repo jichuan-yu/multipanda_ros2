@@ -92,7 +92,17 @@ source install/setup.bash
 # 启动带有自定义环境和多相机渲染的任务仿真
 ros2 launch my_task_description my_task_sim.launch.py
 ```
-*启动后，你应该能看到包含两个相机零件(STL)的 MuJoCo 环境弹开，并且机器人加载在里面。同时 MuJoCo 会通过离屏渲染持续向 ROS 2 发布 `fixed_cam`, `left_arm_cam`, `right_arm_cam` 三路图像。此外，底层控制器 `multi_cartesian_impedance_controller` 也会被自动加载和激活，这说明机器人现在已经准备好接收目标笛卡尔空间指令。*
+*启动后，你应该能看到包含两个相机零件(STL)的 MuJoCo 环境弹开，并且机器人加载在里面。同时 MuJoCo 会通过离屏渲染持续向 ROS 2 发布 `fixed_cam`, 
+    mj_dual_text = re.sub(
+        r'(<site name="mj_left_flange_site"[^>]*/>)',
+        r'\1\n                      <camera name="left_arm_cam" pos="0 0.104765 0.053574" xyaxes="0 -1 0 -0.676 0 -0.736" fovy="58"/>',
+        mj_dual_text
+    )
+
+    mj_dual_text = re.sub(
+        r'(<site name="mj_right_flange_site"[^>]*/>)',
+        r'\1\n                      <camera name="right_arm_cam" pos="0 0.104765 0.053574" xyaxes="0 -1 0 -0.676 0 -0.736" fovy="58"/>',
+        mj_dua`left_arm_cam`, `right_arm_cam` 三路图像。此外，底层控制器 `multi_cartesian_impedance_controller` 也会被自动加载和激活，这说明机器人现在已经准备好接收目标笛卡尔空间指令。*
 
 ---
 

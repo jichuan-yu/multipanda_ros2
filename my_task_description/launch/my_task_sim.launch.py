@@ -65,28 +65,16 @@ def generate_launch_description():
         mj_dual_text = f.read()
     
 
-    mj_dual_text = re.sub(
-        r'(<body name="mj_left_hand"[^>]*>)',
-        r'\1\n                        <camera name="left_arm_cam" pos="0 0.104765 0.053574" xyaxes="0 -1 0 -0.676 0 -0.736" fovy="58"/>',
-        mj_dual_text
-    )
 
-    mj_dual_text = re.sub(
-        r'(<body name="mj_right_hand"[^>]*>)',
-        r'\1\n                        <camera name="right_arm_cam" pos="0 0.104765 0.053574" xyaxes="0 -1 0 -0.676 0 -0.736" fovy="58"/>',
-        mj_dual_text
-    )
-
- 
     mj_dual_text = re.sub(
         r'(<site name="mj_left_flange_site"[^>]*/>)',
-        r'\1\n                        <body name="camera_part1" pos="0 0 0" quat="0 0.93969262 0.34202014 0">\n                          <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.5" contype="1" conaffinity="1"/>\n                        </body>',
+        r'\1\n                        <body name="left_real_camera" pos="0 0 0" quat="0 0.93969262 0.34202014 0">\n                          <camera name="left_arm_cam" pos="0.067283 0.080304 -0.053574" xyaxes="0.542260 -0.345347 -0.766044 0.184060 0.939191 -0.292410" fovy="58"/>\n                          <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.25" contype="1" conaffinity="1"/>\n                          <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.25" contype="1" conaffinity="1"/>\n                        </body>',
         mj_dual_text
     )
   
     mj_dual_text = re.sub(
         r'(<site name="mj_right_flange_site"[^>]*/>)',
-        r'\1\n                        <body name="camera_part2" pos="0 0 0" quat="0 0.93969262 0.34202014 0">\n                          <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.5" contype="1" conaffinity="1"/>\n                        </body>',
+        r'\1\n                        <body name="right_real_camera" pos="0 0 0" quat="0 0.93969262 0.34202014 0">\n                          <camera name="right_arm_cam" pos="0.067283 0.080304 -0.053574" xyaxes="0.542260 -0.345347 -0.766044 0.184060 0.939191 -0.292410" fovy="58"/>\n                          <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.25" contype="1" conaffinity="1"/>\n                          <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.25" contype="1" conaffinity="1"/>\n                        </body>',
         mj_dual_text
     )
     

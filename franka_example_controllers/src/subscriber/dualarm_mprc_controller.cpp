@@ -29,6 +29,8 @@ static void dampedPseudoInverse(const Eigen::MatrixXd& J,
                                 Eigen::MatrixXd&       J_pinv,
                                 double lambda = 0.05) {
   const int m = J.rows();
+  const int n = J.cols();
+  J_pinv.resize(n, m);  // Ensure correct output size
   Eigen::MatrixXd JJt = J * J.transpose();
   J_pinv = J.transpose() * (JJt + lambda * lambda * Eigen::MatrixXd::Identity(m, m)).inverse();
 }
@@ -362,7 +364,6 @@ controller_interface::return_type DualArmMprcController::update(
     Vector7d q_desired_raw = q_cur + delta_q_task + delta_q_null;
 
     // ── CBF Safety Check ─────────────────────────────────────────────────────
-    bool cbf_violated = false;
     if (!collision_env_->isEmpty()) {
       // Compute distance to environment
       double distance;
@@ -372,7 +373,6 @@ controller_interface::return_type DualArmMprcController::update(
 
       // CBF constraint: h(q) = distance - d_min ≥ 0
       if (distance < collision_d_min_) {
-        cbf_violated = true;
         RCLCPP_WARN(get_node()->get_logger(), "CBF violated for %s: distance=%.3f < d_min=%.3f",
                     arm.arm_id_.c_str(), distance, collision_d_min_);
 

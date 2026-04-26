@@ -105,7 +105,7 @@ class DualArmMprcController : public controller_interface::ControllerInterface {
   // Collision environment for static and dynamic obstacles
   std::shared_ptr<CollisionEnv> collision_env_;
 
-  // ── CBF Safety Parameters ───────────────────────────────────────────────────
+  // CBF Safety Parameters
   double cbf_gamma_{0.1};          // CBF correction gain
   double collision_d_min_{0.05};   // Minimum safe distance (m)
 
@@ -114,7 +114,6 @@ class DualArmMprcController : public controller_interface::ControllerInterface {
     (Vector7d() << 2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973).finished()};
   const Vector7d q_min_{
     (Vector7d() << -2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973).finished()};
-  const Vector7d dq_max_{Vector7d::Constant(2.0)};  // Max joint velocity (rad/s)
 
   // ── Thread-safety ─────────────────────────────────────────────────────────
   std::mutex target_mutex_;

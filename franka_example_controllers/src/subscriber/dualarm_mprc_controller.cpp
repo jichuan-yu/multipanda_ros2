@@ -136,8 +136,8 @@ CallbackReturn DualArmMprcController::on_configure(
     arm.pos_stiff = get_node()->get_parameter(prefix + ".pos_stiff").as_double();
     arm.rot_stiff = get_node()->get_parameter(prefix + ".rot_stiff").as_double();
 
-    // ── Initialize PandaRobot model for 27-sphere logic ──
-    std::string collision_yaml = "/home/xiaozy24/dual_panda_ws/src/dualarm_mprc/dualarm_reactive_control/config/panda_collision_spheres_nohand.yaml";
+    // ── Initialize PandaRobot model for collision spheres (with hand) ──
+    std::string collision_yaml = "/home/xiaozy24/dual_panda_ws/src/dualarm_mprc/dualarm_reactive_control/config/panda_collision_spheres.yaml";
     arm.panda_robot_model_ = std::make_shared<PandaRobot>(i, collision_yaml);
 
     // Set base positions (these could also be retrieved from parameters)

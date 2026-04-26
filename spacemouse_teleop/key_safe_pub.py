@@ -55,14 +55,14 @@ class KeySafePubNode(Node):
             10
         )
 
-        # Initial poses (matching typical Panda home EE position)
+        # Initial poses (matching my_task_sim.launch.py startup configuration)
         self.poses = {
             'left': {
-                'pos': np.array([0.3,  0.2, 0.5]),
+                'pos': np.array([0.307,  0.0, 0.487]),
                 'rot': np.array([math.pi, 0.0, 0.0])  # rx, ry, rz
             },
             'right': {
-                'pos': np.array([0.3, -0.2, 0.5]),
+                'pos': np.array([0.307,  0.0, 0.487]),
                 'rot': np.array([math.pi, 0.0, 0.0])
             }
         }

@@ -14,11 +14,14 @@
 #include <cmath>
 #include <exception>
 #include <string>
+#include <chrono>
 
 #include <Eigen/Dense>
 #include <multi_mode_controller/utils/redundancy_resolution.h>
 
 #include "pluginlib/class_list_macros.hpp"
+
+using Vector14d = Eigen::Matrix<double, 14, 1>;
 
 namespace franka_example_controllers {
 
@@ -69,6 +72,7 @@ DualArmMprcController::state_interface_configuration() const {
 CallbackReturn DualArmMprcController::on_init() {
   try {
     auto_declare<int>("arm_count", 2);
+    auto_declare<bool>("use_hqp", false);  // Enable/disable HQP advanced safety control
 
     // Subscriber: Cartesian target poses from key_safe_pub
     sub_pose_desired_ = get_node()->create_subscription<std_msgs::msg::Float64MultiArray>(
@@ -165,6 +169,45 @@ CallbackReturn DualArmMprcController::on_configure(
   collision_env_->loadCollisionObjects(collision_env_config);
   RCLCPP_INFO(get_node()->get_logger(), "Collision environment initialized with %s",
               collision_env_->isEmpty() ? "no objects" : "static objects");
+
+  // ── Initialize HQP Safety Control System ───────────────────────────────────────
+  // Check if HQP mode is enabled
+  if (get_node()->get_parameter("use_hqp", use_hqp_)) {
+    if (use_hqp_) {
+      RCLCPP_INFO(get_node()->get_logger(), "HQP mode enabled, initializing advanced safety control...");
+
+      // Initialize HQP solver
+      hqp_solver_ = std::make_unique<HQP::HierarchicalQP>();
+
+      // Initialize trajectory system
+      trajectory_buffer_ = std::make_unique<TrajectoryBuffer14d>(100);  // 100-point buffer
+      trajectory_buffer_->setFilter(5);  // 5-point moving average filter
+
+      trajectory_interpolator_ = std::make_unique<LinearInterpolator14d>(0.001);  // 1kHz
+
+      // Initialize ConstraintManager
+      std::string control_params_config = "/home/xiaozy24/dual_panda_ws/src/multipanda_ros2/franka_example_controllers/config/control_params.yaml";
+
+      // Get references to PandaRobot models (temporary solution)
+      // In production, we need proper reference handling
+      PandaRobot& robot1_ref = *arms_.begin()->second.panda_robot_model_;
+      PandaRobot& robot2_ref = *std::next(arms_.begin())->second.panda_robot_model_;
+
+      constraint_manager_ = std::make_unique<ConstraintManager>(
+          robot1_ref, robot2_ref, *collision_env_, control_params_config);
+
+      // Add basic constraints
+      constraint_manager_->addConstraint(Constraint(0, ConstraintType::JOINT_LIMIT_WITH_ACC));
+      constraint_manager_->addConstraint(Constraint(1, ConstraintType::COLLISION_AVOIDANCE_ALLCBF));
+
+      RCLCPP_INFO(get_node()->get_logger(), "HQP safety control system initialized successfully");
+    } else {
+      RCLCPP_INFO(get_node()->get_logger(), "HQP mode disabled, using null-space control");
+    }
+  } else {
+    use_hqp_ = false;  // Default to null-space control
+    RCLCPP_INFO(get_node()->get_logger(), "HQP parameter not found, using null-space control");
+  }
 
   return CallbackReturn::SUCCESS;
 }
@@ -278,6 +321,13 @@ controller_interface::return_type DualArmMprcController::update(
 
   if (!has_target_) {
     return controller_interface::return_type::OK;
+  }
+
+  // ── Check if HQP mode is enabled ─────────────────────────────────────────────
+  if (use_hqp_ && hqp_solver_ && constraint_manager_) {
+    // TODO: Implement HQP control mode
+    // For now, fall through to null-space control
+    RCLCPP_WARN_ONCE(get_node()->get_logger(), "HQP mode selected but not yet fully implemented, using null-space control");
   }
 
   // ── Collect current joint states for both arms ───────────────────────────
@@ -431,6 +481,112 @@ controller_interface::return_type DualArmMprcController::update(
   pub_collision_markers_->publish(markers);
 
   return controller_interface::return_type::OK;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HQP Control Helper Functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+bool DualArmMprcController::initializeHQPSolver()
+{
+  if (!hqp_solver_) {
+    RCLCPP_ERROR(get_node()->get_logger(), "HQP solver not initialized");
+    return false;
+  }
+
+  if (!constraint_manager_) {
+    RCLCPP_ERROR(get_node()->get_logger(), "Constraint manager not initialized");
+    return false;
+  }
+
+  RCLCPP_INFO(get_node()->get_logger(), "HQP solver and constraint manager ready");
+  return true;
+}
+
+bool DualArmMprcController::solveHQP(const Vector14d& q_current, const Vector14d& q_desired,
+                                  Vector14d& dq_solution)
+{
+  if (!hqp_solver_ || !constraint_manager_) {
+    return false;
+  }
+
+  // Generate cost function
+  MatrixXd H;
+  VectorXd f;
+  Vector14d dq_current = Vector14d::Zero();  // Assume starting from rest
+  constraint_manager_->generateCost(q_current, q_desired, dq_current, H, f);
+
+  // Generate constraints
+  std::vector<HQP::PriorityConstraint> priority_constraints;
+  constraint_manager_->generateConstraints2HQP(q_current, dq_current, priority_constraints);
+
+  // Set and solve HQP
+  hqp_solver_->setCost(H, f);
+  hqp_solver_->setConstraints(priority_constraints);
+
+  HQP::HQPSolverResult result;
+  hqp_solver_->solve(result);
+
+  if (result.success) {
+    dq_solution = result.x.head<14>();
+    return true;
+  } else {
+    RCLCPP_WARN(get_node()->get_logger(), "HQP solver failed to find solution");
+    return false;
+  }
+}
+
+void DualArmMprcController::updateControlState(const Vector14d& q_current, const Vector14d& q_desired)
+{
+  // Simple state machine logic
+  Vector14d tracking_error = q_current - q_desired;
+  double max_error = tracking_error.cwiseAbs().maxCoeff();
+
+  switch (current_control_state_) {
+    case ControlState::STOPPING:
+      // Wait for new target
+      if (has_target_) {
+        next_control_state_ = ControlState::TRACKING;
+        current_exception_ = ExceptionType::NO_EXCEPTION;
+      }
+      break;
+
+    case ControlState::TRACKING:
+      // Check for large tracking errors
+      if (max_error > 0.5) {  // 0.5 rad tracking error threshold
+        next_control_state_ = ControlState::REACTING;
+        RCLCPP_WARN(get_node()->get_logger(), "Large tracking error: %.3f, switching to REACTING", max_error);
+      }
+      break;
+
+    case ControlState::REACTING:
+      // Check if error is reduced
+      if (max_error < 0.1) {  // 0.1 rad recovery threshold
+        next_control_state_ = ControlState::TRACKING;
+        RCLCPP_INFO(get_node()->get_logger(), "Tracking error recovered, switching back to TRACKING");
+      }
+      break;
+  }
+
+  current_control_state_ = next_control_state_;
+}
+
+void DualArmMprcController::checkStateTransitions(const Vector14d& q_current, const Vector14d& q_desired)
+{
+  // Check for exception conditions
+  if (use_hqp_ && hqp_solver_) {
+    // In HQP mode, the constraint manager handles most safety checks
+    // Additional checks can be added here
+  }
+
+  // Check joint limits
+  for (int i = 0; i < 14; i++) {
+    if (q_current(i) < q_min_(i % 7) || q_current(i) > q_max_(i % 7)) {
+      current_exception_ = ExceptionType::CONSTRAINT_VIOLATION;
+      next_control_state_ = ControlState::STOPPING;
+      RCLCPP_ERROR(get_node()->get_logger(), "Joint limit violated on joint %d", i);
+    }
+  }
 }
 
 }  // namespace franka_example_controllers

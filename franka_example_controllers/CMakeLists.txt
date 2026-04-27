@@ -40,6 +40,8 @@ add_library(
         src/utils/collision_env.cpp
         src/utils/hierarchical_qp.cpp
         src/utils/constraint_manager.cpp
+        src/utils/trajectory_buffer.cpp
+        src/utils/trajectory_interpolator.cpp
         src/comless/gravity_compensation_example_controller.cpp
         src/comless/joint_impedance_example_controller.cpp
         src/comless/cartesian_impedance_example_controller.cpp

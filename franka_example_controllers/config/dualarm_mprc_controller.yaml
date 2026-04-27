@@ -1,0 +1,141 @@
+# DualArmMprcController Configuration
+# Advanced safety controller with optional HQP-based control
+
+controller_manager:
+  ros__parameters:
+    update_rate: 1000  # Hz
+
+    # DualArmMprcController
+    dualarm_mprc_controller:
+      type: franka_example_controllers/DualArmMprcController
+
+      # Arm configuration
+      arm_count: 2
+
+      # Arm 1 (left)
+      arm_1:
+        arm_id: mj_left
+        pos_stiff: 400.0
+        rot_stiff: 15.0
+
+      # Arm 2 (right)
+      arm_2:
+        arm_id: mj_right
+        pos_stiff: 400.0
+        rot_stiff: 15.0
+
+      # Safety control mode
+      use_hqp: false  # Set to true to enable HQP advanced safety control
+
+      # CBF Safety parameters
+      cbf_gamma: 0.1           # CBF correction gain
+      collision_d_min: 0.05    # Minimum safe distance (m)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Hardware Interface Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+hardware_interface:
+  ros__parameters:
+    # Joint state interface for both arms
+    # These should match your actual hardware interface configuration
+    # Example for Franka Emika robots:
+    # - Left arm (mj_left): panda_1_joint_state
+    # - Right arm (mj_right): panda_2_joint_state
+
+    # Left arm joints (mj_left)
+    mj_left_joint1:
+      serial_number: mj_left_joint1
+      allow_feedback: true
+    mj_left_joint2:
+      serial_number: mj_left_joint2
+      allow_feedback: true
+    mj_left_joint3:
+      serial_number: mj_left_joint3
+      allow_feedback: true
+    mj_left_joint4:
+      serial_number: mj_left_joint4
+      allow_feedback: true
+    mj_left_joint5:
+      serial_number: mj_left_joint5
+      allow_feedback: true
+    mj_left_joint6:
+      serial_number: mj_left_joint6
+      allow_feedback: true
+    mj_left_joint7:
+      serial_number: mj_left_joint7
+      allow_feedback: true
+
+    # Right arm joints (mj_right)
+    mj_right_joint1:
+      serial_number: mj_right_joint1
+      allow_feedback: true
+    mj_right_joint2:
+      serial_number: mj_right_joint2
+      allow_feedback: true
+    mj_right_joint3:
+      serial_number: mj_right_joint3
+      allow_feedback: true
+    mj_right_joint4:
+      serial_number: mj_right_joint4
+      allow_feedback: true
+    mj_right_joint5:
+      serial_number: mj_right_joint5
+      allow_feedback: true
+    mj_right_joint6:
+      serial_number: mj_right_joint6
+      allow_feedback: true
+    mj_right_joint7:
+      serial_number: mj_right_joint7
+      allow_feedback: true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Controller List
+# ─────────────────────────────────────────────────────────────────────────────
+dualarm_mprc_controller:
+  ros__parameters:
+    joints:
+      # Left arm joints
+      - mj_left_joint1
+      - mj_left_joint2
+      - mj_left_joint3
+      - mj_left_joint4
+      - mj_left_joint5
+      - mj_left_joint6
+      - mj_left_joint7
+
+      # Right arm joints
+      - mj_right_joint1
+      - mj_right_joint2
+      mj_right_joint3
+      mj_right_joint4
+      mj_right_joint5
+      mj_right_joint6
+      - mj_right_joint7
+
+    # Command interfaces (empty - this controller publishes to topics)
+    command_interfaces: []
+
+    # State interfaces (read joint states)
+    state_interfaces:
+      # Left arm
+      - mj_left_joint1
+      - mj_left_joint2
+      - mj_left_joint3
+      - mj_left_joint4
+      - mj_left_joint5
+      - mj_left_joint6
+      - mj_left_joint7
+
+      # Right arm
+      - mj_right_joint1
+      - mj_right_joint2
+      - mj_right_joint3
+      - mj_right_joint4
+      - mj_right_joint5
+      - mj_right_joint6
+      - mj_right_joint7
+
+    # Required state interfaces for FrankaRobotModel
+    # These provide kinematics and dynamics information
+    - mj_left/robot_model
+    - mj_right/robot_model

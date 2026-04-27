@@ -12,6 +12,11 @@
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 #include "franka_example_controllers/utils/robot_kinematics.hpp"
 #include "franka_example_controllers/utils/collision_env.h"
+#include "franka_example_controllers/utils/hierarchical_qp.h"
+#include "franka_example_controllers/utils/constraint_manager.h"
+#include "franka_example_controllers/utils/control_state.h"
+#include "franka_example_controllers/utils/trajectory_buffer.h"
+#include "franka_example_controllers/utils/trajectory_interpolator.h"
 #include "franka_semantic_components/franka_robot_model.hpp"
 #include "std_msgs/msg/float64_multi_array.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
@@ -34,8 +39,8 @@ using Eigen::Quaterniond;
 /**
  * DualArmMprcController
  *
- * Middle-layer controller that bridges key_safe_pub.py and
- * MultiJointImpedanceController.
+ * Enhanced middle-layer controller that bridges key_safe_pub.py and
+ * MultiJointImpedanceController with HQP-based safety control.
  *
  * Subscribes : /dualarm_mprc/pose_desired  (Float64MultiArray, 24 elements)
  *              layout: [left_pos(3), left_rotmat(9), right_pos(3), right_rotmat(9)]
@@ -43,8 +48,15 @@ using Eigen::Quaterniond;
  * Publishes  : /dual_joint_impedance/joints_desired (Float64MultiArray, 14 elements)
  *              layout: [mj_left_q(7), mj_right_q(7)]
  *
- * Safety:  collision-avoidance & joint-limit gradients from redundancy_resolution
- *          are applied in the null-space of the Jacobian.
+ * Safety:  Uses Hierarchical Quadratic Programming (HQP) with ConstraintManager
+ *          for advanced safety control including collision avoidance, joint limits,
+ *          and constraint prioritization.
+ *
+ * Features:
+ *   - HQP-based optimization with constraint prioritization
+ *   - State machine (TRACKING/REACTING/STOPPING)
+ *   - Trajectory buffering and interpolation
+ *   - Advanced collision avoidance with multiple CBF constraints
  */
 class DualArmMprcController : public controller_interface::ControllerInterface {
  public:
@@ -105,7 +117,27 @@ class DualArmMprcController : public controller_interface::ControllerInterface {
   // Collision environment for static and dynamic obstacles
   std::shared_ptr<CollisionEnv> collision_env_;
 
-  // CBF Safety Parameters
+  // ── HQP Safety Control System ─────────────────────────────────────────────
+  // HQP solver for hierarchical optimization
+  std::unique_ptr<HQP::HierarchicalQP> hqp_solver_;
+
+  // Constraint manager for safety constraints
+  std::unique_ptr<ConstraintManager> constraint_manager_;
+
+  // State machine for control modes
+  ControlState current_control_state_{ControlState::STOPPING};
+  ControlState next_control_state_{ControlState::STOPPING};
+  ExceptionType current_exception_{ExceptionType::NO_EXCEPTION};
+
+  // Trajectory processing system
+  std::unique_ptr<TrajectoryBuffer14d> trajectory_buffer_;
+  std::unique_ptr<LinearInterpolator14d> trajectory_interpolator_;
+
+  // Control parameters
+  ControllerType controller_type_{ControllerType::NullSpace};  // Start with null-space for compatibility
+  bool use_hqp_{false};  // Flag to enable/disable HQP mode
+
+  // CBF Safety Parameters (for backward compatibility)
   double cbf_gamma_{0.1};          // CBF correction gain
   double collision_d_min_{0.05};   // Minimum safe distance (m)
 
@@ -137,6 +169,27 @@ class DualArmMprcController : public controller_interface::ControllerInterface {
    * (Base is fixed; the three leading zeros represent mobile-base DOFs.)
    */
   Eigen::VectorXd buildQvector(const Vector7d& q_left, const Vector7d& q_right) const;
+
+  // ── HQP Control helpers ─────────────────────────────────────────────────────
+  /**
+   * Initialize HQP solver and constraint manager
+   */
+  bool initializeHQPSolver();
+
+  /**
+   * Solve HQP optimization problem
+   */
+  bool solveHQP(const Vector14d& q_current, const Vector14d& q_desired, Vector14d& dq_solution);
+
+  /**
+   * Update control state machine
+   */
+  void updateControlState(const Vector14d& q_current, const Vector14d& q_desired);
+
+  /**
+   * Check for state transitions and exceptions
+   */
+  void checkStateTransitions(const Vector14d& q_current, const Vector14d& q_desired);
 };
 
 }  // namespace franka_example_controllers

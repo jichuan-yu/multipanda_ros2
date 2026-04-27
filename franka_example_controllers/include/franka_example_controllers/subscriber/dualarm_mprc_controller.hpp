@@ -33,6 +33,7 @@ using Matrix7d = Eigen::Matrix<double, 7, 7>;
 using Vector3d = Eigen::Matrix<double, 3, 1>;
 using Vector6d = Eigen::Matrix<double, 6, 1>;
 using Vector7d = Eigen::Matrix<double, 7, 1>;
+using Vector14d = Eigen::Matrix<double, 14, 1>;
 using Eigen::Matrix3d;
 using Eigen::Quaterniond;
 
@@ -146,6 +147,14 @@ class DualArmMprcController : public controller_interface::ControllerInterface {
     (Vector7d() << 2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973).finished()};
   const Vector7d q_min_{
     (Vector7d() << -2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973).finished()};
+
+  // 14-DOF joint limits for HQP mode [left_arm(7), right_arm(7)]
+  const Vector14d q_max_rep_{
+    (Vector14d() << 2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973,
+                  2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973).finished()};
+  const Vector14d q_min_rep_{
+    (Vector14d() << -2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973,
+                  -2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973).finished()};
 
   // ── Thread-safety ─────────────────────────────────────────────────────────
   std::mutex target_mutex_;

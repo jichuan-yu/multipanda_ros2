@@ -323,13 +323,6 @@ controller_interface::return_type DualArmMprcController::update(
     return controller_interface::return_type::OK;
   }
 
-  // ── Check if HQP mode is enabled ─────────────────────────────────────────────
-  if (use_hqp_ && hqp_solver_ && constraint_manager_) {
-    // TODO: Implement HQP control mode
-    // For now, fall through to null-space control
-    RCLCPP_WARN_ONCE(get_node()->get_logger(), "HQP mode selected but not yet fully implemented, using null-space control");
-  }
-
   // ── Collect current joint states for both arms ───────────────────────────
   // Map iterates lexicographically: mj_left (arm[0]), mj_right (arm[1])
   std::vector<ArmContainer*> arm_ptrs;
@@ -343,6 +336,132 @@ controller_interface::return_type DualArmMprcController::update(
 
   Vector7d q_left  = Vector7d(left_arm.franka_robot_model_->getRobotState()->q.data());
   Vector7d q_right = Vector7d(right_arm.franka_robot_model_->getRobotState()->q.data());
+
+  // ── Check if HQP mode is enabled ─────────────────────────────────────────────
+  if (use_hqp_ && hqp_solver_ && constraint_manager_) {
+    // HQP Advanced Safety Control Mode
+    Vector14d q_current, q_desired;
+    q_current << q_left, q_right;
+
+    // Compute desired joint positions from Cartesian targets
+    std::vector<Vector7d> q_desired_arm_list(2);
+
+    for (int arm_idx = 0; arm_idx < 2; ++arm_idx) {
+      ArmContainer& arm = *arm_ptrs[arm_idx];
+      const Vector7d& q_cur = (arm_idx == 0) ? q_left : q_right;
+
+      // Current EE pose
+      Eigen::Map<const Matrix4d> T_cur(
+          arm.franka_robot_model_->getPoseMatrix(franka::Frame::kEndEffector).data());
+      Vector3d current_pos = T_cur.block<3, 1>(0, 3);
+      Eigen::Quaterniond current_ori(T_cur.block<3, 3>(0, 0));
+
+      // Desired pose (thread-safe)
+      Vector3d target_pos;
+      Eigen::Quaterniond target_ori;
+      {
+        std::lock_guard<std::mutex> lock(target_mutex_);
+        target_pos = arm.desired_position;
+        target_ori = arm.desired_orientation;
+      }
+
+      // Cartesian error
+      Vector6d delta_x;
+      delta_x.head<3>() = target_pos - current_pos;
+      Eigen::Quaterniond q_err = target_ori * current_ori.inverse();
+      q_err.normalize();
+      Eigen::AngleAxisd aa(q_err);
+      delta_x.tail<3>() = aa.axis() * aa.angle();
+
+      // Jacobian
+      Eigen::Map<const Eigen::Matrix<double, 6, 7>> J(
+          arm.franka_robot_model_->getZeroJacobian(franka::Frame::kEndEffector).data());
+
+      // Compute desired joint position using Jacobian pseudo-inverse
+      Eigen::MatrixXd J_pinv;
+      dampedPseudoInverse(J, J_pinv);
+      const double k_task = 1.0;
+      Vector7d delta_q_task = k_task * J_pinv * delta_x;
+      q_desired_arm_list[arm_idx] = q_cur + delta_q_task;
+    }
+
+    // Combine into 14-DOF vector
+    q_desired << q_desired_arm_list[0], q_desired_arm_list[1];
+
+    // Solve HQP with constraints
+    Vector14d dq_solution;
+    if (solveHQP(q_current, q_desired, dq_solution)) {
+      // Integrate velocity to position (Euler integration with small dt)
+      const double dt = 0.001;  // 1ms control period
+      Vector14d q_hqp = q_current + dq_solution * dt;
+
+      // Joint limit saturation
+      q_hqp = q_hqp.cwiseMax(q_min_rep_).cwiseMin(q_max_rep_);
+
+      // Update state machine
+      updateControlState(q_current, q_hqp);
+      checkStateTransitions(q_hqp, q_desired);
+
+      // Split back to individual arms and store
+      std::vector<Vector7d> q_desired_list(2);
+      q_desired_list[0] = q_hqp.head<7>();
+      q_desired_list[1] = q_hqp.tail<7>();
+
+      left_arm.q_desired = q_desired_list[0];
+      right_arm.q_desired = q_desired_list[1];
+
+      // ── Publish 14-dim joint target ────────────────────────────────────────
+      std_msgs::msg::Float64MultiArray joint_msg;
+      joint_msg.data.resize(2 * kNumJoints);
+
+      for (int j = 0; j < kNumJoints; ++j) {
+        joint_msg.data[j]              = q_desired_list[0](j);  // left
+        joint_msg.data[kNumJoints + j] = q_desired_list[1](j);  // right
+      }
+      pub_joint_desired_->publish(joint_msg);
+
+      // ── Visualization: 27 SPHERES PER ARM ─────────────────────────────────────
+      visualization_msgs::msg::MarkerArray markers;
+
+      auto add_robot_spheres = [&](ArmContainer& arm, int start_id, float r, float g, float b, const Vector7d& q) {
+        if (!arm.panda_robot_model_) return;
+        std::vector<CollisionSphere> spheres;
+        arm.panda_robot_model_->getCollisionSpheres(q, spheres);
+
+        for (size_t i = 0; i < spheres.size(); ++i) {
+          visualization_msgs::msg::Marker m;
+          m.header.frame_id = "world";
+          m.header.stamp = get_node()->now();
+          m.ns = arm.arm_id_ + "_spheres";
+          m.id = start_id + i;
+          m.type = visualization_msgs::msg::Marker::SPHERE;
+          m.action = visualization_msgs::msg::Marker::ADD;
+          m.pose.position.x = spheres[i].first.x();
+          m.pose.position.y = spheres[i].first.y();
+          m.pose.position.z = spheres[i].first.z();
+          m.scale.x = m.scale.y = m.scale.z = spheres[i].second * 2.0;
+          m.color.r = r; m.color.g = g; m.color.b = b; m.color.a = 0.5;
+          markers.markers.push_back(m);
+        }
+      };
+
+      add_robot_spheres(left_arm, 100, 0.0, 0.8, 1.0, q_left);
+      add_robot_spheres(right_arm, 200, 1.0, 0.5, 0.0, q_right);
+      pub_collision_markers_->publish(markers);
+
+      return controller_interface::return_type::OK;
+
+    } else {
+      // HQP failed, fall back to null-space control
+      RCLCPP_WARN_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 1000,
+                          "HQP solve failed, falling back to null-space control");
+      // Continue to null-space control below
+    }
+  }
+
+  // ── Null-Space Control Mode (default or fallback) ────────────────────────
+  // arm_ptrs[0] = mj_left (arm_1), arm_ptrs[1] = mj_right (arm_2)
+  // (already collected above)
 
   // ── Update collision/joint-limit gradients every kAvoidanceInterval ───────
   ++avoidance_counter_;

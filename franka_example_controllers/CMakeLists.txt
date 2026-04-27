@@ -104,6 +104,31 @@ add_executable(gripper_action_bridge src/subscriber/gripper_action_bridge.cpp)
 ament_target_dependencies(gripper_action_bridge rclcpp rclcpp_action franka_msgs std_msgs std_srvs)
 install(TARGETS gripper_action_bridge DESTINATION lib/${PROJECT_NAME})
 
+# Cartesian2TrajectoryAdapter node
+add_executable(cartesian2traj_adapter src/adapters/cartesian2traj_adapter.cpp)
+target_include_directories(cartesian2traj_adapter
+  PUBLIC
+  include
+  ${EIGEN3_INCLUDE_DIRS}
+  /usr/local/include
+  /usr/local/include/osqp
+)
+ament_target_dependencies(cartesian2traj_adapter
+  rclcpp
+  std_msgs
+  trajectory_msgs
+  franka_semantic_components
+  dual_arm_reactive_control
+)
+# Link against the main library which contains PandaRobot implementation
+target_link_libraries(cartesian2traj_adapter
+  ${PROJECT_NAME}  # This provides robot_kinematics.cpp
+  fcl
+  yaml-cpp
+  OsqpEigen::OsqpEigen
+)
+install(TARGETS cartesian2traj_adapter DESTINATION lib/${PROJECT_NAME})
+
 pluginlib_export_plugin_description_file(
        controller_interface franka_example_controllers.xml)
 

@@ -239,12 +239,6 @@ def generate_launch_description():
         Node(
             package='controller_manager',
             executable='spawner',
-            arguments=['dualarm_mprc_controller', '-c', concatenate_ns(ns, 'controller_manager', True), '--param-file', merged_mjros_config_file],
-            output='screen',
-        ),
-        Node(
-            package='controller_manager',
-            executable='spawner',
             arguments=['dual_joint_impedance_controller', '-c', concatenate_ns(ns, 'controller_manager', True), '--param-file', merged_mjros_config_file],
             output='screen',
         ),

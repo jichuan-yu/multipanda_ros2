@@ -25,7 +25,7 @@ controller_manager:
         rot_stiff: 15.0
 
       # Safety control mode
-      use_hqp: false  # Set to true to enable HQP advanced safety control
+      use_hqp: true  # Set to true to enable HQP advanced safety control
 
       # CBF Safety parameters
       cbf_gamma: 0.1           # CBF correction gain

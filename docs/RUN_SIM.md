@@ -44,7 +44,8 @@ source install/setup.bash
 ### 7. 检查是否真正生效
 ```bash
 ros2 pkg prefix my_task_description
-ros2 launch my_task_description my_task_sim.launch.py
+ros2 launch my_task_description my_task_sim.launch.py use_rviz:=true
+
 ```
 如果输出仍然是 `/home/developer/multipanda_ws/install/...`，说明当前运行的就是这个工作区。
 

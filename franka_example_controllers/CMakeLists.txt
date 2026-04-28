@@ -117,6 +117,7 @@ ament_target_dependencies(cartesian2traj_adapter
   rclcpp
   std_msgs
   trajectory_msgs
+  sensor_msgs
   franka_semantic_components
   dual_arm_reactive_control
 )
@@ -128,6 +129,19 @@ target_link_libraries(cartesian2traj_adapter
   OsqpEigen::OsqpEigen
 )
 install(TARGETS cartesian2traj_adapter DESTINATION lib/${PROJECT_NAME})
+
+# TopicBridge node
+add_executable(topic_bridge src/adapters/topic_bridge.cpp)
+target_include_directories(topic_bridge
+  PUBLIC
+  include
+  ${EIGEN3_INCLUDE_DIRS}
+)
+ament_target_dependencies(topic_bridge
+  rclcpp
+  sensor_msgs
+)
+install(TARGETS topic_bridge DESTINATION lib/${PROJECT_NAME})
 
 pluginlib_export_plugin_description_file(
        controller_interface franka_example_controllers.xml)
@@ -143,6 +157,22 @@ install(
 install(
         DIRECTORY include/
         DESTINATION include
+)
+
+install(
+        DIRECTORY config/
+        DESTINATION share/${PROJECT_NAME}/config
+)
+
+install(
+        DIRECTORY launch/
+        DESTINATION share/${PROJECT_NAME}/launch
+)
+
+install(
+        DIRECTORY scripts/
+        DESTINATION share/${PROJECT_NAME}/scripts
+        PATTERN "setup.bash" EXCLUDE
 )
 
 if(BUILD_TESTING)

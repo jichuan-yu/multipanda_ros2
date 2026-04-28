@@ -27,21 +27,11 @@ find_package(franka_msgs REQUIRED)
 find_package(multi_mode_control_msgs REQUIRED)
 find_package(multi_mode_controller REQUIRED)
 find_package(visualization_msgs REQUIRED)
-find_package(dual_arm_reactive_control REQUIRED)
 find_package(Eigen3 REQUIRED)
-find_package(yaml-cpp REQUIRED)
-find_package(fcl REQUIRED)
-find_package(OsqpEigen REQUIRED)
 
 add_library(
         ${PROJECT_NAME}
         SHARED
-        src/utils/robot_kinematics.cpp
-        src/utils/collision_env.cpp
-        src/utils/hierarchical_qp.cpp
-        src/utils/constraint_manager.cpp
-        src/utils/trajectory_buffer.cpp
-        src/utils/trajectory_interpolator.cpp
         src/comless/gravity_compensation_example_controller.cpp
         src/comless/joint_impedance_example_controller.cpp
         src/comless/cartesian_impedance_example_controller.cpp
@@ -67,10 +57,6 @@ target_include_directories(
         PUBLIC
         include
         ${EIGEN3_INCLUDE_DIRS}
-        /usr/local/include
-        /usr/local/include/osqp
-        /usr/local/share/osqp/codegen_files/inc/public
-        /usr/local/share/osqp/codegen_files/inc/private
 )
 
 ament_target_dependencies(
@@ -85,17 +71,6 @@ ament_target_dependencies(
         multi_mode_controller
         std_msgs
         visualization_msgs
-        dual_arm_reactive_control
-        yaml-cpp
-        fcl
-        OsqpEigen
-)
-
-# Link external libraries manually
-target_link_libraries(${PROJECT_NAME}
-        fcl
-        yaml-cpp
-        OsqpEigen::OsqpEigen
 )
 
 generate_parameter_library(franka_example_controllers_parameters src/comless/model_example_controller_parameters.yaml)
@@ -103,45 +78,6 @@ generate_parameter_library(franka_example_controllers_parameters src/comless/mod
 add_executable(gripper_action_bridge src/subscriber/gripper_action_bridge.cpp)
 ament_target_dependencies(gripper_action_bridge rclcpp rclcpp_action franka_msgs std_msgs std_srvs)
 install(TARGETS gripper_action_bridge DESTINATION lib/${PROJECT_NAME})
-
-# Cartesian2TrajectoryAdapter node
-add_executable(cartesian2traj_adapter src/adapters/cartesian2traj_adapter.cpp)
-target_include_directories(cartesian2traj_adapter
-  PUBLIC
-  include
-  ${EIGEN3_INCLUDE_DIRS}
-  /usr/local/include
-  /usr/local/include/osqp
-)
-ament_target_dependencies(cartesian2traj_adapter
-  rclcpp
-  std_msgs
-  trajectory_msgs
-  sensor_msgs
-  franka_semantic_components
-  dual_arm_reactive_control
-)
-# Link against the main library which contains PandaRobot implementation
-target_link_libraries(cartesian2traj_adapter
-  ${PROJECT_NAME}  # This provides robot_kinematics.cpp
-  fcl
-  yaml-cpp
-  OsqpEigen::OsqpEigen
-)
-install(TARGETS cartesian2traj_adapter DESTINATION lib/${PROJECT_NAME})
-
-# TopicBridge node
-add_executable(topic_bridge src/adapters/topic_bridge.cpp)
-target_include_directories(topic_bridge
-  PUBLIC
-  include
-  ${EIGEN3_INCLUDE_DIRS}
-)
-ament_target_dependencies(topic_bridge
-  rclcpp
-  sensor_msgs
-)
-install(TARGETS topic_bridge DESTINATION lib/${PROJECT_NAME})
 
 pluginlib_export_plugin_description_file(
        controller_interface franka_example_controllers.xml)
@@ -157,22 +93,6 @@ install(
 install(
         DIRECTORY include/
         DESTINATION include
-)
-
-install(
-        DIRECTORY config/
-        DESTINATION share/${PROJECT_NAME}/config
-)
-
-install(
-        DIRECTORY launch/
-        DESTINATION share/${PROJECT_NAME}/launch
-)
-
-install(
-        DIRECTORY scripts/
-        DESTINATION share/${PROJECT_NAME}/scripts
-        PATTERN "setup.bash" EXCLUDE
 )
 
 if(BUILD_TESTING)

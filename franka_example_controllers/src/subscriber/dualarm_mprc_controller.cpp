@@ -14,14 +14,11 @@
 #include <cmath>
 #include <exception>
 #include <string>
-#include <chrono>
 
 #include <Eigen/Dense>
 #include <multi_mode_controller/utils/redundancy_resolution.h>
 
 #include "pluginlib/class_list_macros.hpp"
-
-using Vector14d = Eigen::Matrix<double, 14, 1>;
 
 namespace franka_example_controllers {
 
@@ -32,8 +29,6 @@ static void dampedPseudoInverse(const Eigen::MatrixXd& J,
                                 Eigen::MatrixXd&       J_pinv,
                                 double lambda = 0.05) {
   const int m = J.rows();
-  const int n = J.cols();
-  J_pinv.resize(n, m);  // Ensure correct output size
   Eigen::MatrixXd JJt = J * J.transpose();
   J_pinv = J.transpose() * (JJt + lambda * lambda * Eigen::MatrixXd::Identity(m, m)).inverse();
 }
@@ -72,7 +67,6 @@ DualArmMprcController::state_interface_configuration() const {
 CallbackReturn DualArmMprcController::on_init() {
   try {
     auto_declare<int>("arm_count", 2);
-    auto_declare<bool>("use_hqp", false);  // Enable/disable HQP advanced safety control
 
     // Subscriber: Cartesian target poses from key_safe_pub
     sub_pose_desired_ = get_node()->create_subscription<std_msgs::msg::Float64MultiArray>(
@@ -87,12 +81,6 @@ CallbackReturn DualArmMprcController::on_init() {
     // Publisher: collision markers
     pub_collision_markers_ = get_node()->create_publisher<visualization_msgs::msg::MarkerArray>(
         "/mprc/collision_spheres", 1);
-
-    // Subscriber: dynamic obstacles from environment
-    sub_dynamic_obstacle_ = get_node()->create_subscription<dual_arm_reactive_control::msg::CollisionObject>(
-        "/dynamic_obstacle", 10,
-        std::bind(&DualArmMprcController::dynamicObstacleCallback, this,
-                  std::placeholders::_1));
 
   } catch (const std::exception& e) {
     RCLCPP_ERROR(get_node()->get_logger(), "DualArmMprcController::on_init exception: %s", e.what());
@@ -141,17 +129,6 @@ CallbackReturn DualArmMprcController::on_configure(
     }
     arm.pos_stiff = get_node()->get_parameter(prefix + ".pos_stiff").as_double();
     arm.rot_stiff = get_node()->get_parameter(prefix + ".rot_stiff").as_double();
-
-    // ── Initialize PandaRobot model for collision spheres (with hand) ──
-    std::string collision_yaml = "/home/xiaozy24/dual_panda_ws/src/dualarm_mprc/dualarm_reactive_control/config/panda_collision_spheres.yaml";
-    arm.panda_robot_model_ = std::make_shared<PandaRobot>(i, collision_yaml);
-
-    // Set base positions (these could also be retrieved from parameters)
-    if (arm.arm_id_ == "mj_left") {
-      arm.panda_robot_model_->setBase(Vector3d(0, 0.26, 0), Vector3d(0, 0, 0));
-    } else if (arm.arm_id_ == "mj_right") {
-      arm.panda_robot_model_->setBase(Vector3d(0, -0.26, 0), Vector3d(0, 0, 0));
-    }
   }
 
   if (static_cast<int>(arms_.size()) != num_robots_) {
@@ -162,52 +139,6 @@ CallbackReturn DualArmMprcController::on_configure(
   // Initialise cached gradients to zero
   for (auto& g : grad_coll_) g.setZero();
   for (auto& g : grad_qlim_) g.setZero();
-
-  // ── Initialize Collision Environment ──
-  collision_env_ = std::make_shared<CollisionEnv>();
-  std::string collision_env_config = "/home/xiaozy24/dual_panda_ws/src/dualarm_mprc/dualarm_reactive_control/config/collision_env_sim.yaml";
-  collision_env_->loadCollisionObjects(collision_env_config);
-  RCLCPP_INFO(get_node()->get_logger(), "Collision environment initialized with %s",
-              collision_env_->isEmpty() ? "no objects" : "static objects");
-
-  // ── Initialize HQP Safety Control System ───────────────────────────────────────
-  // Check if HQP mode is enabled
-  if (get_node()->get_parameter("use_hqp", use_hqp_)) {
-    if (use_hqp_) {
-      RCLCPP_INFO(get_node()->get_logger(), "HQP mode enabled, initializing advanced safety control...");
-
-      // Initialize HQP solver
-      hqp_solver_ = std::make_unique<HQP::HierarchicalQP>();
-
-      // Initialize trajectory system
-      trajectory_buffer_ = std::make_unique<TrajectoryBuffer14d>(100);  // 100-point buffer
-      trajectory_buffer_->setFilter(5);  // 5-point moving average filter
-
-      trajectory_interpolator_ = std::make_unique<LinearInterpolator14d>(0.001);  // 1kHz
-
-      // Initialize ConstraintManager
-      std::string control_params_config = "/home/xiaozy24/dual_panda_ws/src/multipanda_ros2/franka_example_controllers/config/control_params.yaml";
-
-      // Get references to PandaRobot models (temporary solution)
-      // In production, we need proper reference handling
-      PandaRobot& robot1_ref = *arms_.begin()->second.panda_robot_model_;
-      PandaRobot& robot2_ref = *std::next(arms_.begin())->second.panda_robot_model_;
-
-      constraint_manager_ = std::make_unique<ConstraintManager>(
-          robot1_ref, robot2_ref, *collision_env_, control_params_config);
-
-      // Add basic constraints
-      constraint_manager_->addConstraint(Constraint(0, ConstraintType::JOINT_LIMIT_WITH_ACC));
-      constraint_manager_->addConstraint(Constraint(1, ConstraintType::COLLISION_AVOIDANCE_ALLCBF));
-
-      RCLCPP_INFO(get_node()->get_logger(), "HQP safety control system initialized successfully");
-    } else {
-      RCLCPP_INFO(get_node()->get_logger(), "HQP mode disabled, using null-space control");
-    }
-  } else {
-    use_hqp_ = false;  // Default to null-space control
-    RCLCPP_INFO(get_node()->get_logger(), "HQP parameter not found, using null-space control");
-  }
 
   return CallbackReturn::SUCCESS;
 }
@@ -288,16 +219,6 @@ void DualArmMprcController::desiredPoseCallback(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// dynamicObstacleCallback  — handle dynamic obstacle updates
-// ─────────────────────────────────────────────────────────────────────────────
-void DualArmMprcController::dynamicObstacleCallback(
-    const dual_arm_reactive_control::msg::CollisionObject& msg) {
-  if (collision_env_) {
-    collision_env_->dynamicObstacleHandler(msg);
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // buildQvector
 // Layout: [0, 0, 0, q_right(7), q_left(7)]  ← redundancy_resolution convention
 // The map is sorted: mj_left (index 0) < mj_right (index 1)
@@ -336,132 +257,6 @@ controller_interface::return_type DualArmMprcController::update(
 
   Vector7d q_left  = Vector7d(left_arm.franka_robot_model_->getRobotState()->q.data());
   Vector7d q_right = Vector7d(right_arm.franka_robot_model_->getRobotState()->q.data());
-
-  // ── Check if HQP mode is enabled ─────────────────────────────────────────────
-  if (use_hqp_ && hqp_solver_ && constraint_manager_) {
-    // HQP Advanced Safety Control Mode
-    Vector14d q_current, q_desired;
-    q_current << q_left, q_right;
-
-    // Compute desired joint positions from Cartesian targets
-    std::vector<Vector7d> q_desired_arm_list(2);
-
-    for (int arm_idx = 0; arm_idx < 2; ++arm_idx) {
-      ArmContainer& arm = *arm_ptrs[arm_idx];
-      const Vector7d& q_cur = (arm_idx == 0) ? q_left : q_right;
-
-      // Current EE pose
-      Eigen::Map<const Matrix4d> T_cur(
-          arm.franka_robot_model_->getPoseMatrix(franka::Frame::kEndEffector).data());
-      Vector3d current_pos = T_cur.block<3, 1>(0, 3);
-      Eigen::Quaterniond current_ori(T_cur.block<3, 3>(0, 0));
-
-      // Desired pose (thread-safe)
-      Vector3d target_pos;
-      Eigen::Quaterniond target_ori;
-      {
-        std::lock_guard<std::mutex> lock(target_mutex_);
-        target_pos = arm.desired_position;
-        target_ori = arm.desired_orientation;
-      }
-
-      // Cartesian error
-      Vector6d delta_x;
-      delta_x.head<3>() = target_pos - current_pos;
-      Eigen::Quaterniond q_err = target_ori * current_ori.inverse();
-      q_err.normalize();
-      Eigen::AngleAxisd aa(q_err);
-      delta_x.tail<3>() = aa.axis() * aa.angle();
-
-      // Jacobian
-      Eigen::Map<const Eigen::Matrix<double, 6, 7>> J(
-          arm.franka_robot_model_->getZeroJacobian(franka::Frame::kEndEffector).data());
-
-      // Compute desired joint position using Jacobian pseudo-inverse
-      Eigen::MatrixXd J_pinv;
-      dampedPseudoInverse(J, J_pinv);
-      const double k_task = 1.0;
-      Vector7d delta_q_task = k_task * J_pinv * delta_x;
-      q_desired_arm_list[arm_idx] = q_cur + delta_q_task;
-    }
-
-    // Combine into 14-DOF vector
-    q_desired << q_desired_arm_list[0], q_desired_arm_list[1];
-
-    // Solve HQP with constraints
-    Vector14d dq_solution;
-    if (solveHQP(q_current, q_desired, dq_solution)) {
-      // Integrate velocity to position (Euler integration with small dt)
-      const double dt = 0.001;  // 1ms control period
-      Vector14d q_hqp = q_current + dq_solution * dt;
-
-      // Joint limit saturation
-      q_hqp = q_hqp.cwiseMax(q_min_rep_).cwiseMin(q_max_rep_);
-
-      // Update state machine
-      updateControlState(q_current, q_hqp);
-      checkStateTransitions(q_hqp, q_desired);
-
-      // Split back to individual arms and store
-      std::vector<Vector7d> q_desired_list(2);
-      q_desired_list[0] = q_hqp.head<7>();
-      q_desired_list[1] = q_hqp.tail<7>();
-
-      left_arm.q_desired = q_desired_list[0];
-      right_arm.q_desired = q_desired_list[1];
-
-      // ── Publish 14-dim joint target ────────────────────────────────────────
-      std_msgs::msg::Float64MultiArray joint_msg;
-      joint_msg.data.resize(2 * kNumJoints);
-
-      for (int j = 0; j < kNumJoints; ++j) {
-        joint_msg.data[j]              = q_desired_list[0](j);  // left
-        joint_msg.data[kNumJoints + j] = q_desired_list[1](j);  // right
-      }
-      pub_joint_desired_->publish(joint_msg);
-
-      // ── Visualization: 27 SPHERES PER ARM ─────────────────────────────────────
-      visualization_msgs::msg::MarkerArray markers;
-
-      auto add_robot_spheres = [&](ArmContainer& arm, int start_id, float r, float g, float b, const Vector7d& q) {
-        if (!arm.panda_robot_model_) return;
-        std::vector<CollisionSphere> spheres;
-        arm.panda_robot_model_->getCollisionSpheres(q, spheres);
-
-        for (size_t i = 0; i < spheres.size(); ++i) {
-          visualization_msgs::msg::Marker m;
-          m.header.frame_id = "world";
-          m.header.stamp = get_node()->now();
-          m.ns = arm.arm_id_ + "_spheres";
-          m.id = start_id + i;
-          m.type = visualization_msgs::msg::Marker::SPHERE;
-          m.action = visualization_msgs::msg::Marker::ADD;
-          m.pose.position.x = spheres[i].first.x();
-          m.pose.position.y = spheres[i].first.y();
-          m.pose.position.z = spheres[i].first.z();
-          m.scale.x = m.scale.y = m.scale.z = spheres[i].second * 2.0;
-          m.color.r = r; m.color.g = g; m.color.b = b; m.color.a = 0.5;
-          markers.markers.push_back(m);
-        }
-      };
-
-      add_robot_spheres(left_arm, 100, 0.0, 0.8, 1.0, q_left);
-      add_robot_spheres(right_arm, 200, 1.0, 0.5, 0.0, q_right);
-      pub_collision_markers_->publish(markers);
-
-      return controller_interface::return_type::OK;
-
-    } else {
-      // HQP failed, fall back to null-space control
-      RCLCPP_WARN_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 1000,
-                          "HQP solve failed, falling back to null-space control");
-      // Continue to null-space control below
-    }
-  }
-
-  // ── Null-Space Control Mode (default or fallback) ────────────────────────
-  // arm_ptrs[0] = mj_left (arm_1), arm_ptrs[1] = mj_right (arm_2)
-  // (already collected above)
 
   // ── Update collision/joint-limit gradients every kAvoidanceInterval ───────
   ++avoidance_counter_;
@@ -514,46 +309,32 @@ controller_interface::return_type DualArmMprcController::update(
     Eigen::Map<const Eigen::Matrix<double, 6, 7>> J(
         arm.franka_robot_model_->getZeroJacobian(franka::Frame::kEndEffector).data());
 
-    // ── Null-Space Control with CBF Safety Check ─────────────────────────────
-    // Original null-space control
+    // ── Damped pseudo-inverse ──────────────────────────────────────────────
     Eigen::MatrixXd J_pinv;
     dampedPseudoInverse(J, J_pinv);
 
-    const double k_task = 1.0;
+    // ── Task-space contribution: delta_q = J† * gain * delta_x ───────────
+    const double k_task = 1.0;   // proportional gain
     Vector7d delta_q_task = k_task * J_pinv * delta_x;
 
-    // Null-space safety contribution
+    // ── Null-space safety contribution ─────────────────────────────────────
+    //    N = I - J† J  (null-space projector)
+    //    delta_q_null = N * (-grad_coll - grad_qlim)
     Eigen::Matrix<double, 7, 7> N =
         Eigen::Matrix<double, 7, 7>::Identity() - J_pinv * J;
     const double k_null = 0.5;
     Vector7d safe_gradient = -(grad_coll_[arm_idx] + grad_qlim_[arm_idx]);
     Vector7d delta_q_null = k_null * N * safe_gradient;
 
-    // Compute desired joint position
-    Vector7d q_desired_raw = q_cur + delta_q_task + delta_q_null;
+    // ── Integrate: q_desired = q_current + delta_q ─────────────────────────
+    q_desired_list[arm_idx] = q_cur + delta_q_task + delta_q_null;
 
-    // ── CBF Safety Check ─────────────────────────────────────────────────────
-    if (!collision_env_->isEmpty()) {
-      // Compute distance to environment
-      double distance;
-      Vector7d grad;
-      collision_env_->robot2EnvDistanceGradient(*arm.panda_robot_model_, q_desired_raw,
-                                                distance, grad);
-
-      // CBF constraint: h(q) = distance - d_min ≥ 0
-      if (distance < collision_d_min_) {
-        RCLCPP_WARN(get_node()->get_logger(), "CBF violated for %s: distance=%.3f < d_min=%.3f",
-                    arm.arm_id_.c_str(), distance, collision_d_min_);
-
-        // Project q_desired back to safe region using gradient projection
-        double correction = cbf_gamma_ * (collision_d_min_ - distance);
-        Vector7d q_correction = correction * grad / (grad.norm() + 1e-6);
-        q_desired_raw = q_desired_raw + q_correction;
-      }
-    }
-
-    // Joint-limit saturation
-    q_desired_list[arm_idx] = q_desired_raw.cwiseMax(q_min_).cwiseMin(q_max_);
+    // ── Joint-limit saturation ─────────────────────────────────────────────
+    const static Vector7d q_max =
+        (Vector7d() << 2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973).finished();
+    const static Vector7d q_min =
+        (Vector7d() << -2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973).finished();
+    q_desired_list[arm_idx] = q_desired_list[arm_idx].cwiseMax(q_min).cwiseMin(q_max);
 
     // Store for next cycle
     arm.q_desired = q_desired_list[arm_idx];
@@ -570,142 +351,36 @@ controller_interface::return_type DualArmMprcController::update(
   }
   pub_joint_desired_->publish(joint_msg);
 
-  // ── Visualization of Upgrade: 27 SPHERES PER ARM ─────────────────────────
+  // ── Visualization of Component B Collision Model ────────────────────────
+  // We use redundancy_resolution's getJointsPositions to visualize the joints
+  // since this controller uses that library for safety.
   visualization_msgs::msg::MarkerArray markers;
+  Eigen::VectorXd Q = buildQvector(q_left, q_right);
 
-  auto add_robot_spheres = [&](ArmContainer& arm, int start_id, float r, float g, float b, const Vector7d& q) {
-    if (!arm.panda_robot_model_) return;
-    std::vector<CollisionSphere> spheres;
-    arm.panda_robot_model_->getCollisionSpheres(q, spheres);
-
-    for (size_t i = 0; i < spheres.size(); ++i) {
+  auto add_arm_markers = [&](bool is_right, int start_id, float r, float g, float b) {
+    Eigen::MatrixXd pos = redundancy_resolution::getJointsPositions(Q, is_right);
+    for (int i = 0; i < pos.cols(); ++i) {
       visualization_msgs::msg::Marker m;
       m.header.frame_id = "world";
       m.header.stamp = get_node()->now();
-      m.ns = arm.arm_id_ + "_spheres";
+      m.ns = is_right ? "right_arm_joints" : "left_arm_joints";
       m.id = start_id + i;
       m.type = visualization_msgs::msg::Marker::SPHERE;
       m.action = visualization_msgs::msg::Marker::ADD;
-      m.pose.position.x = spheres[i].first.x();
-      m.pose.position.y = spheres[i].first.y();
-      m.pose.position.z = spheres[i].first.z();
-      m.scale.x = m.scale.y = m.scale.z = spheres[i].second * 2.0; // scale is diameter
-      m.color.r = r; m.color.g = g; m.color.b = b; m.color.a = 0.5;
+      m.pose.position.x = pos(0, i);
+      m.pose.position.y = pos(1, i);
+      m.pose.position.z = pos(2, i);
+      m.scale.x = m.scale.y = m.scale.z = 0.08; // Representative size for joint spheres
+      m.color.r = r; m.color.g = g; m.color.b = b; m.color.a = 0.6;
       markers.markers.push_back(m);
     }
   };
 
-  add_robot_spheres(left_arm, 100, 0.0, 0.8, 1.0, q_left);  // Cyan for left
-  add_robot_spheres(right_arm, 200, 1.0, 0.5, 0.0, q_right); // Orange for right
+  add_arm_markers(false, 0, 0.0, 1.0, 0.0); // Left Green
+  add_arm_markers(true, 10, 1.0, 1.0, 0.0); // Right Yellow
   pub_collision_markers_->publish(markers);
 
   return controller_interface::return_type::OK;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// HQP Control Helper Functions
-// ─────────────────────────────────────────────────────────────────────────────
-
-bool DualArmMprcController::initializeHQPSolver()
-{
-  if (!hqp_solver_) {
-    RCLCPP_ERROR(get_node()->get_logger(), "HQP solver not initialized");
-    return false;
-  }
-
-  if (!constraint_manager_) {
-    RCLCPP_ERROR(get_node()->get_logger(), "Constraint manager not initialized");
-    return false;
-  }
-
-  RCLCPP_INFO(get_node()->get_logger(), "HQP solver and constraint manager ready");
-  return true;
-}
-
-bool DualArmMprcController::solveHQP(const Vector14d& q_current, const Vector14d& q_desired,
-                                  Vector14d& dq_solution)
-{
-  if (!hqp_solver_ || !constraint_manager_) {
-    return false;
-  }
-
-  // Generate cost function
-  MatrixXd H;
-  VectorXd f;
-  Vector14d dq_current = Vector14d::Zero();  // Assume starting from rest
-  constraint_manager_->generateCost(q_current, q_desired, dq_current, H, f);
-
-  // Generate constraints
-  std::vector<HQP::PriorityConstraint> priority_constraints;
-  constraint_manager_->generateConstraints2HQP(q_current, dq_current, priority_constraints);
-
-  // Set and solve HQP
-  hqp_solver_->setCost(H, f);
-  hqp_solver_->setConstraints(priority_constraints);
-
-  HQP::HQPSolverResult result;
-  hqp_solver_->solve(result);
-
-  if (result.success) {
-    dq_solution = result.x.head<14>();
-    return true;
-  } else {
-    RCLCPP_WARN(get_node()->get_logger(), "HQP solver failed to find solution");
-    return false;
-  }
-}
-
-void DualArmMprcController::updateControlState(const Vector14d& q_current, const Vector14d& q_desired)
-{
-  // Simple state machine logic
-  Vector14d tracking_error = q_current - q_desired;
-  double max_error = tracking_error.cwiseAbs().maxCoeff();
-
-  switch (current_control_state_) {
-    case ControlState::STOPPING:
-      // Wait for new target
-      if (has_target_) {
-        next_control_state_ = ControlState::TRACKING;
-        current_exception_ = ExceptionType::NO_EXCEPTION;
-      }
-      break;
-
-    case ControlState::TRACKING:
-      // Check for large tracking errors
-      if (max_error > 0.5) {  // 0.5 rad tracking error threshold
-        next_control_state_ = ControlState::REACTING;
-        RCLCPP_WARN(get_node()->get_logger(), "Large tracking error: %.3f, switching to REACTING", max_error);
-      }
-      break;
-
-    case ControlState::REACTING:
-      // Check if error is reduced
-      if (max_error < 0.1) {  // 0.1 rad recovery threshold
-        next_control_state_ = ControlState::TRACKING;
-        RCLCPP_INFO(get_node()->get_logger(), "Tracking error recovered, switching back to TRACKING");
-      }
-      break;
-  }
-
-  current_control_state_ = next_control_state_;
-}
-
-void DualArmMprcController::checkStateTransitions(const Vector14d& q_current, const Vector14d& q_desired)
-{
-  // Check for exception conditions
-  if (use_hqp_ && hqp_solver_) {
-    // In HQP mode, the constraint manager handles most safety checks
-    // Additional checks can be added here
-  }
-
-  // Check joint limits
-  for (int i = 0; i < 14; i++) {
-    if (q_current(i) < q_min_(i % 7) || q_current(i) > q_max_(i % 7)) {
-      current_exception_ = ExceptionType::CONSTRAINT_VIOLATION;
-      next_control_state_ = ControlState::STOPPING;
-      RCLCPP_ERROR(get_node()->get_logger(), "Joint limit violated on joint %d", i);
-    }
-  }
 }
 
 }  // namespace franka_example_controllers

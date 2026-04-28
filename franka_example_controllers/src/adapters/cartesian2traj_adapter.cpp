@@ -13,12 +13,6 @@ Cartesian2TrajectoryAdapter::Cartesian2TrajectoryAdapter()
   // Initialize robot models
   initializeRobotModels();
 
-  // Create subscriber for joint states (to get current robot configuration)
-  joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(
-      "/joint_states", 10,
-      std::bind(&Cartesian2TrajectoryAdapter::jointStateCallback, this,
-                std::placeholders::_1));
-
   // Create subscriber for Cartesian commands
   cartesian_sub_ = this->create_subscription<std_msgs::msg::Float64MultiArray>(
       "/dualarm_mprc/pose_desired", 10,
@@ -32,7 +26,7 @@ Cartesian2TrajectoryAdapter::Cartesian2TrajectoryAdapter()
   RCLCPP_INFO(this->get_logger(),
               "Cartesian2TrajectoryAdapter initialized");
   RCLCPP_INFO(this->get_logger(),
-              "Subscribing to: /joint_states and /dualarm_mprc/pose_desired");
+              "Subscribing to: /dualarm_mprc/pose_desired");
   RCLCPP_INFO(this->get_logger(),
               "Publishing to: /dualArm_traj");
 }
@@ -46,18 +40,12 @@ void Cartesian2TrajectoryAdapter::initializeRobotModels() {
   robot1_ = std::make_shared<PandaRobot>(1, collision_yaml);
   robot2_ = std::make_shared<PandaRobot>(2, collision_yaml);
 
-  // Set base positions to match MuJoCo simulation (CRITICAL!)
-  // MuJoCo: mj_left at (0, 0.26, 0), mj_right at (0, -0.26, 0)
-  // This MUST match both adapter and senior controller!
+  // Set base positions (matching the actual robot setup)
   robot1_->setBase(Vector3d(0, 0.26, 0), Vector3d(0, 0, 0));
   robot2_->setBase(Vector3d(0, -0.26, 0), Vector3d(0, 0, 0));
 
   RCLCPP_INFO(this->get_logger(),
               "Robot models initialized with collision spheres");
-  RCLCPP_INFO(this->get_logger(),
-              "  robot1 (panda_1) base: (0, 0.26, 0)");
-  RCLCPP_INFO(this->get_logger(),
-              "  robot2 (panda_2) base: (0, -0.26, 0)");
 }
 
 void Cartesian2TrajectoryAdapter::cartesianCallback(
@@ -67,15 +55,6 @@ void Cartesian2TrajectoryAdapter::cartesianCallback(
     RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                          "Expected 24 elements, got %zu", msg->data.size());
     return;
-  }
-
-  // Rate limiting: check minimum time interval
-  if (has_last_target_) {
-    rclcpp::Time current_time = this->now();
-    double time_since_last = (current_time - last_publish_time_).seconds();
-    if (time_since_last < 0.1) {  // 100ms = 10Hz max publish rate
-      return;  // Skip this message to avoid flooding senior's controller
-    }
   }
 
   // Extract left arm target
@@ -123,25 +102,9 @@ void Cartesian2TrajectoryAdapter::cartesianCallback(
   q1_target = q1_target.cwiseMax(q_min_).cwiseMin(q_max_);
   q2_target = q2_target.cwiseMax(q_min_).cwiseMin(q_max_);
 
-  // Safety margin for joint limits (especially for joint 4 which has special range)
-  const double margin = 0.1;  // 0.1 rad margin from limits
-  Vector7d q_min_safe = q_min_ + Vector7d::Constant(margin);
-  Vector7d q_max_safe = q_max_ - Vector7d::Constant(margin);
-
-  // Check if targets are too close to limits
-  bool q1_too_close = ((q1_target.array() < q_min_safe.array()) ||
-                       (q1_target.array() > q_max_safe.array())).any();
-  bool q2_too_close = ((q2_target.array() < q_min_safe.array()) ||
-                       (q2_target.array() > q_max_safe.array())).any();
-
-  if (q1_too_close || q2_too_close) {
-    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                        "Target position too close to joint limits, skipping");
-    return;
-  }
-
-  // Note: q1_current_ and q2_current_ are updated by jointStateCallback
-  // from actual robot states, not from IK results
+  // Update current joint states (closed loop)
+  q1_current_ = q1_target;
+  q2_current_ = q2_target;
 
   // Construct JointTrajectory message
   auto traj_msg = trajectory_msgs::msg::JointTrajectory();
@@ -181,10 +144,9 @@ void Cartesian2TrajectoryAdapter::cartesianCallback(
     last_right_pos_ = right_pos;
     last_right_rot_ = right_rot;
     has_last_target_ = true;
-    last_publish_time_ = this->now();  // Update last publish time
   }
 
-  RCLCPP_INFO(this->get_logger(),
+  RCLCPP_DEBUG(this->get_logger(),
               "Published trajectory target: q1=[%.3f, %.3f, %.3f, ...], q2=[%.3f, %.3f, %.3f, ...]",
               q1_target(0), q1_target(1), q1_target(2),
               q2_target(0), q2_target(1), q2_target(2));
@@ -236,52 +198,18 @@ Vector7d Cartesian2TrajectoryAdapter::solveIK(
   Vector7d delta_q = J_pinv * delta_x;
 
   // Limit joint increment (prevent large jumps)
-  // Use conservative limits to avoid HQP constraint conflicts in senior's controller
-  const double max_delta = 0.05;  // rad (reduced from 0.1 for safety)
-  const double max_delta_joint4 = 0.02;  // joint 4 has special limits, be extra careful
-
-  for (int i = 0; i < 7; ++i) {
-    double limit = (i == 3) ? max_delta_joint4 : max_delta;  // Joint 4 (index 3)
-    if (std::abs(delta_q(i)) > limit) {
-      delta_q(i) = (delta_q(i) > 0) ? limit : -limit;
-    }
+  const double max_delta = 0.1;  // rad
+  if (delta_q.lpNorm<Eigen::Infinity>() > max_delta) {
+    delta_q = delta_q * max_delta / delta_q.lpNorm<Eigen::Infinity>();
+    RCLCPP_DEBUG(this->get_logger(),
+                "Limited joint increment from %.4f to %.4f rad",
+                delta_q.lpNorm<Eigen::Infinity>(), max_delta);
   }
-
-  RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                       "Joint increment: [%.3f, %.3f, %.3f, %.3f, %.3f, %.3f, %.3f]",
-                       delta_q(0), delta_q(1), delta_q(2), delta_q(3),
-                       delta_q(4), delta_q(5), delta_q(6));
 
   // Compute target joint position
   Vector7d q_target = q_current + delta_q;
 
   return q_target;
-}
-
-void Cartesian2TrajectoryAdapter::jointStateCallback(
-    const sensor_msgs::msg::JointState::SharedPtr msg) {
-
-  // Update current joint states from actual robot configuration
-  for (size_t i = 0; i < msg->name.size(); ++i) {
-    const std::string& joint_name = msg->name[i];
-
-    // Extract mj_left joints (panda_1)
-    if (joint_name.find("mj_left_joint") == 0) {
-      std::string joint_num = joint_name.substr(13);  // "mj_left_joint" length
-      int joint_idx = std::stoi(joint_num) - 1;
-      if (joint_idx >= 0 && joint_idx < 7) {
-        q1_current_(joint_idx) = msg->position[i];
-      }
-    }
-    // Extract mj_right joints (panda_2)
-    else if (joint_name.find("mj_right_joint") == 0) {
-      std::string joint_num = joint_name.substr(14);  // "mj_right_joint" length
-      int joint_idx = std::stoi(joint_num) - 1;
-      if (joint_idx >= 0 && joint_idx < 7) {
-        q2_current_(joint_idx) = msg->position[i];
-      }
-    }
-  }
 }
 
 Matrix4d Cartesian2TrajectoryAdapter::poseVectorToMatrix(

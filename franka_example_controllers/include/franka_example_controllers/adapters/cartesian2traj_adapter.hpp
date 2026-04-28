@@ -3,7 +3,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/float64_multi_array.hpp>
 #include <trajectory_msgs/msg/joint_trajectory.hpp>
-#include <sensor_msgs/msg/joint_state.hpp>
 #include <Eigen/Dense>
 #include <memory>
 #include <mutex>
@@ -40,7 +39,6 @@ class Cartesian2TrajectoryAdapter : public rclcpp::Node {
   // ROS interfaces
   rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr cartesian_sub_;
   rclcpp::Publisher<trajectory_msgs::msg::JointTrajectory>::SharedPtr traj_pub_;
-  rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
 
   // Robot models for IK
   std::shared_ptr<PandaRobot> robot1_;
@@ -57,12 +55,8 @@ class Cartesian2TrajectoryAdapter : public rclcpp::Node {
     (Vector7d() << 2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973).finished()};
 
   // Threshold for publishing new trajectory
-  double position_threshold_{0.01};   // 1cm (increased)
-  double rotation_threshold_{0.1};    // ~5.7 degrees (increased)
-
-  // Time interval for rate limiting
-  rclcpp::Time last_publish_time_;
-  double min_publish_interval_{0.1};  // 100ms (10Hz max)
+  double position_threshold_{0.001};  // 1mm
+  double rotation_threshold_{0.01};   // ~0.57 degrees
 
   // Last published target (for thresholding)
   Vector3d last_left_pos_;
@@ -75,9 +69,8 @@ class Cartesian2TrajectoryAdapter : public rclcpp::Node {
   // Mutex for thread safety
   std::mutex target_mutex_;
 
-  // Callbacks
+  // Callback
   void cartesianCallback(const std_msgs::msg::Float64MultiArray::SharedPtr msg);
-  void jointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg);
 
   // IK solving
   Vector7d solveIK(const Vector3d& target_pos,

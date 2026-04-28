@@ -68,13 +68,13 @@ def generate_launch_description():
 
     mj_dual_text = re.sub(
         r'(<body name="mj_left_hand"[^>]*>)',
-        r'\1\n                        <body name="left_real_camera" pos="0 0 0" quat="1 0 0 0">\n                          <camera name="left_arm_cam" pos="0.104437 0.000332 0.053574" xyaxes="0.8910 0 0.4540 0 -1 0" fovy="58"/>\n                          <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.25" contype="1" conaffinity="1"/>\n                          <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.25" contype="1" conaffinity="1"/>\n                        </body>',
+        r'\1\n                        <body name="left_real_camera" pos="0 0 0" quat="1 0 0 0">\n                          <camera name="left_arm_cam" pos="0.104437 0.000332 0.053574" xyaxes="0 -1 0 -0.889756 0 -0.5129 " fovy="100"/>\n                          <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.25" contype="1" conaffinity="1"/>\n                          <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.25" contype="1" conaffinity="1"/>\n                        </body>',
         mj_dual_text
     )
   
     mj_dual_text = re.sub(
         r'(<body name="mj_right_hand"[^>]*>)',
-        r'\1\n                        <body name="right_real_camera" pos="0 0 0" quat="1 0 0 0">\n                          <camera name="right_arm_cam" pos="0.104437 0.000332 0.053574" xyaxes="0.8910 0 0.4540 0 -1 0" fovy="58"/>\n                          <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.25" contype="1" conaffinity="1"/>\n                          <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.25" contype="1" conaffinity="1"/>\n                        </body>',
+        r'\1\n                        <body name="right_real_camera" pos="0 0 0" quat="1 0 0 0">\n                          <camera name="right_arm_cam" pos="0.104437 0.000332 0.053574" xyaxes=" 0 -1 0 -0.889756 0 -0.5129" fovy="100"/>\n                          <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.25" contype="1" conaffinity="1"/>\n                          <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.25" contype="1" conaffinity="1"/>\n                        </body>',
         mj_dual_text
     )
     

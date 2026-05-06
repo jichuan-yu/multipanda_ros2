@@ -2,6 +2,59 @@
 
 本文档说明了如何从进入 Docker 容器开始，编译、运行仿真，并使用相关脚本通过 ROS 2 Topic 持续发布指令来控制机械臂运动。
 
+## 调整参数时的工作流
+
+当需要修改相机位置、模型位置、控制器参数或其他仿真配置时，请按以下流程操作：
+
+### 1. 启动容器
+先启动容器，然后按如下指令运行：
+```bash
+docker start multipanda-container
+```
+通过 `docker exec -it multipanda-container bash` 进入容器，确保每个终端都处于项目工作空间目录下（multipanda_ws）
+
+### 2. 修改源码中的参数
+- 优先修改工作区源码目录中的文件，而不是 `install/` 目录。
+- 常见修改位置包括：
+  - `my_task_description/launch/my_task_sim.launch.py`
+  - 控制器配置文件
+  - 机器人模型 XML / 生成 XML 的逻辑
+
+### 3. 确认修改的是当前实际运行的工作区
+- 当前仿真使用的是：
+  - `/home/developer/multipanda_ws/install/my_task_description`
+- 如果源码不在该工作区内，需要先同步到对应 workspace。
+
+### 4. 重新编译工作区
+```bash
+cd /home/developer/multipanda_ws
+colcon build --packages-select my_task_description --symlink-install
+```（注意选择对应的packages,不需要全部编译，这里一my_task_description为例子）
+
+### 5. 重新加载环境
+```bash
+source install/setup.bash
+```
+
+### 6. 重新启动仿真
+- 先停止旧的 `ros2 launch` 进程
+- 再执行新的启动命令
+- 修改后的 XML、相机位置、物体位置等才会生效
+
+### 7. 检查是否真正生效
+```bash
+ros2 pkg prefix my_task_description
+ros2 launch my_task_description my_task_sim.launch.py use_rviz:=true
+
+```
+如果输出仍然是 `/home/developer/multipanda_ws/install/...`，说明当前运行的就是这个工作区。
+
+### 8. 如果改动后没有变化
+- 检查是否改到了错误的源码目录
+- 检查是否忘记重新 `colcon build`
+- 检查是否忘记重新 `source install/setup.bash`
+- 检查是否还在运行旧的 launch 进程
+
 ## 前置准备
 
 启动 Docker 容器时，为了确保能看到仿真界面并与容器外进行 ROS 2 通信，请运行以下完整的 Docker 启动命令（如果已有容器在运行请先停止并删除旧的，然后重启）：
@@ -35,10 +88,10 @@ docker start multipanda-container
 docker exec -it multipanda-container bash
 colcon build
 source install/setup.bash
-# 启动带有自定义环境和多相机渲染的任务仿真
+# 启动带有自定义环境 and 多相机渲染的任务仿真
 ros2 launch my_task_description my_task_sim.launch.py
 ```
-*启动后，你应该能看到包含两个相机零件(STL)的 MuJoCo 环境弹开，并且机器人加载在里面。同时 MuJoCo 会通过离屏渲染持续向 ROS 2 发布 `fixed_cam`, `left_arm_cam`, `right_arm_cam` 三路图像。此外，底层控制器 `dual_joint_impedance_controller` 也会被自动加载和激活，这说明机器人现在已经准备好接收关节目标指令。*
+*启动后，你应该能看到包含两个相机零件(STL)的 MuJoCo 环境弹开，并且机器人加载在里面。同时 MuJoCo 会通过离屏渲染持续向 ROS 2 发布 `fixed_cam`, `left_arm_cam`, `right_arm_cam` 三路图像。此外，底层控制器 `multi_cartesian_impedance_controller` 也会被自动加载和激活，这说明机器人现在已经准备好接收目标笛卡尔空间指令。*
 
 ---
 

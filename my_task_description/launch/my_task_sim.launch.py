@@ -65,28 +65,16 @@ def generate_launch_description():
         mj_dual_text = f.read()
     
 
+
     mj_dual_text = re.sub(
         r'(<body name="mj_left_hand"[^>]*>)',
-        r'\1\n                        <camera name="left_arm_cam" pos="0 0.104765 0.053574" xyaxes="0 -1 0 -0.676 0 -0.736" fovy="58"/>',
-        mj_dual_text
-    )
-
-    mj_dual_text = re.sub(
-        r'(<body name="mj_right_hand"[^>]*>)',
-        r'\1\n                        <camera name="right_arm_cam" pos="0 0.104765 0.053574" xyaxes="0 -1 0 -0.676 0 -0.736" fovy="58"/>',
-        mj_dual_text
-    )
-
- 
-    mj_dual_text = re.sub(
-        r'(<site name="mj_left_flange_site"[^>]*/>)',
-        r'\1\n                        <body name="camera_part1" pos="0 0 0" quat="0 0.93969262 0.34202014 0">\n                          <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.5" contype="0" conaffinity="0"/>\n                        </body>',
+        r'\1\n                        <body name="left_real_camera" pos="0 0 0" quat="1 0 0 0">\n                          <camera name="left_arm_cam" pos="0.104437 0.000332 0.053574" xyaxes="0 -1 0 -0.889756 0 -0.5129 " fovy="100"/>\n                          <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.25" contype="1" conaffinity="1"/>\n                          <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.25" contype="1" conaffinity="1"/>\n                        </body>',
         mj_dual_text
     )
   
     mj_dual_text = re.sub(
-        r'(<site name="mj_right_flange_site"[^>]*/>)',
-        r'\1\n                        <body name="camera_part2" pos="0 0 0" quat="0 0.93969262 0.34202014 0">\n                          <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.5" contype="0" conaffinity="0"/>\n                        </body>',
+        r'(<body name="mj_right_hand"[^>]*>)',
+        r'\1\n                        <body name="right_real_camera" pos="0 0 0" quat="1 0 0 0">\n                          <camera name="right_arm_cam" pos="0.104437 0.000332 0.053574" xyaxes=" 0 -1 0 -0.889756 0 -0.5129" fovy="100"/>\n                          <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.25" contype="1" conaffinity="1"/>\n                          <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.25" contype="1" conaffinity="1"/>\n                        </body>',
         mj_dual_text
     )
     
@@ -202,6 +190,20 @@ def generate_launch_description():
             parameters=[{'source_list': jsp_source_list, 'rate': 30}],
     )
 
+    node_left_camera_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        arguments=['0', '0', '0', '0.93969262', '0.34202014', '0', '0', 'mj_left_link8', 'left_real_camera'],
+        output='screen',
+    )
+
+    node_right_camera_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        arguments=['0', '0', '0', '0.93969262', '0.34202014', '0', '0', 'mj_right_link8', 'right_real_camera'],
+        output='screen',
+    )
+
     rviz_file = os.path.join(get_package_share_directory('franka_description'), 'rviz', 'visualize_dual_franka.rviz')
 
     return LaunchDescription([
@@ -229,6 +231,8 @@ def generate_launch_description():
 
         node_robot_state_publisher,
         node_joint_state_publisher,
+        node_left_camera_tf,
+        node_right_camera_tf,
 
         Node(
             package='controller_manager',

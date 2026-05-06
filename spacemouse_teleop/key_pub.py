@@ -54,11 +54,11 @@ class KeyTeleopNode(Node):
         # (O_T_EE is roughly: x=0.3, y=0.0, z=0.5, and orientation is rotated 180 around X)
         self.poses = {
             'left': {
-                'pos': np.array([0.3, 0.2, 0.5]),
+                'pos': np.array([0.307,  0.0, 0.487]),
                 'rot': np.array([math.pi, 0.0, 0.0]) # rx, ry, rz
             },
             'right': {
-                'pos': np.array([0.3, -0.2, 0.5]),
+                'pos': np.array([0.307,  0.0, 0.487]),
                 'rot': np.array([math.pi, 0.0, 0.0])
             }
         }

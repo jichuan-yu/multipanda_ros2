@@ -58,11 +58,11 @@ class KeySafePubNode(Node):
         # Initial poses (matching typical Panda home EE position)
         self.poses = {
             'left': {
-                'pos': np.array([0.3,  0.2, 0.5]),
+                'pos': np.array([0.307,  0.0, 0.487]),
                 'rot': np.array([math.pi, 0.0, 0.0])  # rx, ry, rz
             },
             'right': {
-                'pos': np.array([0.3, -0.2, 0.5]),
+                'pos': np.array([0.307,  0.0, 0.487]),
                 'rot': np.array([math.pi, 0.0, 0.0])
             }
         }
@@ -70,8 +70,8 @@ class KeySafePubNode(Node):
         self.selected_arm = 'left'
 
         # Step sizes
-        self.step_pos = 0.001    # m
-        self.step_rot = 0.005    # rad
+        self.step_pos = 0.01    # m
+        self.step_rot = 0.05    # rad
 
         # Gripper publishers
         self.left_gripper_pub  = self.create_publisher(

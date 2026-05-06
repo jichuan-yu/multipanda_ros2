@@ -70,8 +70,8 @@ class KeySafePubNode(Node):
         self.selected_arm = 'left'
 
         # Step sizes
-        self.step_pos = 0.01    # m
-        self.step_rot = 0.05    # rad
+        self.step_pos = 0.003    # m
+        self.step_rot = 0.015    # rad
 
         # Gripper publishers
         self.left_gripper_pub  = self.create_publisher(

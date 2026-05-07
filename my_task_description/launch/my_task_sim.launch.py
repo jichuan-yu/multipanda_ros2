@@ -37,6 +37,7 @@ def generate_launch_description():
     franka_desc_dir = get_package_share_directory('franka_description')
     my_task_desc_dir = get_package_share_directory('my_task_description')
     franka_bringup_path = get_package_share_directory('franka_bringup')
+    mprc_dir = get_package_share_directory('dual_arm_reactive_control')
     
     mj_dual_file = 'mj_dual.xml' if load_gripper else 'mj_dual_ng.xml'
     mj_dual_path = os.path.join(franka_desc_dir, 'mujoco', 'franka', mj_dual_file)
@@ -190,6 +191,14 @@ def generate_launch_description():
             parameters=[{'source_list': jsp_source_list, 'rate': 30}],
     )
 
+    # Static TF from base_link to world (required for RViz RobotModel)
+    node_base_link_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        arguments=['0', '0', '0', '0', '0', '0', 'world', 'base_link'],
+        output='screen',
+    )
+
     node_left_camera_tf = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
@@ -231,6 +240,7 @@ def generate_launch_description():
 
         node_robot_state_publisher,
         node_joint_state_publisher,
+        node_base_link_tf,
         node_left_camera_tf,
         node_right_camera_tf,
 
@@ -265,5 +275,19 @@ def generate_launch_description():
              name='rviz2',
              arguments=['--display-config', rviz_file],
              condition=IfCondition(use_rviz)
-             )
+             ),
+        # Collision environment visualizer
+        Node(
+            package='dual_arm_reactive_control',
+            executable='collision_env_visualizer_node',
+            name='collision_env_visualizer',
+            output='screen',
+            parameters=[{
+                'collision_env_config': os.path.join(mprc_dir, 'config', 'collision_env_my_task.yaml'),
+                'collision_spheres_config': os.path.join(mprc_dir, 'config', 'panda_collision_spheres_nohand.yaml'),
+                'base_frame': 'base_link',
+                'robot1_prefix': 'mj_left',
+                'robot2_prefix': 'mj_right'
+            }]
+        )
     ])

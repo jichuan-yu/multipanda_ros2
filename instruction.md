@@ -27,7 +27,7 @@ docker exec -it multipanda-container bash
 cd /home/xiaozy24/dual_panda_ws
 colcon build --packages-select dual_arm_reactive_control
 source install/setup.bash
-ros2 run dual_arm_reactive_control main_sim_node --ros-args -p trajectory_file:/home/xiaozy24/dual_panda_ws/src/multipanda_ros2/tools/traj1.csv
+ros2 run dual_arm_reactive_control main_sim_node --ros-args -p trajectory_file:=/home/xiaozy24/dual_panda_ws/src/multipanda_ros2/tools/traj1.csv
 ```
 
 ## 文件说明

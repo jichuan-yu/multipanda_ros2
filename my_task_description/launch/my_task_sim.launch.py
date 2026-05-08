@@ -284,10 +284,12 @@ def generate_launch_description():
             output='screen',
             parameters=[{
                 'collision_env_config': os.path.join(mprc_dir, 'config', 'collision_env_my_task.yaml'),
-                'collision_spheres_config': os.path.join(mprc_dir, 'config', 'panda_collision_spheres_nohand.yaml'),
+                'collision_spheres_config': os.path.join(mprc_dir, 'config', 'panda_collision_spheres.yaml'),
                 'base_frame': 'base_link',
                 'robot1_prefix': 'mj_left',
-                'robot2_prefix': 'mj_right'
+                'robot2_prefix': 'mj_right',
+                'robot1_xyz': [0.0, 0.26, 0.0],
+                'robot2_xyz': [0.0, -0.26, 0.0]
             }]
         )
     ])

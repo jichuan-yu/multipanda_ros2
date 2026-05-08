@@ -17,6 +17,7 @@ from pink.tasks import FrameTask
 import math
 import os
 import subprocess
+import time
 
 def get_urdf_from_xacro():
     """Generate URDF from xacro using current workspace paths and settings"""
@@ -225,6 +226,7 @@ Ctrl-C to quit
         return self.configuration.q
 
     def timer_callback(self):
+        start_time = time.perf_counter()
         q = self.solve_ik()
         
         # Publish joint angles to dual_joint_impedance_controller
@@ -282,6 +284,20 @@ Ctrl-C to quit
             
             self.last_printed_pos['left'] = current_left_pos.copy()
             self.last_printed_pos['right'] = current_right_pos.copy()
+            
+        # Log computational time
+        end_time = time.perf_counter()
+        comp_time_ms = (end_time - start_time) * 1000
+        if not hasattr(self, 'comp_times'):
+            self.comp_times = []
+        self.comp_times.append(comp_time_ms)
+        
+        # Periodically show average computational time
+        if len(self.comp_times) >= 20: # Every 1 second at 20Hz
+            avg_time = sum(self.comp_times) / len(self.comp_times)
+            max_time = max(self.comp_times)
+            self.get_logger().info(f'[Comp Time] Avg: {avg_time:.2f}ms | Max: {max_time:.2f}ms')
+            self.comp_times = []
 
 def get_key(settings):
     tty.setraw(sys.stdin.fileno())

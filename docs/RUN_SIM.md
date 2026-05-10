@@ -84,7 +84,11 @@ source install/setup.bash
 ros2 run dual_arm_reactive_control main_sim_node
 ```
 
-控制器启动后会监听 `/dualarm_teleop_cmd` 话题，接收遥操作命令进入 `TELEOPERATING` 模式。也可以通过 `/dualArm_traj` 话题发送轨迹命令进入 `TRACKING` 模式。
+控制器启动后会直接进入待命状态，监听以下话题：
+- `/dualarm_teleop_cmd` - 遥操作命令（键盘/SpaceMouse/CSV回放）
+- `/dualArm_traj` - 轨迹命令（可选，用于预定义轨迹）
+
+发送遥操作命令后会自动切换到 `TELEOPERATING` 模式。
 
 更多遥操作实现细节请参考：[dualarm_mprc 遥操作文档](../../dualarm_mprc/docs/tele_operation.md)
 

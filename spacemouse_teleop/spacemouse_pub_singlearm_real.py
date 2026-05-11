@@ -103,6 +103,7 @@ class SpaceMouseTeleopNode(Node):
         self.mouse_state = None
         self.pose = np.eye(4)
         self.pose_initialized_from_ee_pose = False
+        self.prev_buttons = None  # For button edge detection
         self.ee_pose_sub = self.create_subscription(
             PoseStamped,
             self.ee_pose_topic,
@@ -219,11 +220,19 @@ class SpaceMouseTeleopNode(Node):
         try:
             buttons = getattr(state, 'buttons', None)
             if buttons:
-                # common mapping: button[0] -> open, button[1] -> close
-                if len(buttons) > 0 and buttons[0]:
+                # Detect button edge (False -> True) to send command only once per press
+                if self.prev_buttons is None:
+                    self.prev_buttons = [False] * len(buttons)
+                
+                # Button 0 -> open gripper
+                if len(buttons) > 0 and buttons[0] and not self.prev_buttons[0]:
                     self._send_gripper_width(self.gripper_open_width)
-                if len(buttons) > 1 and buttons[1]:
+                
+                # Button 1 -> grasp/close gripper
+                if len(buttons) > 1 and buttons[1] and not self.prev_buttons[1]:
                     self._send_gripper_grasp(self.gripper_close_width)
+                
+                self.prev_buttons = list(buttons)
         except Exception:
             pass
 

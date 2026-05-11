@@ -24,7 +24,7 @@ public:
         this->declare_parameter<std::string>("arm_id", "left");
         std::string arm_id_ = this->get_parameter("arm_id").as_string();
 
-        auto node_prefix = arm_id_ + "_gripper_sim_node";
+        auto node_prefix = arm_id_ + "_gripper";
         
         // Topic Names
         auto sub_topic_move = arm_id_ + "_gripper/width_desired";

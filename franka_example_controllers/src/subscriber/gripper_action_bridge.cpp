@@ -24,13 +24,13 @@ public:
         this->declare_parameter<std::string>("arm_id", "left");
         std::string arm_id_ = this->get_parameter("arm_id").as_string();
 
-        auto node_prefix = "/mj_" + arm_id_ + "_gripper_sim_node";
+        auto node_prefix = arm_id_ + "_gripper_sim_node";
         
         // Topic Names
-        auto sub_topic_move = "/mj_" + arm_id_ + "_gripper/width_desired";
-        auto sub_topic_grasp = "/mj_" + arm_id_ + "_gripper/grasp_desired";
-        auto sub_topic_homing = "/mj_" + arm_id_ + "_gripper/homing_desired";
-        auto sub_topic_stop = "/mj_" + arm_id_ + "_gripper/stop_desired";
+        auto sub_topic_move = arm_id_ + "_gripper/width_desired";
+        auto sub_topic_grasp = arm_id_ + "_gripper/grasp_desired";
+        auto sub_topic_homing = arm_id_ + "_gripper/homing_desired";
+        auto sub_topic_stop = arm_id_ + "_gripper/stop_desired";
 
         // Action / Service Names
         auto action_move = node_prefix + "/move";

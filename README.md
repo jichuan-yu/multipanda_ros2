@@ -7,6 +7,20 @@ This repository is a fork of [multipanda_ros2](https://github.com/tenfoldpaper/m
 
 ## Controllers and Communication Interfaces
 
+#### Gripper Control
+We developed a [gripper action bridge](src/multipanda_ros2/franka_example_controllers/src/subscriber/gripper_action_bridge.cpp) to provide a more convenient control interface.
+
+**Controller Interfaces:**
+| Topic Name | Message Type | Direction | Freq. | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `/<arm_id>_gripper/width_desired` | `std_msgs/msg/Float64` | Input (Sub) | Event-driven | External move command for target gripper width. |
+| `/<arm_id>_gripper/grasp_desired` | `std_msgs/msg/Float64MultiArray` | Input (Sub) | Event-driven | External grasp command for width, speed, force, and epsilon values. |
+| `/<arm_id>_gripper/homing_desired` | `std_msgs/msg/Bool` | Input (Sub) | Event-driven | External homing command for gripper calibration. |
+| `/<arm_id>_gripper/stop_desired` | `std_msgs/msg/Bool` | Input (Sub) | Event-driven | External stop command for gripper motion. |
+| `/<arm_id>_gripper/joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | ~17 Hz (state_publish_rate should be 50Hz, see franka_gripper/config)| Gripper joint states. |
+
+For more examples, please refer to [gripper_control](./docs/gripper_control.md)
+
 #### Cartesian Impedance Controller (Single Arm)
 
 ``` bash
@@ -20,9 +34,8 @@ ros2 launch franka_bringup franka_control.launch.py \
 **Controller Interfaces:**
 | Topic Name | Message Type | Direction | Freq. | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `/panda/joint_states` (from joint_state_broadcaster) | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states. |
-| `/panda_gripper/joint_states` (from panda_gripper) | `sensor_msgs/msg/JointState` | Output (Pub) | ~17 Hz (state_publish_rate should be 50Hz, see franka_gripper/config)| Gripper joint states. |
-| `/cartesian_impedance/target_pose` | `geometry_msgs/msg/PoseStamped` | Input (Sub) | 100Hz recommended | Target pose for the end-effector (in robot base frame) |
+| `/arm_id/joint_states` (from joint_state_broadcaster) | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states. |
+| `/cartesian_impedance/pose_desired` | `geometry_msgs/msg/PoseStamped` | Input (Sub) | 100Hz recommended | Desired pose for the end-effector (in robot base frame) |
 | `/cartesian_impedance/ee_pose` | `geometry_msgs/msg/PoseStamped` | Output (Pub) | 1000Hz | Current  pose for the end-effector (in robot base frame) |
 | `/cartesian_impedance/external_wrench` | `geometry_msgs/msg/WrenchStamped` | Output (Pub) | 1000Hz | Current external wrench of the robot in the base frame. `wrench.force.xyz` is external force and `wrench.torque.xyz` is external torque. |
 
@@ -52,7 +65,7 @@ $$
 **Controller Interfaces:**
 | Topic / Interface Name | Message Type / Interface Type | Direction | Freq. | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `/panda/joint_states` (from joint_state_broadcaster) | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states used by the controller. |
+| `/<arm_id>/joint_states` (from joint_state_broadcaster) | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states used by the controller. |
 | `/joint_impedance/joints_desired` | `sensor_msgs/msg/JointState` | Input (Sub) | 100Hz recommended | Desired joint positions and velocities. `position[0..6]` are the target joint positions, and `velocity[0..6]` are the target joint velocities. |
 
 
@@ -94,5 +107,4 @@ newgrp plugdev
 ```bash
 pip install pyspacemouse
 ```
-
 

@@ -18,6 +18,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+from launch.conditions import IfCondition
 
 
 def generate_launch_description():
@@ -59,6 +60,15 @@ def generate_launch_description():
         output='screen',
     )
 
+    gripper_bridge = Node(
+        package='franka_example_controllers',
+        executable='gripper_action_bridge',
+        name='gripper_action_bridge',
+        output='screen',
+        parameters=[{'arm_id': 'panda'}],
+        condition=IfCondition(load_gripper),
+    )
+
     return LaunchDescription(
         [
             DeclareLaunchArgument(
@@ -94,6 +104,7 @@ def generate_launch_description():
                 description='Controller name to spawn after base bringup.',
             ),
             base_launch,
+            gripper_bridge,
             controller_spawner,
         ]
     )

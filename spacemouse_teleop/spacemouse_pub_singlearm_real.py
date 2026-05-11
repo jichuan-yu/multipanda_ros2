@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
+from std_msgs.msg import Float64, Float64MultiArray
 import numpy as np
 import math
 import time
@@ -15,7 +16,7 @@ import pyspacemouse
 
 @dataclass
 class SpacemouseConfig:
-    target_pose_topic: str = '/cartesian_impedance/target_pose' # target pose topic to publish to
+    target_pose_topic: str = '/cartesian_impedance/pose_desired' # desired pose topic to publish to
     ee_pose_topic: str = '/cartesian_impedance/ee_pose' # robot end-effector pose feedback
     base_frame: str = 'panda_link0'
     publish_hz: float = 100.0
@@ -27,6 +28,13 @@ class SpacemouseConfig:
     scale_rot: float = 0.2 # 0.2 rad/s
 
     deadzone: float = 0.05 # 5% deadzone by default
+    # Gripper control defaults (m, m, m/s, N)
+    # Button 0 - open, Button 1 - close
+    arm_id: str = 'panda'
+    gripper_open_width: float = 0.08
+    gripper_close_width: float = 0.0
+    gripper_speed: float = 0.1
+    gripper_force: float = 10.0
     # 6x6 mapping from normalized SpaceMouse input [tx, ty, tz, rx, ry, rz]
     # to robot command axes [dx, dy, dz, drx, dry, drz].
     motion_mapping: np.ndarray = field(
@@ -71,6 +79,25 @@ class SpaceMouseTeleopNode(Node):
             self.target_pose_topic,
             10
         )
+        # Gripper publishers (use gripper action bridge topics)
+        # read gripper defaults from config rather than ROS parameters
+        self.arm_id = self.config.arm_id
+        self.gripper_open_width = float(self.config.gripper_open_width)
+        self.gripper_close_width = float(self.config.gripper_close_width)
+        self.gripper_speed = float(self.config.gripper_speed)
+        self.gripper_force = float(self.config.gripper_force)
+
+        self.width_pub = self.create_publisher(
+            Float64,
+            f"/{self.arm_id}_gripper/width_desired",
+            10,
+        )
+        self.grasp_pub = self.create_publisher(
+            Float64MultiArray,
+            f"/{self.arm_id}_gripper/grasp_desired",
+            10,
+        )
+
         self.pose_lock = threading.Lock()
         self.mouse_state_lock = threading.Lock()
         self.mouse_state = None
@@ -103,6 +130,19 @@ class SpaceMouseTeleopNode(Node):
         self._last_pose_log_time = 0.0
 
         self.get_logger().info('SpaceMouse publisher (single arm) initialized!')
+
+    def _send_gripper_width(self, width: float):
+        msg = Float64()
+        msg.data = float(width)
+        self.width_pub.publish(msg)
+
+    def _send_gripper_grasp(self, width: float, speed: float = None, force: float = None, epsilon: float = 0.01):
+        msg = Float64MultiArray()
+        spd = self.gripper_speed if speed is None else float(speed)
+        frc = self.gripper_force if force is None else float(force)
+        # expected order: width, speed, force, epsilon
+        msg.data = [float(width), float(spd), float(frc), float(epsilon)]
+        self.grasp_pub.publish(msg)
 
     def ee_pose_callback(self, msg: PoseStamped):
         if self.pose_initialized_from_ee_pose:
@@ -174,6 +214,18 @@ class SpaceMouseTeleopNode(Node):
                 self.pose[1, 3] += dy
                 self.pose[2, 3] += dz
                 self.pose[0:3, 0:3] = R_delta @ self.pose[0:3, 0:3]
+
+        # If SpaceMouse state provides buttons, map button presses to gripper commands
+        try:
+            buttons = getattr(state, 'buttons', None)
+            if buttons:
+                # common mapping: button[0] -> open, button[1] -> close
+                if len(buttons) > 0 and buttons[0]:
+                    self._send_gripper_width(self.gripper_open_width)
+                if len(buttons) > 1 and buttons[1]:
+                    self._send_gripper_grasp(self.gripper_close_width)
+        except Exception:
+            pass
 
     def update_mouse_state(self, state):
         with self.mouse_state_lock:

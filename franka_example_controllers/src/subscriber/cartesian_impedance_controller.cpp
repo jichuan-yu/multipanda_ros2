@@ -133,7 +133,7 @@ CallbackReturn CartesianImpedanceController::on_init() {
     auto_declare<double>("rot_stiff", 10);
     auto_declare<double>("n_stiffness", 10.0);
     sub_desired_cartesian_ = get_node()->create_subscription<geometry_msgs::msg::PoseStamped>(
-      "/cartesian_impedance/target_pose", 1,
+      "/cartesian_impedance/pose_desired", 1,
       std::bind(&CartesianImpedanceController::desiredCartesianCallback, this, std::placeholders::_1)
     );
   } catch (const std::exception& e) {

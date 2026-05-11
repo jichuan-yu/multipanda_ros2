@@ -32,7 +32,7 @@ ros2 launch franka_bringup franka_control.launch.py \
 
 ```bash
 cd src/multipanda_ros2
-python3 spacemouse_teleop/spacemouse_node_singlearm.py
+python3 spacemouse_teleop/spacemouse_pub_singlearm_real.py
 ```
 
 

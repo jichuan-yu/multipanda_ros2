@@ -51,9 +51,8 @@ class CartesianImpedanceController : public controller_interface::ControllerInte
   Matrix4d desired;
   Matrix6d stiffness;
   Matrix6d damping;
-  double pos_stiff;
-  double rot_stiff;
-  double n_stiffness;
+  Vector6d pos_stiff;
+  Vector7d n_stiffness;
   const double delta_tau_max_ = 1.0;
 
   void desiredCartesianCallback(const geometry_msgs::msg::PoseStamped& msg);

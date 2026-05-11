@@ -116,7 +116,7 @@ move_to_start_example_controller:
       - 30.0
       - 10.0
       - 10.0
-      - 5.
+      - 5.0
 joint_position_example_controller:
   ros__parameters:
     arm_id: panda
@@ -132,9 +132,8 @@ cartesian_velocity_example_controller:
 cartesian_impedance_controller:
   ros__parameters:
     arm_id: panda
-    pos_stiff: 1000.0    # high-stiffness cartesian tracking
-    rot_stiff: 50.0     # high-stiffness cartesian tracking
-    n_stiffness: 1.0   # nullspace stiffness
+    pos_stiff: [1000.0, 1000.0, 1000.0, 50.0, 50.0, 50.0]
+    n_stiffness: [10.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 
 joint_impedance_controller:
   ros__parameters:

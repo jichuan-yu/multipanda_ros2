@@ -7,7 +7,7 @@ This repository is a fork of [multipanda_ros2](https://github.com/tenfoldpaper/m
 
 ## Controllers and Communication Interfaces
 
-#### Gripper Control
+### Gripper Control
 We developed a [gripper action bridge](src/multipanda_ros2/franka_example_controllers/src/subscriber/gripper_action_bridge.cpp) to provide a more convenient control interface.
 
 **Controller Interfaces:**
@@ -21,7 +21,7 @@ We developed a [gripper action bridge](src/multipanda_ros2/franka_example_contro
 
 For more examples, please refer to [gripper_control](./docs/gripper_control.md)
 
-#### Cartesian Impedance Controller (Single Arm)
+### Cartesian Impedance Controller (Single Arm)
 
 ``` bash
 ros2 launch franka_bringup franka_control.launch.py \
@@ -34,7 +34,7 @@ ros2 launch franka_bringup franka_control.launch.py \
 **Controller Interfaces:**
 | Topic Name | Message Type | Direction | Freq. | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `/arm_id/joint_states` (from joint_state_broadcaster) | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states. |
+| `/<arm_id>/joint_states` (from joint_state_broadcaster) | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states. |
 | `/cartesian_impedance/pose_desired` | `geometry_msgs/msg/PoseStamped` | Input (Sub) | 100Hz recommended | Desired pose for the end-effector (in robot base frame) |
 | `/cartesian_impedance/ee_pose` | `geometry_msgs/msg/PoseStamped` | Output (Pub) | 1000Hz | Current  pose for the end-effector (in robot base frame) |
 | `/cartesian_impedance/external_wrench` | `geometry_msgs/msg/WrenchStamped` | Output (Pub) | 1000Hz | Current external wrench of the robot in the base frame. `wrench.force.xyz` is external force and `wrench.torque.xyz` is external torque. |
@@ -43,9 +43,8 @@ ros2 launch franka_bringup franka_control.launch.py \
 | Parameter Name | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `arm_id` | `string` | `panda` | Arm namespace used to resolve interfaces and robot model state. |
-| `pos_stiff` | `double` | `100` | Translational stiffness gain for Cartesian impedance. |
-| `rot_stiff` | `double` | `10` | Rotational stiffness gain for Cartesian impedance. |
-| `n_stiffness` | `double` | `10.0` | Null-space stiffness used for posture regulation toward `desired_qn`. |
+| `pos_stiff` | `vector<double>` | see config | Cartesian stiffness gains as a 6-element vector: translational (X,Y,Z) then rotational (Rx,Ry,Rz). |
+| `n_stiffness` | `vector<double>` | see_config | Null-space stiffness per joint (7 values) used for posture regulation toward `desired_qn`. |
 
 The control law is implemented as:
 $$
@@ -60,7 +59,7 @@ $$
 $$
 
 
-#### Joint Impedance Controller (Single Arm)
+### Joint Impedance Controller (Single Arm)
 
 **Controller Interfaces:**
 | Topic / Interface Name | Message Type / Interface Type | Direction | Freq. | Description |
@@ -73,8 +72,8 @@ $$
 | Parameter Name | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `arm_id` | `string` | `panda` | Arm namespace used to resolve interfaces and robot model state. |
-| `k_gains` | `vector<double>` | required | Joint position stiffness gains. Must contain 7 values. |
-| `d_gains` | `vector<double>` | required | Joint damping gains. Must contain 7 values. |
+| `k_gains` | `vector<double>` | see config | Joint position stiffness gains. Must contain 7 values. |
+| `d_gains` | `vector<double>` | see config | Joint damping gains. Must contain 7 values. |
 | `alpha`  (internal constant)| `double` | `0.24` | Low-pass filter coefficient (~50 Hz) for measured joint velocity. |
 | `pos_saturation`  (internal constant)| `double` | `0.2 rad` | Saturation bound for position error `q_d - q`. |
 | `vel_saturation`  (internal constant)| `double` | `0.5 rad/s` | Saturation bound for velocity error `dq_d - dq`. |

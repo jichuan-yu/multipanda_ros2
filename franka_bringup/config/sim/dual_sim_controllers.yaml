@@ -179,21 +179,17 @@ multi_cartesian_impedance_controller:
     arm_count: 2
     arm_1:
       arm_id: mj_left
-      pos_stiff: 100.0
-      rot_stiff: 10.0
+      pos_stiff: [100.0, 100.0, 100.0, 10.0, 10.0, 10.0]
     arm_2:
       arm_id: mj_right
-      pos_stiff: 100.0
-      rot_stiff: 10.0
+      pos_stiff: [100.0, 100.0, 100.0, 10.0, 10.0, 10.0]
 
 dualarm_mprc_controller:
   ros__parameters:
     arm_count: 2
     arm_1:
       arm_id: mj_left
-      pos_stiff: 400.0
-      rot_stiff: 15.0
+      pos_stiff: [400.0, 400.0, 400.0, 15.0, 15.0, 15.0]
     arm_2:
       arm_id: mj_right
-      pos_stiff: 400.0
-      rot_stiff: 15.0
+      pos_stiff: [400.0, 400.0, 400.0, 15.0, 15.0, 15.0]

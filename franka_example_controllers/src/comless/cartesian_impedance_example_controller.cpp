@@ -19,6 +19,7 @@
 #include <exception>
 #include <string>
 #include <franka/model.h>
+#include <vector>
 
 inline void pseudoInverse(const Eigen::MatrixXd& M_, Eigen::MatrixXd& M_pinv_, bool damped = true) {
     double lambda_ = damped ? 0.2 : 0.0;
@@ -95,10 +96,12 @@ controller_interface::return_type CartesianImpedanceExampleController::update(
   
   Eigen::MatrixXd jacobian_transpose_pinv;
     pseudoInverse(jacobian.transpose(), jacobian_transpose_pinv);
+  // nullspace stiffness/damping as per-joint gains
+  Eigen::Matrix<double,7,7> N_diag = n_stiffness.asDiagonal();
+  Eigen::Matrix<double,7,7> D_diag = (2.0 * n_stiffness.array().sqrt()).matrix().asDiagonal();
   tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) -
                       jacobian.transpose() * jacobian_transpose_pinv) *
-                         (n_stiffness * (desired_qn - q) -
-                          (2.0 * sqrt(n_stiffness)) * qD);
+                         (N_diag * (desired_qn - q) - D_diag * qD);
 
   tau_d <<  tau_task + coriolis + tau_nullspace;
   for (int i = 0; i < num_joints; ++i) {
@@ -136,16 +139,16 @@ CallbackReturn CartesianImpedanceExampleController::on_activate(
   desired_orientation = Quaterniond(desired.block<3,3>(0,0));
   desired_qn = Vector7d(franka_robot_model_->getRobotState()->q.data());
 
-  double pos_stiff = 400.0;
-  double rot_stiff = 20.0;
-  stiffness.setIdentity();
-  stiffness.topLeftCorner(3, 3) << pos_stiff * Matrix3d::Identity();
-  stiffness.bottomRightCorner(3, 3) << rot_stiff * Matrix3d::Identity();
-  // Simple critical damping
-  damping.setIdentity();
-  damping.topLeftCorner(3,3) << 2 * sqrt(pos_stiff) * Matrix3d::Identity();
-  damping.bottomRightCorner(3, 3) << 0.8 * 2 * sqrt(rot_stiff) * Matrix3d::Identity();
-  n_stiffness = 10.0;
+  // default 6-element stiffness (trans xyz, rot xyz)
+  std::vector<double> pos_vec = {400.0, 400.0, 400.0, 20.0, 20.0, 20.0};
+  stiffness.setZero();
+  for (int i = 0; i < 6; ++i) stiffness(i, i) = pos_vec[i];
+  // Simple critical damping diagonal
+  damping.setZero();
+  for (int i = 0; i < 3; ++i) damping(i, i) = 2.0 * std::sqrt(std::max(pos_vec[i], 0.0));
+  for (int i = 3; i < 6; ++i) damping(i, i) = 0.8 * 2.0 * std::sqrt(std::max(pos_vec[i], 0.0));
+  // default nullspace stiffness per joint
+  for (int i = 0; i < 7; ++i) n_stiffness(i) = 10.0;
 
   return CallbackReturn::SUCCESS;
 }

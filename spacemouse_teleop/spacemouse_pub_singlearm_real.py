@@ -98,11 +98,13 @@ class SpaceMouseTeleopNode(Node):
             10,
         )
 
-        self.pose_lock = threading.Lock()
+        self.pose_cmd_lock = threading.Lock()
+        self.pose_fb_lock = threading.Lock()
+        self.pose_fb = None
         self.mouse_state_lock = threading.Lock()
         self.mouse_state = None
-        self.pose = np.eye(4)
-        self.pose_initialized_from_ee_pose = False
+        self.pose_cmd = np.eye(4)
+        self.pose_cmd_initialized_from_fb = False
         self.prev_buttons = None  # For button edge detection
         self.ee_pose_sub = self.create_subscription(
             PoseStamped,
@@ -113,11 +115,11 @@ class SpaceMouseTeleopNode(Node):
 
         # Initialize target pose from current robot EE pose if available.
         init_start = time.monotonic()
-        while (not self.pose_initialized_from_ee_pose and
+        while (not self.pose_cmd_initialized_from_fb and
              (time.monotonic() - init_start) < self.INIT_TIMEOUT_SEC):
             rclpy.spin_once(self, timeout_sec=0.05)
 
-        if not self.pose_initialized_from_ee_pose:
+        if not self.pose_cmd_initialized_from_fb:
             raise RuntimeError(
                 f"Timeout waiting for {self.ee_pose_topic} (>{self.INIT_TIMEOUT_SEC:.1f}s). "
                 f"Cannot initialize self.pose from current end-effector pose."
@@ -146,24 +148,29 @@ class SpaceMouseTeleopNode(Node):
         self.grasp_pub.publish(msg)
 
     def ee_pose_callback(self, msg: PoseStamped):
-        if self.pose_initialized_from_ee_pose:
-            return
+        # Always update latest measured feedback EE pose
         rotation = Rotation.from_quat([
             msg.pose.orientation.x,
             msg.pose.orientation.y,
             msg.pose.orientation.z,
             msg.pose.orientation.w,
         ]).as_matrix()
-        with self.pose_lock:
-            self.pose = np.eye(4)
-            self.pose[0:3, 0:3] = rotation
-            self.pose[0:3, 3] = np.array([
-                msg.pose.position.x,
-                msg.pose.position.y,
-                msg.pose.position.z,
-            ], dtype=float)
-        self.pose_initialized_from_ee_pose = True
-        self.get_logger().info(f'Initialized target pose from {self.ee_pose_topic}.')
+        current = np.eye(4)
+        current[0:3, 0:3] = rotation
+        current[0:3, 3] = np.array([
+            msg.pose.position.x,
+            msg.pose.position.y,
+            msg.pose.position.z,
+        ], dtype=float)
+        with self.pose_fb_lock:
+            self.pose_fb = current.copy()
+
+        # Initialize target command pose from feedback pose once
+        if not self.pose_cmd_initialized_from_fb:
+            with self.pose_cmd_lock:
+                self.pose_cmd = current.copy()
+            self.pose_cmd_initialized_from_fb = True
+            self.get_logger().info(f'Initialized target pose from {self.ee_pose_topic}.')
 
     def step(self, state):
         if not state:
@@ -210,11 +217,11 @@ class SpaceMouseTeleopNode(Node):
             rot_z = Rotation.from_rotvec([0.0, 0.0, drz])
             R_delta = (rot_z * rot_y * rot_x).as_matrix()
             
-            with self.pose_lock:
-                self.pose[0, 3] += dx
-                self.pose[1, 3] += dy
-                self.pose[2, 3] += dz
-                self.pose[0:3, 0:3] = R_delta @ self.pose[0:3, 0:3]
+            with self.pose_cmd_lock:
+                self.pose_cmd[0, 3] += dx
+                self.pose_cmd[1, 3] += dy
+                self.pose_cmd[2, 3] += dz
+                self.pose_cmd[0:3, 0:3] = R_delta @ self.pose_cmd[0:3, 0:3]
 
         # If SpaceMouse state provides buttons, map button presses to gripper commands
         try:
@@ -251,8 +258,8 @@ class SpaceMouseTeleopNode(Node):
         pose_msg.header.stamp = self.get_clock().now().to_msg()
         pose_msg.header.frame_id = self.frame_id
 
-        with self.pose_lock:
-            arm_T = self.pose.copy()
+        with self.pose_cmd_lock:
+            arm_T = self.pose_cmd.copy()
         pose_msg.pose.position.x = float(arm_T[0, 3])
         pose_msg.pose.position.y = float(arm_T[1, 3])
         pose_msg.pose.position.z = float(arm_T[2, 3])
@@ -269,14 +276,37 @@ class SpaceMouseTeleopNode(Node):
         state = self.consume_mouse_state()
         if state is not None:
             self.step(state)
-        self.publisher.publish(self.get_pose_msg())
+        # publish current commanded pose
+        target_msg = self.get_pose_msg()
+        self.publisher.publish(target_msg)
         now = time.monotonic()
         if now - self._last_pose_log_time >= 2.0:
-            with self.pose_lock:
-                pose_snapshot = self.pose.copy()
-            self.get_logger().info(
-                f'Current cartesian pose:\n{np.array2string(pose_snapshot, precision=4, suppress_small=True)}'
-            )
+            with self.pose_cmd_lock:
+                pose_snapshot = self.pose_cmd.copy()
+            # Read latest measured feedback pose if available
+            with self.pose_fb_lock:
+                measured = None if self.pose_fb is None else self.pose_fb.copy()
+
+            # Compute position and orientation error if measured pose exists
+            pos_err_str = 'N/A'
+            ori_err_str = 'N/A'
+            if measured is not None:
+                pos_err = pose_snapshot[0:3, 3] - measured[0:3, 3]
+                pos_err_norm = float(np.linalg.norm(pos_err))
+                # orientation error as rotation vector (rotvec)
+                R_t = pose_snapshot[0:3, 0:3]
+                R_m = measured[0:3, 0:3]
+                R_err = R_t @ R_m.T
+                rotvec = Rotation.from_matrix(R_err).as_rotvec()
+                ori_err_norm = float(np.linalg.norm(rotvec))
+                pos_err_str = f'{pos_err.tolist()} (norm={pos_err_norm:.6f} m)'
+                ori_err_str = f'{rotvec.tolist()} (norm={ori_err_norm:.6f} rad)'
+
+                self.get_logger().info(
+                    f'Current cartesian command:\n{np.array2string(pose_snapshot, precision=4, suppress_small=True)}\n'
+                    f'Current cartesian pose:\n{np.array2string(measured if measured is not None else np.zeros((4,4)), precision=4, suppress_small=True)}\n'
+                    f'Position error: {pos_err_str}; Orientation error: {ori_err_str}'
+                )
             self._last_pose_log_time = now
 
 

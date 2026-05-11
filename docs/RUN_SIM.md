@@ -35,7 +35,8 @@ docker start multipanda-container
 
 ```bash
 docker exec -it multipanda-container bash
-colcon build
+# 跳过复杂的碰撞库，如有需求单独编译
+colcon build --packages-skip nvblox coal
 source install/setup.bash
 # 启动带有自定义环境 and 多相机渲染的任务仿真
 ros2 launch my_task_description my_task_sim.launch.py use_rviz:=true
@@ -110,6 +111,15 @@ source install/setup.bash
 **使用 Coal:**
 ```bash
 source /opt/ros/humble/setup.bash
+
+# 首次使用 Coal 需要先构建 Coal 库
+cd /home/xiaozy24/dual_panda_ws/src/dualarm_mprc/coal
+mkdir -p build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_PYTHON_INTERFACE=OFF
+make -j$(nproc)
+
+# 然后编译控制器
+cd /home/xiaozy24/dual_panda_ws
 colcon build --packages-select dual_arm_reactive_control --cmake-args -DUSE_COAL=ON
 source install/setup.bash
 ```

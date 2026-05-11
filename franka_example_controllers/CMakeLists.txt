@@ -15,6 +15,8 @@ option(CHECK_TIDY "Adds clang-tidy tests" OFF)
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(controller_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
@@ -23,6 +25,8 @@ find_package(franka_semantic_components REQUIRED)
 find_package(generate_parameter_library)
 find_package(franka_msgs REQUIRED)
 find_package(multi_mode_control_msgs REQUIRED)
+find_package(multi_mode_controller REQUIRED)
+find_package(visualization_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
 
 add_library(
@@ -44,6 +48,7 @@ add_library(
         src/subscriber/joint_impedance_controller.cpp
         src/subscriber/multi_joint_impedance_controller.cpp
         src/subscriber/multi_cartesian_impedance_controller.cpp
+        src/subscriber/dualarm_mprc_controller.cpp
         )
         
 
@@ -53,6 +58,7 @@ target_include_directories(
         include
         ${EIGEN3_INCLUDE_DIRS}
 )
+
 ament_target_dependencies(
         ${PROJECT_NAME}
         controller_interface
@@ -62,9 +68,16 @@ ament_target_dependencies(
         rclcpp_lifecycle
         franka_semantic_components
         multi_mode_control_msgs
+        multi_mode_controller
+        std_msgs
+        visualization_msgs
 )
 
 generate_parameter_library(franka_example_controllers_parameters src/comless/model_example_controller_parameters.yaml)
+
+add_executable(gripper_action_bridge src/subscriber/gripper_action_bridge.cpp)
+ament_target_dependencies(gripper_action_bridge rclcpp rclcpp_action franka_msgs std_msgs std_srvs)
+install(TARGETS gripper_action_bridge DESTINATION lib/${PROJECT_NAME})
 
 pluginlib_export_plugin_description_file(
        controller_interface franka_example_controllers.xml)

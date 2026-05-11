@@ -3,6 +3,7 @@ mujoco_server:
     MujocoPlugins:
       names:
         - mujoco_ros2_control
+        - dynamic_obstacles
       mujoco_ros2_control:
         type: mujoco_ros2_control::MujocoRos2ControlPlugin
         hardware:
@@ -12,6 +13,8 @@ mujoco_server:
           namespace: ""
           robot_description_node: "robot_state_publisher"
           robot_description: "robot_description"
+      dynamic_obstacles:
+        type: mujoco_ros::DynamicObstaclesPlugin
 
 controller_manager:
   ros__parameters:
@@ -29,6 +32,8 @@ controller_manager:
       type: franka_example_controllers/MultiCartesianImpedanceController
     dual_joint_impedance_controller:
       type: franka_example_controllers/MultiJointImpedanceController
+    dualarm_mprc_controller:
+      type: franka_example_controllers/DualArmMprcController
     franka_right_robot_model_broadcaster:
       type: franka_robot_state_broadcaster/FrankaRobotModelBroadcaster
     dual_joint_impedance_example_controller:
@@ -180,3 +185,15 @@ multi_cartesian_impedance_controller:
       arm_id: mj_right
       pos_stiff: 100.0
       rot_stiff: 10.0
+
+dualarm_mprc_controller:
+  ros__parameters:
+    arm_count: 2
+    arm_1:
+      arm_id: mj_left
+      pos_stiff: 400.0
+      rot_stiff: 15.0
+    arm_2:
+      arm_id: mj_right
+      pos_stiff: 400.0
+      rot_stiff: 15.0

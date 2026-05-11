@@ -13,16 +13,16 @@ docker run -it -d --name multipanda-container \
   --ipc=host \
   -e DISPLAY=$DISPLAY \
   -v /tmp/.X11-unix:/tmp/.X11-unix \
-  -v /home/xiaozy24/python_code/multipanda_ros2:/home/xiaozy24/python_code/multipanda_ros2 \
-  -w /home/xiaozy24/python_code/multipanda_ros2 \
+  -v /home/xiaozy24/dual_panda_ws:/home/xiaozy24/dual_panda_ws \
+  -w /home/xiaozy24/dual_panda_ws \
   build-env:multipanda_ros2-amd64 bash
 ```
+run指令后容器自动处于已启动状态
 
-先启动容器，然后按如下指令运行：
+此后再次使用该容器时，按如下指令启动该容器：
 ```bash
 docker start multipanda-container
 ```
-请打开 **4个独立的终端** 均通过 `docker exec -it multipanda-container bash` 进入容器，确保每个终端都处于项目工作空间目录下。
 
 ---
 
@@ -32,11 +32,12 @@ docker start multipanda-container
 
 ```bash
 docker exec -it multipanda-container bash
+colcon build
 source install/setup.bash
-# 启动带有自定义环境和多相机渲染的任务仿真
-ros2 launch my_task_description my_task_sim.launch.py
+# 启动带有自定义环境 and 多相机渲染的任务仿真
+ros2 launch my_task_description my_task_sim.launch.py use_rviz:=true
 ```
-*启动后，你应该能看到包含两个相机零件(STL)的 MuJoCo 环境弹开，并且机器人加载在里面。同时 MuJoCo 会通过离屏渲染持续向 ROS 2 发布 `fixed_cam`, `left_arm_cam`, `right_arm_cam` 三路图像。*
+*启动后，你应该能看到包含两个相机零件(STL)的 MuJoCo 环境弹开，并且机器人加载在里面。同时 MuJoCo 会通过离屏渲染持续向 ROS 2 发布 `fixed_cam`, `left_arm_cam`, `right_arm_cam` 三路图像。此外，底层控制器 `multi_cartesian_impedance_controller` 也会被自动加载和激活，这说明机器人现在已经准备好接收目标笛卡尔空间指令。*
 
 ---
 
@@ -55,37 +56,44 @@ ros2 run web_video_server web_video_server
 
 ---
 
-## 终端 3：切换控制器
-
-在第三个终端中，加载控制器并使其激活。
+## 终端 3：碰撞体可视化发布节点
 
 ```bash
 docker exec -it multipanda-container bash
 source install/setup.bash
-ros2 control load_controller multi_cartesian_impedance_controller 
-ros2 control set_controller_state multi_cartesian_impedance_controller inactive 
-ros2 control set_controller_state multi_cartesian_impedance_controller active 
+ros2 run dual_arm_reactive_control collision_env_visualizer_node --ros-args -p base_frame:=world
 ```
-*激活成功后，你可以通过 `ros2 topic list` 看到相关对话。这说明机器人现在正在等待外部发送目标笛卡尔空间指令。*
+*启动发布节点后，在rviz2的图形化界面中点击Add，在By topic面板选择/collision_env_markers的MarkerArray添加到可视化区域*
 
 ---
 
-## 终端 4：运行控制脚本
+## 终端 4：运行安全控制器
 
-在第四个终端中，运行自动/交互式控制脚本。
+在第三个终端中，运行mprc节点
 
 ```bash
-cd python_code/multipanda_ros2
-source ~/myenv/bin/activate #进入你的虚拟环境
-python3 tools/spacemouse_pub.py
+docker exec -it multipanda-container bash
+source install/setup.bash
+ros2 run dual_arm_reactive_control main_sim_node --ros-args -p trajectory_file:=/home/xiaozy24/dual_panda_ws/src/multipanda_ros2/tools/dummy.csv
 ```
 
-执行后，切回 MuJoCo 仿真界面，你将可以通过外部设备或者代码定义的轨迹直接驱动 Panda 机械臂阵列！
+---
 
+## 终端 5：运行键盘发布器
+
+```bash
+cd dual_panda_ws
+source ~/myenv/bin/activate
+python3 src/multipanda_ros2/spacemouse_teleop/key_pub_joint.py
+```
+
+---
 
 ## Real Robot
 
 ``` bash
+docker exec -it multipanda-container bash
+cd /home/xiaozy24/dual_panda_ws
 ros2 launch franka_bringup franka.launch.py robot_ip:=172.16.0.2
 
 ros2 control load_controller cartesian_impedance_controller 

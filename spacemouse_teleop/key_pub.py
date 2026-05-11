@@ -2,8 +2,9 @@
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import Float64MultiArray, Float64
 import sys
+
 import select
 import termios
 import tty
@@ -42,17 +43,22 @@ class KeyTeleopNode(Node):
             '/multi_cartesian_impedance/pose_desired', 
             10
         )
+        self.publisher_oscbf = self.create_publisher(
+            Float64MultiArray, 
+            '/multi_cartesian_impedance/oscbf_request', 
+            10
+        )
         
         # Initial positions and rotations (Euler angles for simplicity)
         # Assuming initial standard pose for panda 
         # (O_T_EE is roughly: x=0.3, y=0.0, z=0.5, and orientation is rotated 180 around X)
         self.poses = {
             'left': {
-                'pos': np.array([0.3, 0.2, 0.5]),
+                'pos': np.array([0.307,  0.0, 0.487]),
                 'rot': np.array([math.pi, 0.0, 0.0]) # rx, ry, rz
             },
             'right': {
-                'pos': np.array([0.3, -0.2, 0.5]),
+                'pos': np.array([0.307,  0.0, 0.487]),
                 'rot': np.array([math.pi, 0.0, 0.0])
             }
         }
@@ -63,12 +69,15 @@ class KeyTeleopNode(Node):
         self.step_pos = 0.01
         self.step_rot = 0.05
         
+        self.left_gripper_pub = self.create_publisher(Float64, '/mj_left_gripper/width_desired', 10)
+        self.right_gripper_pub = self.create_publisher(Float64, '/mj_right_gripper/width_desired', 10)
+
         self.timer = self.create_timer(0.02, self.timer_callback) # 50Hz
         self.get_logger().info('Key publisher initialized.')
         self.print_usage()
 
     def print_usage(self):
-        print("""
+        msg = """
 ----------------------------------------
 Keyboard Teleop for Dual Cartesian Arm
 ----------------------------------------
@@ -79,18 +88,27 @@ Q/E : Up/Down (Z)
 J/L : Rotate around X (-/+)
 I/K : Rotate around Y (-/+)
 U/O : Rotate around Z (-/+)
+C/V : Close/Open Gripper
 Ctrl-C to quit
 ----------------------------------------
-""".format(self.selected_arm.upper()))
+""".format(self.selected_arm.upper()).replace('\n', '\r\n')
+        print(msg, flush=True)
+
+    def move_gripper(self, arm_name, width):
+        msg = Float64()
+        msg.data = float(width)
+        if arm_name == 'left':
+            self.left_gripper_pub.publish(msg)
+        else:
+            self.right_gripper_pub.publish(msg)
 
     def update_pose(self, key):
-        redraw = False
         if key == 'z':
-            self.selected_arm = 'left'
-            redraw = True
+            if self.selected_arm != 'left':
+                self.selected_arm = 'left'
         elif key == 'x':
-            self.selected_arm = 'right'
-            redraw = True
+            if self.selected_arm != 'right':
+                self.selected_arm = 'right'
             
         arm = self.poses[self.selected_arm]
         
@@ -122,8 +140,10 @@ Ctrl-C to quit
         elif key == 'o':
             arm['rot'][2] += self.step_rot
             
-        if redraw:
-            self.print_usage()
+        elif key == 'c':
+            self.move_gripper(self.selected_arm, 0.0)
+        elif key == 'v':
+            self.move_gripper(self.selected_arm, 0.08)
 
     def get_pose_array(self, arm_name):
         arr = []
@@ -154,7 +174,11 @@ Ctrl-C to quit
             data[0] = 0.001
             
         msg.data = data
-        self.publisher.publish(msg)
+        
+        if self.publisher_oscbf.get_subscription_count() > 0:
+            self.publisher_oscbf.publish(msg)
+        else:
+            self.publisher.publish(msg)
 
 def get_key(settings):
     tty.setraw(sys.stdin.fileno())

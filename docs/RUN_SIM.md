@@ -78,39 +78,43 @@ ros2 run dual_arm_reactive_control collision_env_visualizer_node --ros-args -p b
 
 ### 碰撞检测后端选择
 
-`dualarm_reactive_control` 支持三种碰撞检测后端，可根据场景需求选择：
+`dualarm_reactive_control` 支持两种碰撞检测后端，可根据场景需求选择：
 
 | 后端 | 描述 | 性能 | 适用场景 |
 |------|------|------|----------|
 | **FCL** | Flexible Collision Library (默认) | 基准 (~2ms/查询) | 简单环境，兼容性优先 |
-| **Coal** | FCL 的现代继任者 (HPP-FCL) | 快 5-15x (~0.5ms/查询) | 复杂障碍物，CPU 优化 |
-| **nvblox GPU** | NVIDIA GPU 加速 TSDF/ESDF | 最快 (~0.1ms/查询) | 高频控制，大量动态障碍物 |
+| **Coal** | FCL 的现代继任者 (HPP-FCL) | 快 5-15x (~0.5ms/查询) | **推荐**: 复杂障碍物，CPU 优化 |
 
 ### 编译不同后端
 
+**重要提示**: 所有编译命令必须在容器内执行，并确保 ROS2 环境已正确 source：
+
+```bash
+# 进入容器
+docker exec -it multipanda-container bash
+
+# 首次编译需要先构建依赖包
+source /opt/ros/humble/setup.bash
+colcon build --packages-select franka_msgs
+
+# 然后选择以下任一方式编译 dual_arm_reactive_control
+```
+
 **使用 FCL (默认):**
 ```bash
-docker exec -it multipanda-container bash
-cd /home/xiaozy24/dual_panda_ws
+source /opt/ros/humble/setup.bash
 colcon build --packages-select dual_arm_reactive_control
 source install/setup.bash
 ```
 
 **使用 Coal:**
 ```bash
-docker exec -it multipanda-container bash
-cd /home/xiaozy24/dual_panda_ws
+source /opt/ros/humble/setup.bash
 colcon build --packages-select dual_arm_reactive_control --cmake-args -DUSE_COAL=ON
 source install/setup.bash
 ```
 
-**使用 nvblox GPU:**
-```bash
-docker exec -it multipanda-container bash
-cd /home/xiaozy24/dual_panda_ws
-colcon build --packages-select dual_arm_reactive_control --cmake-args -DUSE_NVBLOX=ON
-source install/setup.bash
-```
+**注意**: 如需使用 GPU 加速的 nvblox 后端（实验性），请参考 [nvblox GPU 加速文档](../../dualarm_mprc/docs/nvblox.md)。
 
 ### 运行控制器
 
@@ -127,18 +131,6 @@ ros2 run dual_arm_reactive_control main_sim_node
 - `/dualArm_traj` - 轨迹命令（可选，用于预定义轨迹）
 
 发送遥操作命令后会自动切换到 `TELEOPERATING` 模式。
-
-### nvblox GPU 配置
-
-使用 nvblox 后端时，可在配置文件中调整参数：
-
-```yaml
-# config/nvblox_collision.yaml
-voxel_size: 0.02          # 体素大小 (米)
-max_distance: 2.0         # 最大 ESDF 距离
-gpu_device_id: 0          # GPU 设备 ID
-enable_async_transfer: true  # 异步 CUDA 操作
-```
 
 更多遥操作实现细节请参考：[dualarm_mprc 遥操作文档](../../dualarm_mprc/docs/tele_operation.md)
 

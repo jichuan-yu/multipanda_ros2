@@ -59,6 +59,8 @@ $$
 $$
 
 
+> With `pos_stiff: [2000.0, 2000.0, 2000.0, 50.0, 50.0, 50.0], n_stiffness: [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]`,the positioning error is approximately 5 mm / 0.03 rad
+
 ### Joint Impedance Controller (Single Arm)
 
 **Controller Interfaces:**

@@ -132,8 +132,8 @@ cartesian_velocity_example_controller:
 cartesian_impedance_controller:
   ros__parameters:
     arm_id: panda
-    pos_stiff: [1000.0, 1000.0, 1000.0, 50.0, 50.0, 50.0]
-    n_stiffness: [10.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    pos_stiff: [2000.0, 2000.0, 2000.0, 50.0, 50.0, 50.0]
+    n_stiffness: [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
 
 joint_impedance_controller:
   ros__parameters:

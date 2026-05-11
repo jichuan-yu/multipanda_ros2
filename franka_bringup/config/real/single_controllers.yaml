@@ -11,9 +11,6 @@ controller_manager:
     cartesian_impedance_example_controller:
       type: franka_example_controllers/CartesianImpedanceExampleController
 
-    cartesian_impedance_controller:
-      type: franka_controllers/CartesianImpedanceController
-
     joint_position_example_controller:
       type: franka_example_controllers/JointPositionExampleController
 
@@ -135,9 +132,9 @@ cartesian_velocity_example_controller:
 cartesian_impedance_controller:
   ros__parameters:
     arm_id: panda
-    pos_stiff: 500.0    # high-stiffness cartesian tracking
+    pos_stiff: 1000.0    # high-stiffness cartesian tracking
     rot_stiff: 50.0     # high-stiffness cartesian tracking
-    n_stiffness: 10.0   # nullspace stiffness
+    n_stiffness: 1.0   # nullspace stiffness
 
 joint_impedance_controller:
   ros__parameters:

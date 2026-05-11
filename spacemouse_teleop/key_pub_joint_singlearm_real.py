@@ -31,7 +31,7 @@ class KeyPubConfig:
     topic: str = '/joint_impedance/joints_desired'
     publish_hz: float = 10.0  # rate used to compute per-press increment
     scale: float = 0.05       # rad/s when key held down, used to compute per-press increment
-    use_sim_time: bool = True
+    use_sim_time: bool = False
 
 
 class KeyJointSinglearmTeleop(Node):
@@ -62,6 +62,8 @@ class KeyJointSinglearmTeleop(Node):
         self.joint_states_received = False
         self.error_log_period = 2.0
         self._last_error_log_time = 0.0
+        self._missing_joint_state_logged = False
+        self._missing_q_cmd_logged = False
 
         # Teleop state
         self.selected_joint = 0
@@ -70,7 +72,9 @@ class KeyJointSinglearmTeleop(Node):
         # per-press increment computed from scale/publish_hz for configurable behaviour
         self.step = float(self.scale) / max(self.publish_hz, 1.0)
 
-        self.get_logger().info('Single-arm joint teleop initialized')
+        self.get_logger().info(
+            f'Single-arm joint teleop initialized (use_sim_time={self.config.use_sim_time})'
+        )
         self.print_usage()
 
         # Held-key detection and continuous send state
@@ -119,9 +123,18 @@ class KeyJointSinglearmTeleop(Node):
             if all(idx is not None for idx in indices):
                 with self.state_lock:
                     self.q_current = np.array([msg.position[idx] for idx in indices], dtype=float)
+                    if self.q_cmd is None:
+                        self.q_cmd = self.q_current.copy()
                 if not self.joint_states_received:
                     self.joint_states_received = True
                     print('\nJoint states received. Ready for control!', flush=True)
+            elif not self._missing_joint_state_logged:
+                missing = [self.joint_names[i] for i, idx in enumerate(indices) if idx is None]
+                self.get_logger().warn(
+                    'JointState names do not fully match expected Panda joints. '
+                    f'Missing: {missing}. Received names: {list(msg.name)}'
+                )
+                self._missing_joint_state_logged = True
         except Exception as e:
             # ignore parsing errors
             pass
@@ -141,10 +154,16 @@ class KeyJointSinglearmTeleop(Node):
         if now - self._last_error_log_time < self.error_log_period:
             return
         if not self.joint_states_received:
+            if not self._missing_joint_state_logged:
+                self.get_logger().warn('Skipping joint error log because matching joint_states have not been received yet.')
+                self._missing_joint_state_logged = True
             return
 
         with self.state_lock:
             if self.q_cmd is None:
+                if not self._missing_q_cmd_logged:
+                    self.get_logger().warn('Skipping joint error log because q_cmd is still None.')
+                    self._missing_q_cmd_logged = True
                 return
             q_current = self.q_current.copy()
             q_cmd = self.q_cmd.copy()
@@ -171,7 +190,9 @@ class KeyJointSinglearmTeleop(Node):
             return
 
         with self.state_lock:
-            q_target = self.q_current.copy()
+            if self.q_cmd is None:
+                self.q_cmd = self.q_current.copy()
+            q_target = self.q_cmd.copy()
         if action[0] == 'inc':
             q_target[self.selected_joint] += self.step
         elif action[0] == 'dec':
@@ -181,7 +202,7 @@ class KeyJointSinglearmTeleop(Node):
 
         # Publish the desired joint positions as controller input
         self.publish_command(q_target)
-        print(f"Published command. joint {self.selected_joint+1}: {q_target[self.selected_joint]:.4f}", flush=True)
+        # print(f"Published command. joint {self.selected_joint+1}: {q_target[self.selected_joint]:.4f}", flush=True)
 
 
 def get_key(settings):

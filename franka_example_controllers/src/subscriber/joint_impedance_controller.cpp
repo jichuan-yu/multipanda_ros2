@@ -142,6 +142,12 @@ JointImpedanceController::on_activate(
   q_d_target_ = q_;
   dq_d_.setZero();
   dq_d_target_.setZero();
+
+  RCLCPP_INFO(get_node()->get_logger(), "JointImpedanceController on_activate:");
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "  q_      = " << q_.transpose());
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "  k_gains = " << k_gains_.transpose());
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "  d_gains = " << d_gains_.transpose());
+
   return CallbackReturn::SUCCESS;
 }
 

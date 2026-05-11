@@ -4,8 +4,10 @@
 #include <cmath>
 #include <exception>
 #include <string>
+#include <algorithm>
 
 #include <Eigen/Eigen>
+#include "sensor_msgs/msg/joint_state.hpp"
 
 namespace franka_example_controllers {
 
@@ -41,14 +43,36 @@ JointImpedanceController::update(
   updateJointStates();
   Eigen::Map<const Vector7d> coriolis(
     franka_robot_model_->getCoriolisForceVector().data());
-  Vector7d q_goal = q_d_;
-  const double kAlpha = 0.99;
-  dq_filtered_ = (1 - kAlpha) * dq_filtered_ + kAlpha * dq_;
+  const auto& robot_state = *franka_robot_model_->getRobotState();
+  /*
+  The implementation uses a first-order low-pass filter.
+    y[n] = (1-alpha) * y[n-1] + alpha * x[n]
+  where
+    alpha = (2 * M_PI * fc * T) / (1 + 2 * M_PI * fc * T)
+  fc is the cutoff frequency and T is the sampling time. 
+  */ 
+  dq_filtered_ = (1.0 - alpha_) * dq_filtered_ + alpha_ * dq_;
+  
+  // Saturate the tracking errors, then reconstruct desired position/velocity.
+  Vector7d q_error = (q_d_target_ - q_)
+    .cwiseMin(Vector7d::Constant(pos_saturation_))
+    .cwiseMax(Vector7d::Constant(-pos_saturation_));
+  Vector7d dq_error = (dq_d_target_ - dq_filtered_)
+    .cwiseMin(Vector7d::Constant(vel_saturation_))
+    .cwiseMax(Vector7d::Constant(-vel_saturation_));
+
   Vector7d tau_d_calculated =
-      k_gains_.cwiseProduct(q_goal - q_) + d_gains_.cwiseProduct(
-        -dq_filtered_) + coriolis;
+      k_gains_.cwiseProduct(q_error) + d_gains_.cwiseProduct(dq_error) + coriolis;
+
+  std::array<double, 7> tau_d_calculated_array{};
   for (int i = 0; i < num_joints; ++i) {
-    command_interfaces_[i].set_value(tau_d_calculated(i));
+    tau_d_calculated_array[i] = tau_d_calculated(i);
+  }
+  const std::array<double, 7> tau_d_saturated =
+      saturateTorqueRate(tau_d_calculated_array, robot_state.tau_J_d);
+
+  for (int i = 0; i < num_joints; ++i) {
+    command_interfaces_[i].set_value(tau_d_saturated[i]);
   }
   return controller_interface::return_type::OK;
 }
@@ -59,7 +83,7 @@ JointImpedanceController::on_init() {
     auto_declare<std::string>("arm_id", "panda");
     auto_declare<std::vector<double>>("k_gains", {});
     auto_declare<std::vector<double>>("d_gains", {});
-    sub_desired_joint_ = get_node()->create_subscription<std_msgs::msg::Float64MultiArray>(
+    sub_desired_joint_ = get_node()->create_subscription<sensor_msgs::msg::JointState>(
       "/joint_impedance/joints_desired", 1,
       std::bind(&JointImpedanceController::desiredJointCallback, this, std::placeholders::_1)
     );
@@ -101,6 +125,10 @@ JointImpedanceController::on_configure(
     d_gains_(i) = d_gains.at(i);
     k_gains_(i) = k_gains.at(i);
   }
+  q_d_target_.setZero();
+  q_d_.setZero();
+  dq_d_target_.setZero();
+  dq_d_.setZero();
   dq_filtered_.setZero();
   return CallbackReturn::SUCCESS;
 }
@@ -111,6 +139,9 @@ JointImpedanceController::on_activate(
   updateJointStates();
   franka_robot_model_->assign_loaned_state_interfaces(state_interfaces_);
   q_d_ = q_;
+  q_d_target_ = q_;
+  dq_d_.setZero();
+  dq_d_target_.setZero();
   return CallbackReturn::SUCCESS;
 }
 
@@ -128,12 +159,36 @@ void JointImpedanceController::updateJointStates() {
 }
 
 void JointImpedanceController::desiredJointCallback(
-  const std_msgs::msg::Float64MultiArray& msg) {
-  if (msg.data[0]){
-    for (auto i = 0; i < num_joints; ++i) {
-      q_d_(i) = msg.data[i];
-    }
+  const sensor_msgs::msg::JointState& msg) {
+  if (msg.position.size() != static_cast<size_t>(num_joints)) {
+    RCLCPP_ERROR(get_node()->get_logger(),
+                 "Expected %d desired joint positions, but received %zu.",
+                 num_joints, msg.position.size());
+    return;
   }
+  if (!msg.velocity.empty() && msg.velocity.size() != static_cast<size_t>(num_joints)) {
+    RCLCPP_ERROR(get_node()->get_logger(),
+                 "Expected %d desired joint velocities, but received %zu.",
+                 num_joints, msg.velocity.size());
+    return;
+  }
+
+  for (auto i = 0; i < num_joints; ++i) {
+    q_d_target_(i) = msg.position[i];
+    dq_d_target_(i) = msg.velocity.empty() ? 0.0 : msg.velocity[i];
+  }
+}
+
+std::array<double, 7> JointImpedanceController::saturateTorqueRate(
+    const std::array<double, 7>& tau_d_calculated,
+    const std::array<double, 7>& tau_J_d) const {
+  std::array<double, 7> tau_d_saturated{};
+  for (int i = 0; i < num_joints; ++i) {
+    const double difference = tau_d_calculated[i] - tau_J_d[i];
+    tau_d_saturated[i] = tau_J_d[i] +
+        std::max(std::min(difference, delta_tau_max_), -delta_tau_max_);
+  }
+  return tau_d_saturated;
 }
 
 }  // namespace franka_example_controllers

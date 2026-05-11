@@ -7,9 +7,8 @@ This repository is a fork of [multipanda_ros2](https://github.com/tenfoldpaper/m
 
 ## Controllers and Communication Interfaces
 
+#### Cartesian Impedance Controller (Single Arm)
 
-
-- `cartesian_impedance_controller`
 ``` bash
 ros2 launch franka_bringup franka_control.launch.py \
   robot_ip:=172.16.0.2 \
@@ -18,6 +17,7 @@ ros2 launch franka_bringup franka_control.launch.py \
   use_rviz:=false
 ```
 
+**Controller Interfaces:**
 | Topic Name | Message Type | Direction | Freq. | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `/panda/joint_states` (from joint_state_broadcaster) | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states. |
@@ -25,6 +25,52 @@ ros2 launch franka_bringup franka_control.launch.py \
 | `/cartesian_impedance/target_pose` | `geometry_msgs/msg/PoseStamped` | Input (Sub) | 100Hz recommended | Target pose for the end-effector (in robot base frame) |
 | `/cartesian_impedance/ee_pose` | `geometry_msgs/msg/PoseStamped` | Output (Pub) | 1000Hz | Current  pose for the end-effector (in robot base frame) |
 | `/cartesian_impedance/external_wrench` | `geometry_msgs/msg/WrenchStamped` | Output (Pub) | 1000Hz | Current external wrench of the robot in the base frame. `wrench.force.xyz` is external force and `wrench.torque.xyz` is external torque. |
+
+**Controller Parameters:**
+| Parameter Name | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `arm_id` | `string` | `panda` | Arm namespace used to resolve interfaces and robot model state. |
+| `pos_stiff` | `double` | `100` | Translational stiffness gain for Cartesian impedance. |
+| `rot_stiff` | `double` | `10` | Rotational stiffness gain for Cartesian impedance. |
+| `n_stiffness` | `double` | `10.0` | Null-space stiffness used for posture regulation toward `desired_qn`. |
+
+The control law is implemented as:
+$$
+τ = τ_{task} + τ_{coriolis} + τ_{null}
+$$
+$$
+τ_{task} = J^T\left(-K e - D(J\dot q)\right)
+$$
+$$
+τ_{null} = \left(I - J^T J^{\dagger}\right)
+\left(n_{stiffness}(q_d^n - q) - 2\sqrt{n_{stiffness}}\,\dot q\right)
+$$
+
+
+#### Joint Impedance Controller (Single Arm)
+
+**Controller Interfaces:**
+| Topic / Interface Name | Message Type / Interface Type | Direction | Freq. | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `/panda/joint_states` (from joint_state_broadcaster) | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states used by the controller. |
+| `/joint_impedance/joints_desired` | `sensor_msgs/msg/JointState` | Input (Sub) | 100Hz recommended | Desired joint positions and velocities. `position[0..6]` are the target joint positions, and `velocity[0..6]` are the target joint velocities. |
+
+
+**Controller Parameters:**
+| Parameter Name | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `arm_id` | `string` | `panda` | Arm namespace used to resolve interfaces and robot model state. |
+| `k_gains` | `vector<double>` | required | Joint position stiffness gains. Must contain 7 values. |
+| `d_gains` | `vector<double>` | required | Joint damping gains. Must contain 7 values. |
+| `alpha`  (internal constant)| `double` | `0.24` | Low-pass filter coefficient (~50 Hz) for measured joint velocity. |
+| `pos_saturation`  (internal constant)| `double` | `0.2 rad` | Saturation bound for position error `q_d - q`. |
+| `vel_saturation`  (internal constant)| `double` | `0.5 rad/s` | Saturation bound for velocity error `dq_d - dq`. |
+
+The control law is implemented as:
+
+$$
+τ = K_p\,\mathrm{sat}(q_d - q) + K_d\,\mathrm{sat}(\dot q_d - \dot q) + τ_{coriolis}
+$$
 
 
 

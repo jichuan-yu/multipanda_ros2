@@ -71,6 +71,7 @@ cartesian_impedance_controller:
     arm_id: panda
     pos_stiff: 100.0
     rot_stiff: 10.0
+    n_stiffness: 10.0
 
 joint_impedance_controller:
   ros__parameters:

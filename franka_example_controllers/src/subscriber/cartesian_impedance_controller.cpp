@@ -4,6 +4,7 @@
 #include <cmath>
 #include <exception>
 #include <string>
+#include <algorithm>
 #include <franka/model.h>
 
 inline void pseudoInverse(const Eigen::MatrixXd& M_, Eigen::MatrixXd& M_pinv_, bool damped = true) {
@@ -76,15 +77,23 @@ controller_interface::return_type CartesianImpedanceController::update(
   tau_task << jacobian.transpose() * (-stiffness*error - damping*(jacobian*qD));
 
   Eigen::MatrixXd jacobian_transpose_pinv;
-    pseudoInverse(jacobian.transpose(), jacobian_transpose_pinv);
+  pseudoInverse(jacobian.transpose(), jacobian_transpose_pinv);
   tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) -
                       jacobian.transpose() * jacobian_transpose_pinv) *
                          (n_stiffness * (desired_qn - q) -
                           (2.0 * sqrt(n_stiffness)) * qD);
 
   tau_d <<  tau_task + coriolis + tau_nullspace;
+
+  std::array<double, 7> tau_d_calculated{};
   for (int i = 0; i < num_joints; ++i) {
-    command_interfaces_[i].set_value(tau_d(i));
+    tau_d_calculated[i] = tau_d(i);
+  }
+  const std::array<double, 7> tau_d_saturated =
+      saturateTorqueRate(tau_d_calculated, robot_state.tau_J_d);
+
+  for (int i = 0; i < num_joints; ++i) {
+    command_interfaces_[i].set_value(tau_d_saturated[i]);
   }
 
   if (ee_pose_publisher_) {
@@ -122,6 +131,7 @@ CallbackReturn CartesianImpedanceController::on_init() {
     auto_declare<std::string>("arm_id", "panda");
     auto_declare<double>("pos_stiff", 100);
     auto_declare<double>("rot_stiff", 10);
+    auto_declare<double>("n_stiffness", 10.0);
     sub_desired_cartesian_ = get_node()->create_subscription<geometry_msgs::msg::PoseStamped>(
       "/cartesian_impedance/target_pose", 1,
       std::bind(&CartesianImpedanceController::desiredCartesianCallback, this, std::placeholders::_1)
@@ -138,12 +148,13 @@ CallbackReturn CartesianImpedanceController::on_configure(
   arm_id_ = get_node()->get_parameter("arm_id").as_string();
   pos_stiff = get_node()->get_parameter("pos_stiff").as_double();
   rot_stiff = get_node()->get_parameter("rot_stiff").as_double();
+  n_stiffness = get_node()->get_parameter("n_stiffness").as_double();
   franka_robot_model_ = std::make_unique<franka_semantic_components::FrankaRobotModel>(
       franka_semantic_components::FrankaRobotModel(arm_id_ + "/robot_model",
                                                    arm_id_));
   ee_pose_publisher_ = get_node()->create_publisher<geometry_msgs::msg::PoseStamped>(
       "/cartesian_impedance/ee_pose", 1);
-    external_wrench_publisher_ = get_node()->create_publisher<geometry_msgs::msg::WrenchStamped>(
+  external_wrench_publisher_ = get_node()->create_publisher<geometry_msgs::msg::WrenchStamped>(
       "/cartesian_impedance/external_wrench", 1);
   auto parameters = get_node()->list_parameters({}, 10);
   return CallbackReturn::SUCCESS;
@@ -164,7 +175,6 @@ CallbackReturn CartesianImpedanceController::on_activate(
   damping.setIdentity();
   damping.topLeftCorner(3,3) << 2 * sqrt(pos_stiff) * Matrix3d::Identity();
   damping.bottomRightCorner(3, 3) << 0.8 * 2 * sqrt(rot_stiff) * Matrix3d::Identity();
-  n_stiffness = 10.0;
 
   return CallbackReturn::SUCCESS;
 }
@@ -185,6 +195,18 @@ void CartesianImpedanceController::desiredCartesianCallback(
       msg.pose.orientation.x,
       msg.pose.orientation.y,
       msg.pose.orientation.z);
+}
+
+std::array<double, 7> CartesianImpedanceController::saturateTorqueRate(
+    const std::array<double, 7>& tau_d_calculated,
+    const std::array<double, 7>& tau_J_d) const {
+  std::array<double, 7> tau_d_saturated{};
+  for (int i = 0; i < num_joints; ++i) {
+    const double difference = tau_d_calculated[i] - tau_J_d[i];
+    tau_d_saturated[i] = tau_J_d[i] +
+        std::max(std::min(difference, delta_tau_max_), -delta_tau_max_);
+  }
+  return tau_d_saturated;
 }
 
 }  // namespace franka_example_controllers

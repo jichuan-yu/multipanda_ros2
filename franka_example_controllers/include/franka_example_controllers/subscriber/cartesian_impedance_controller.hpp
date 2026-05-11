@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <string>
 
 #include <Eigen/Eigen>
@@ -53,8 +54,12 @@ class CartesianImpedanceController : public controller_interface::ControllerInte
   double pos_stiff;
   double rot_stiff;
   double n_stiffness;
+  const double delta_tau_max_ = 1.0;
 
   void desiredCartesianCallback(const geometry_msgs::msg::PoseStamped& msg);
+  std::array<double, 7> saturateTorqueRate(
+      const std::array<double, 7>& tau_d_calculated,
+      const std::array<double, 7>& tau_J_d) const;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr ee_pose_publisher_;
   rclcpp::Publisher<geometry_msgs::msg::WrenchStamped>::SharedPtr external_wrench_publisher_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_desired_cartesian_; 

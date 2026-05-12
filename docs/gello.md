@@ -9,7 +9,6 @@ GELLO 遥操作是一种基于舵机臂的双臂遥操作方案，用于在 MuJo
 ## 2. 系统要求
 
 - Ubuntu 22.04 + ROS2 Humble
-- 已配置好 `my_task_description` 及 `dual_arm_reactive_control` 等仿真包
 - Python 3.10+
 - 物理 GELLO 舵机臂（通过 USB 连接）
 
@@ -17,14 +16,15 @@ GELLO 遥操作是一种基于舵机臂的双臂遥操作方案，用于在 MuJo
 
 ### 3.1 安装 gello_software（核心依赖）
 
+选择一个您喜欢的安装目录（示例位置）：
+
 ```bash
-# 创建安装目录
-mkdir -p ~/libraries/gello
-cd ~/libraries/gello
+# 创建安装目录（可自定义路径）
+mkdir -p ~/gello_software
+cd ~/gello_software
 
 # 克隆 gello_software 仓库
-git clone https://github.com/wuphilipp/gello_software.git
-cd gello_software
+git clone https://github.com/wuphilipp/gello_software.git .
 
 # 初始化并更新子模块（包含 Dynamixel SDK）
 git submodule init && git submodule update
@@ -36,24 +36,25 @@ pip install -e .
 pip install -e third_party/DynamixelSDK/python
 ```
 
-### 3.2 确认脚本位置
+> **说明**：安装目录可自行选择，无需固定位置。建议选择非工作空间目录（如 `~/gello_software`），避免与 ROS2 工作空间冲突。
 
-脚本已包含在 `multipanda_ros2` 仓库中：
+### 3.2 获取遥操作脚本
+
+脚本已包含在 `multipanda_ros2` 仓库中。
+
+**方式一：已有工作空间（推荐）**
+
+如果您已经有 `dual_panda_ws` 工作空间，只需克隆 `gello_teleop` 目录：
 
 ```bash
-# 脚本路径
-~/dual_panda_ws/src/multipanda_ros2/gello_teleop/scripts/gello_franka_ros2.py
+cd ~/dual_panda_ws/src/multipanda_ros2
+git checkout humble
+git pull origin humble
 ```
 
-### 3.3 关于 gello-teleop（可选）
-
-> **说明**：官方文档推荐安装 `gello-teleop` 包，但经过测试，本项目的自定义脚本**不依赖**该包。如果安装失败，可以**安全跳过**此步骤，脚本仍能正常运行。
-
-如需尝试安装（可选）：
-
+脚本位置：
 ```bash
-# 可选：安装 gello-teleop（如果需要正运动学功能）
-pip install git+https://github.com/RLinf/gello-teleop.git
+~/dual_panda_ws/src/multipanda_ros2/gello_teleop/scripts/gello_franka_ros2.py
 ```
 
 ## 4. 硬件设置
@@ -70,7 +71,7 @@ ls -l /dev/ttyUSB* /dev/ttyACM* 2>/dev/null
 
 通常 GELLO 设备会被识别为 `/dev/ttyUSB0`。
 
-### 4.3 设置权限
+### 4.3 设置权限（已有权限可跳过）
 
 ```bash
 sudo chmod 666 /dev/ttyUSB0
@@ -80,6 +81,19 @@ newgrp dialout
 ```
 
 ## 5. 运行指南
+
+### 5.0 仿真模式选择
+
+根据需求选择启动方式：
+
+| 模式 | 适用场景 | 启动命令 |
+|------|---------|---------|
+| **基础模式** | 快速测试、关节级控制 | `ros2 launch franka_bringup dual_franka_sim.launch.py` |
+| **完整模式** | 完整实验、带安全控制 | `ros2 launch my_task_description my_task_sim.launch.py use_rviz:=true` |
+
+> **切换模式**：如需切换模式，需手动修改脚本中的发布话题。编辑 `scripts/gello_franka_ros2.py`，修改 `self.joint_publisher` 的话题名称：
+> - 基础模式：`/dual_joint_impedance/joints_desired`
+> - 完整模式：`/dualarm_teleop_cmd`
 
 ### 5.1 方式一：基础模式（关节阻抗控制）
 
@@ -231,7 +245,49 @@ sudo chmod 666 /dev/ttyUSB0
 
 ### 10.3 关节跟踪不顺畅
 
-检查脚本中的关节限幅和控制参数，确保与控制器配置匹配。
+**问题现象**：GELLO 小幅度运动时从臂关节无响应，或跟随幅度小。
+
+**解决方案**：调整关节阻抗控制器的刚度（k_gain）和阻尼（d_gain）参数。
+
+编辑控制器配置文件：
+```bash
+vim ~/dual_panda_ws/src/multipanda_ros2/franka_bringup/config/sim/dual_sim_controllers.yaml
+```
+
+找到 `dual_joint_impedance_example_controller` 部分，增大从臂（arm_2）的关节增益：
+
+```yaml
+dual_joint_impedance_example_controller:
+  ros__parameters:
+    arm_count: 2
+    arm_2:  # 从臂
+      arm_id: mj_right
+      k_gains:  # 刚度增益，增大可提高跟踪力度
+        - 24.0
+        - 24.0
+        - 24.0
+        - 24.0
+        - 10.0
+        - 6.0
+        - 2.0    # 关节7，可尝试增大到 5.0 或更高
+      d_gains:  # 阻尼增益，增大可提高响应速度
+        - 2.0
+        - 2.0
+        - 2.0
+        - 1.0
+        - 1.0
+        - 1.0
+        - 0.5    # 关节7，可尝试增大到 1.0 或更高
+```
+
+修改后重新编译工作空间：
+```bash
+cd ~/dual_panda_ws
+colcon build
+source install/setup.bash
+```
+
+> **提示**：通常关节7的增益需要特别调整，因为其运动范围和负载特性与其他关节不同。
 
 ### 10.4 仿真启动失败
 
@@ -243,29 +299,6 @@ colcon build
 source install/setup.bash
 ```
 
-### 10.5 gello-teleop 安装失败
-
-**解决方案**：跳过此步骤，本项目的自定义脚本不依赖 `gello-teleop`，安装失败不影响遥操作功能。
-
-## 11. 与其他遥操作方式对比
-
-| 遥操作方式 | 输入设备 | 控制空间 | 适用场景 |
-|-----------|---------|---------|---------|
-| GELLO | 舵机臂 | 关节空间 | 直观双臂遥操作 |
-| 键盘 | 键盘 | 关节/笛卡尔 | 快速测试 |
-| SpaceMouse | 3D鼠标 | 笛卡尔空间 | 精细笛卡尔控制 |
-
-## 12. 注意事项
-
-1. 确保 GELLO 设备已正确连接并上电
-2. 首次使用前建议进行标定
-3. 根据实验需求选择合适的启动方式
-4. 完整模式需要更多系统资源
-5. `gello-teleop` 安装失败不影响本项目的遥操作功能
-
----
 
 **版本**: v1.0  
-**最后更新**: May 2026  
-**维护者**: GELLO 遥操作开发组  
-**验证方式**: 实际测试确认无需 `gello-teleop`
+**最后更新**: May 2026 

@@ -4,7 +4,6 @@
 
 GELLO 遥操作是一种基于舵机臂的双臂遥操作方案，用于在 MuJoCo 仿真中控制 Franka 机械臂。本方案支持两种控制模式：基础关节阻抗控制和完整安全控制（带碰撞检测）。
 
-> **注意**：本指南基于实际测试验证，不依赖 `gello-teleop` 包，使用自定义遥操作脚本。
 
 ## 2. 系统要求
 
@@ -41,9 +40,6 @@ pip install -e third_party/DynamixelSDK/python
 ### 3.2 获取遥操作脚本
 
 脚本已包含在 `multipanda_ros2` 仓库中。
-
-**方式一：已有工作空间（推荐）**
-
 如果您已经有 `dual_panda_ws` 工作空间，只需克隆 `gello_teleop` 目录：
 
 ```bash
@@ -90,6 +86,8 @@ newgrp dialout
 |------|---------|---------|
 | **基础模式** | 快速测试、关节级控制 | `ros2 launch franka_bringup dual_franka_sim.launch.py` |
 | **完整模式** | 完整实验、带安全控制 | `ros2 launch my_task_description my_task_sim.launch.py use_rviz:=true` |
+
+当前脚本默认使用**完整模式**，发布话题为 `/dualarm_teleop_cmd`，适配双臂安全控制器。
 
 > **切换模式**：如需切换模式，需手动修改脚本中的发布话题。编辑 `scripts/gello_franka_ros2.py`，修改 `self.joint_publisher` 的话题名称：
 > - 基础模式：`/dual_joint_impedance/joints_desired`

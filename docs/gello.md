@@ -22,11 +22,20 @@ GELLO 遥操作是一种基于舵机臂的双臂遥操作方案，用于在 MuJo
 mkdir -p ~/gello_software
 cd ~/gello_software
 
+# 创建并激活 conda 环境（Python 3.11）
+conda create -n panda python=3.11 -y
+conda activate panda
+
 # 克隆 gello_software 仓库
-git clone https://github.com/wuphilipp/gello_software.git .
+git clone https://github.com/wuphilipp/gello_software.git gello_software
 
 # 初始化并更新子模块（包含 Dynamixel SDK）
-git submodule init && git submodule update
+cd gello_software
+git submodule init
+git submodule update
+
+# 安装仓库依赖
+pip install -r requirements.txt --no-deps
 
 # 安装 gello_software（开发模式）
 pip install -e .
@@ -34,6 +43,8 @@ pip install -e .
 # 安装 Dynamixel SDK（使用仓库中的子模块版本）
 pip install -e third_party/DynamixelSDK/python
 ```
+
+> **说明**：如果你希望把依赖也尽量交给 conda 管理，可以先在环境里安装基础包（例如 `conda install -c conda-forge pip numpy scipy pyserial`），再执行后面的 `pip install -r requirements.txt` 和可编辑安装命令。
 
 > **说明**：安装目录可自行选择，无需固定位置。建议选择非工作空间目录（如 `~/gello_software`），避免与 ROS2 工作空间冲突。
 

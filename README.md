@@ -94,6 +94,7 @@ $$
 
 ## Spacemouse Teleoperation
 
+[PySpaceMouse](https://github.com/JakubAndrysek/PySpaceMouse.git)
 ### Installation:
 1. Install hidapi:
 ```bash
@@ -128,6 +129,7 @@ pip install pyspacemouse
 
 
 ## GELLO Teleoperation
+[GELLO: General, Low-Cost, and Intuitive Teleoperation Framework](https://github.com/wuphilipp/gello_software.git)
 ### Installation:
 
 

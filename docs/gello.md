@@ -42,12 +42,6 @@ pip install -e third_party/DynamixelSDK/python
 脚本已包含在 `multipanda_ros2` 仓库中。
 如果您已经有 `dual_panda_ws` 工作空间，只需克隆 `gello_teleop` 目录：
 
-```bash
-cd ~/dual_panda_ws/src/multipanda_ros2
-git checkout humble
-git pull origin humble
-```
-
 脚本位置：
 ```bash
 ~/dual_panda_ws/src/multipanda_ros2/gello_teleop/scripts/gello_franka_ros2.py
@@ -65,7 +59,7 @@ git pull origin humble
 ls -l /dev/ttyUSB* /dev/ttyACM* 2>/dev/null
 ```
 
-通常 GELLO 设备会被识别为 `/dev/ttyUSB0`。
+通常 GELLO 设备会被识别为 `/dev/ttyUSB0`。请查脚本中设备路径是否正确
 
 ### 4.3 设置权限（已有权限可跳过）
 
@@ -277,6 +271,7 @@ dual_joint_impedance_example_controller:
         - 1.0
         - 0.5    # 关节7，可尝试增大到 1.0 或更高
 ```
+测试第七关节可能需要足够大的参数如15.0才能正常运行，其余关节可以运行但刚度较低，可以适当增大
 
 修改后重新编译工作空间：
 ```bash
@@ -285,7 +280,6 @@ colcon build
 source install/setup.bash
 ```
 
-> **提示**：通常关节7的增益需要特别调整，因为其运动范围和负载特性与其他关节不同。
 
 ### 10.4 仿真启动失败
 

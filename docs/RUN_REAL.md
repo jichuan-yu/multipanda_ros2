@@ -10,7 +10,7 @@ For real robot experiments, a real-time kernal is required. Please refer to [Fra
 
 
 ---
-## SpaceMouse Teleoperation:
+## SpaceMouse Teleoperation With Cartesian Impedance Controller:
 
 0. Ruturn to home position (0, -PI/4, 0, -3PI/4, 0, PI/2, PI/4):
 ```bash
@@ -19,7 +19,7 @@ ros2 launch franka_bringup move_to_start.launch.py \
   load_gripper:=true
 ```
 
-1. Launch cartesian controller:
+1. Launch cartesian impedance controller:
 ``` bash
 ros2 launch franka_bringup franka_control.launch.py \
   robot_ip:=172.16.0.3 \
@@ -55,8 +55,7 @@ python3 spacemouse_teleop/spacemouse_pub_singlearm_real.py
 ```
 
 ---
-## Gello Teleoperation:
-
+## SpaceMouse Teleoperation With IK + Joint Impedance Controller:
 
 0. Ruturn to home position (0, -PI/4, 0, -3PI/4, 0, PI/2, PI/4):
 ```bash
@@ -69,6 +68,12 @@ ros2 launch franka_bringup move_to_start.launch.py \
 ``` bash
 ros2 launch franka_bringup franka_control.launch.py \
   robot_ip:=172.16.0.2 \
+  load_gripper:=true \
+  controller_name:=joint_impedance_controller \
+  use_rviz:=false
+```
+``` bash
+ros2 launch franka_bringup franka_control_sim.launch.py \
   load_gripper:=true \
   controller_name:=joint_impedance_controller \
   use_rviz:=false
@@ -89,11 +94,11 @@ ros2 bag record -o ./data/$(date +%Y%m%d_%H%M%S) \
   /cartesian_impedance/pose_desired \
   /panda/franka_states
 ```
-
 Press `Ctrl+C` to stop recording when done.
 
 2. keypub test:
 ```bash
+conda activate panda
 cd src/multipanda_ros2
-python3 spacemouse_teleop/key_pub_joint_singlearm_real.py
+python3 spacemouse_teleop/spacemouse_pub_singlearm_joint.py
 ```

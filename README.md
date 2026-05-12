@@ -47,12 +47,15 @@ ros2 launch franka_bringup franka_control.launch.py \
 | `n_stiffness` | `vector<double>` | see_config | Null-space stiffness per joint (7 values) used for posture regulation toward `desired_qn`. |
 
 The control law is implemented as:
+
 $$
 τ = τ_{task} + τ_{coriolis} + τ_{null}
 $$
+
 $$
 τ_{task} = J^T\left(-K e - D(J\dot q)\right)
 $$
+
 $$
 τ_{null} = \left(I - J^T J^{\dagger}\right)
 \left(n_{stiffness}(q_d^n - q) - 2\sqrt{n_{stiffness}}\,\dot q\right)
@@ -91,7 +94,7 @@ $$
 
 ## Spacemouse Teleoperation
 
-#### Installation:
+### Installation:
 1. Install hidapi:
 ```bash
 sudo apt-get install libhidapi-dev
@@ -104,8 +107,29 @@ sudo usermod -aG plugdev $USER
 newgrp plugdev
 ```
 
-3. Install pyspacemouse:
+3. Install Python Dependencies:
 ```bash
+# Create conda environment (Python 3.10)
+conda create -n panda python=3.10 -y
+
+# Activate the environment
+conda activate panda
+
+# Install Pinocchio and (preferably) pink from conda-forge
+conda install -c conda-forge pinocchio pink -y
+
+# Install pyspacemouse via pip
 pip install pyspacemouse
 ```
 
+### Examples:
+
+
+
+
+## GELLO Teleoperation
+### Installation:
+
+
+
+### Examples:

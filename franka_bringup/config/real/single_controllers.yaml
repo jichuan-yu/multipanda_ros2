@@ -145,7 +145,7 @@ joint_impedance_controller:
       - 600.0
       - 250.0
       - 150.0
-      - 50.0
+      - 100.0
     d_gains:
       - 30.0
       - 30.0
@@ -153,4 +153,4 @@ joint_impedance_controller:
       - 12.0
       - 12.0
       - 12.0
-      - 6.0
+      - 9.0

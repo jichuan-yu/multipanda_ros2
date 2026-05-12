@@ -10,7 +10,7 @@ import time
 import numpy as np
 import pinocchio as pin
 import pink
-from pink.tasks import FrameTask
+from pink.tasks import FrameTask, PostureTask
 import pyspacemouse
 from rclpy.node import Node
 import rclpy
@@ -54,7 +54,7 @@ def _get_urdf_from_xacro(xacro_path: str, arm_id: str, hand: bool = True) -> str
 @dataclass
 class SpacemouseConfig:
     arm_id: str = 'panda'
-    joint_state_topic: str = '/joint_states'
+    joint_state_topic: str = '/panda/joint_states'
     target_joint_topic: str = '/joint_impedance/joints_desired'
     ee_frame: str = 'panda_hand_tcp'
     base_frame: str = 'panda_link0'
@@ -154,7 +154,20 @@ class SpaceMouseJointTeleopNode(Node):
             raise RuntimeError(f'Frame {self.ee_frame} not found in Pinocchio model')
 
         self.arm_joint_q_indices = self._resolve_arm_joint_q_indices()
-        self.task = FrameTask(self.ee_frame, position_cost=1.0, orientation_cost=1.0)
+        self.ee_task = FrameTask(self.ee_frame, position_cost=1.0, orientation_cost=1.0)
+        self.posture_task = PostureTask(cost=1e-3)
+        self.posture_q_arm = np.array(
+            [
+                0.0,
+                -0.785398,
+                0.0,
+                -2.35619,
+                0.0,
+                1.5708,
+                0.785398,
+            ],
+            dtype=float,
+        )
 
         self.joint_state_sub = self.create_subscription(
             JointState,
@@ -329,8 +342,18 @@ class SpaceMouseJointTeleopNode(Node):
             q_full = self._build_full_configuration(q_arm_feedback)
             self.configuration = pink.Configuration(self.model, self.data, q_full)
         
-        self.task.set_target(pin.SE3(target_pose[0:3, 0:3], target_pose[0:3, 3]))
-        velocity = pink.solve_ik(self.configuration, [self.task], dt=1.0 / self.publish_hz, solver='quadprog')
+        self.ee_task.set_target(pin.SE3(target_pose[0:3, 0:3], target_pose[0:3, 3]))
+        posture_target = self.configuration.q.copy()
+        for i, q_index in enumerate(self.arm_joint_q_indices):
+            posture_target[q_index] = self.posture_q_arm[i]
+        self.posture_task.set_target(posture_target)
+
+        velocity = pink.solve_ik(
+            self.configuration,
+            [self.ee_task, self.posture_task],
+            dt=1.0 / self.publish_hz,
+            solver='quadprog',
+        )
         self.configuration.integrate_inplace(velocity, 1.0 / max(self.publish_hz, 1.0))
         q_desired = self._extract_arm_from_full(self.configuration.q)
                

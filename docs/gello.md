@@ -39,30 +39,12 @@ pip install -e third_party/DynamixelSDK/python
 
 ### 3.2 获取遥操作脚本
 
-脚本已包含在 `multipanda_ros2` 仓库中。**方式一：已有工作空间（推荐）**
-
-如果您已经有 `dual_panda_ws` 工作空间且已克隆 `multipanda_ros2` 仓库，只需更新到最新版本：
+脚本已包含在 `multipanda_ros2` 仓库中。
+如果您已经有 `dual_panda_ws` 工作空间，只需克隆 `gello_teleop` 目录：
 
 ```bash
 cd ~/dual_panda_ws/src/multipanda_ros2
 git checkout humble
-git pull origin humble
-```
-
-> **说明**：此命令会更新整个 `multipanda_ros2` 仓库，包含 `gello_teleop` 目录及其他文件。
-
-**方式二：仅获取脚本目录**
-
-如需单独获取 `gello_teleop` 目录（不克隆整个仓库）：
-
-```bash
-# 创建目录并初始化 git
-mkdir -p ~/dual_panda_ws/src/multipanda_ros2/gello_teleop
-cd ~/dual_panda_ws/src/multipanda_ros2/gello_teleop
-git init
-git remote add origin https://github.com/jichuan-yu/multipanda_ros2.git
-git config core.sparseCheckout true
-echo "gello_teleop/" >> .git/info/sparse-checkout
 git pull origin humble
 ```
 
@@ -105,7 +87,7 @@ newgrp dialout
 | **基础模式** | 快速测试、关节级控制 | `ros2 launch franka_bringup dual_franka_sim.launch.py` |
 | **完整模式** | 完整实验、带安全控制 | `ros2 launch my_task_description my_task_sim.launch.py use_rviz:=true` |
 
-> **默认配置**：当前脚本默认使用完整模式，发布话题为 `/dualarm_teleop_cmd`，配合双臂安全控制器使用。
+> **默认配置**：当前脚本默认使用基础模式，发布话题为 `/dual_joint_impedance/joints_desired`，配合关节阻抗控制器使用。
 >
 > **切换模式**：如需切换模式，需手动修改脚本中的发布话题。编辑 `scripts/gello_franka_ros2.py`，修改 `self.joint_publisher` 的话题名称：
 > - 基础模式：`/dual_joint_impedance/joints_desired`

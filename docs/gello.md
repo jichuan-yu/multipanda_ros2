@@ -108,7 +108,9 @@ source /opt/ros/humble/setup.bash
 source ~/dual_panda_ws/install/setup.bash
 ros2 launch franka_bringup dual_franka_sim.launch.py
 ```
-
+```bash
+ros2 launch franka_bringup franka_control_sim.launch.py controller_name:=joint_impedance_controller
+```
 **终端 2：启动关节阻抗控制器**
 ```bash
 source /opt/ros/humble/setup.bash
@@ -122,6 +124,11 @@ source /opt/ros/humble/setup.bash
 source ~/dual_panda_ws/install/setup.bash
 cd ~/dual_panda_ws/src/multipanda_ros2/gello_teleop
 python3 scripts/gello_franka_ros2.py
+```
+
+```bash
+python3 scripts/gello_franka_singlearm.py
+
 ```
 
 ### 5.2 方式二：完整模式（带安全控制）

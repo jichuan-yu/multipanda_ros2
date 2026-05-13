@@ -22,7 +22,7 @@ RIGHT_ARM = 2
 BOTH_ARMS = 3
 
 # 默认控制模式
-CONTROL_MODE = BOTH_ARMS
+CONTROL_MODE = RIGHT_ARM
 
 # 默认关节位置（用于未控制的手臂）
 DEFAULT_JOINTS = np.array([0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785])

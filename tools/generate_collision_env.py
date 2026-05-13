@@ -27,6 +27,18 @@ from typing import List, Tuple
 
 
 @dataclass
+class Zone:
+    """Represents a placement zone with X/Y ranges and pillar counts."""
+    x_min: float
+    x_max: float
+    y_min: float
+    y_max: float
+    num_small: int
+    num_large: int
+    name: str
+
+
+@dataclass
 class Pillar:
     """Represents a single pillar obstacle."""
     index: int
@@ -61,14 +73,8 @@ class Pillar:
 class CollisionEnvGenerator:
     """Generates random non-overlapping pillar configurations."""
 
-    # Position range for pillar centers
-    X_MIN = 0.35
-    X_MAX = 1.0
-    Y_MIN = -0.4
-    Y_MAX = 0.4
-
     # Height options for small pillars (multiples of 0.1)
-    SMALL_HEIGHTS = [0.3, 0.4, 0.5, 0.6]
+    SMALL_HEIGHTS = [0.3, 0.4, 0.5, 0.6, 0.7]
 
     # Small pillar dimensions
     SMALL_SIZE = 0.05
@@ -76,6 +82,22 @@ class CollisionEnvGenerator:
     # Large pillar dimensions
     LARGE_SIZE = 0.1
     LARGE_HEIGHT = 0.2
+
+    # Define zones with their X/Y ranges and pillar counts
+    ZONES = [
+        # Zone 1: Center near origin
+        Zone(0.2, 0.4, -0.05, 0.05, 1, 0, "Zone1_center"),
+        # Zone 2: Left rear
+        Zone(0.2, 0.4, -0.45, -0.4, 1, 0, "Zone2_left_rear"),
+        # Zone 3: Left front
+        Zone(0.2, 0.4, 0.4, 0.45, 1, 0, "Zone3_left_front"),
+        # Zone 4: Middle
+        Zone(0.4, 0.6, -0.4, 0.4, 3, 1, "Zone4_middle"),
+        # Zone 5: Right middle
+        Zone(0.6, 0.75, -0.3, 0.3, 2, 1, "Zone5_right_middle"),
+        # Zone 6: Right front
+        Zone(0.75, 0.85, -0.2, 0.2, 2, 0, "Zone6_right_front"),
+    ]
 
     def __init__(self, seed: int = None, margin: float = 0.01, max_retries: int = 1000):
         """
@@ -123,23 +145,24 @@ class CollisionEnvGenerator:
         return False
 
     def try_place_pillar(self, length: float, width: float, height: float,
-                         existing: List[Pillar]) -> Pillar:
+                         existing: List[Pillar], zone: Zone) -> Pillar:
         """
-        Try to place a pillar at a random non-overlapping position.
+        Try to place a pillar at a random non-overlapping position within a zone.
 
         Args:
             length: Pillar length
             width: Pillar width
             height: Pillar height
             existing: List of already placed pillars
+            zone: Zone to place pillar in
 
         Returns:
             Placed pillar, or None if placement failed
         """
         for _ in range(self.max_retries):
-            # Generate random position and round to 0.01 precision
-            x = round(random.uniform(self.X_MIN, self.X_MAX), 2)
-            y = round(random.uniform(self.Y_MIN, self.Y_MAX), 2)
+            # Generate random position within zone bounds, rounded to 0.01
+            x = round(random.uniform(zone.x_min, zone.x_max), 2)
+            y = round(random.uniform(zone.y_min, zone.y_max), 2)
 
             pillar = Pillar(
                 index=len(existing) + 1,
@@ -155,46 +178,49 @@ class CollisionEnvGenerator:
 
         return None
 
-    def generate_pillars(self, num_small: int = 10, num_large: int = 2) -> List[Pillar]:
+    def generate_pillars(self) -> List[Pillar]:
         """
-        Generate a complete pillar configuration.
-
-        Args:
-            num_small: Number of small pillars (0.05x0.05m)
-            num_large: Number of large pillars (0.1x0.1m, height=0.2m)
+        Generate a complete pillar configuration based on predefined zones.
 
         Returns:
-            List of generated pillars
+            List of generated pillars, or None if placement failed
         """
         pillars = []
+        pillar_index = 1
 
-        # Create pillar templates (size categories)
-        templates = []
-        for _ in range(num_small):
-            height = random.choice(self.SMALL_HEIGHTS)
-            templates.append((self.SMALL_SIZE, self.SMALL_SIZE, height, "small"))
+        for zone in self.ZONES:
+            print(f"\nGenerating for {zone.name}: X=[{zone.x_min}, {zone.x_max}], "
+                  f"Y=[{zone.y_min}, {zone.y_max}]")
 
-        for _ in range(num_large):
-            templates.append((self.LARGE_SIZE, self.LARGE_SIZE, self.LARGE_HEIGHT, "large"))
+            # Collect pillars to place in this zone
+            zone_templates = []
 
-        # Shuffle for randomness
-        random.shuffle(templates)
+            # Add small pillars for this zone
+            for _ in range(zone.num_small):
+                height = random.choice(self.SMALL_HEIGHTS)
+                zone_templates.append((self.SMALL_SIZE, self.SMALL_SIZE, height, "small", zone))
 
-        # Place each pillar
-        for length, width, height, size_type in templates:
-            pillar = self.try_place_pillar(length, width, height, pillars)
+            # Add large pillars for this zone
+            for _ in range(zone.num_large):
+                zone_templates.append((self.LARGE_SIZE, self.LARGE_SIZE, self.LARGE_HEIGHT, "large", zone))
 
-            if pillar is None:
-                print(f"Warning: Could not place {size_type} pillar after {self.max_retries} attempts")
-                print("Consider increasing the position range or reducing the number of pillars")
-                return None
+            # Shuffle for randomness within zone
+            random.shuffle(zone_templates)
 
-            pillars.append(pillar)
-            print(f"Placed {pillar.name}: X={pillar.x:.2f}, Y={pillar.y:.2f}, "
-                  f"Size={length}x{width}, H={height}")
+            # Place each pillar in this zone
+            for length, width, height, size_type, pillar_zone in zone_templates:
+                pillar = self.try_place_pillar(length, width, height, pillars, pillar_zone)
 
-        # Sort by index for consistent output
-        pillars.sort(key=lambda p: p.index)
+                if pillar is None:
+                    print(f"Warning: Could not place {size_type} pillar in {pillar_zone.name} "
+                          f"after {self.max_retries} attempts")
+                    return None
+
+                pillar.index = pillar_index
+                pillar_index += 1
+                pillars.append(pillar)
+                print(f"  Placed {pillar.name}: X={pillar.x:.2f}, Y={pillar.y:.2f}, "
+                      f"Size={length}x{width}, H={height}, Zone={pillar_zone.name}")
 
         return pillars
 
@@ -278,10 +304,6 @@ def main():
     )
     parser.add_argument('--seed', type=int, default=None,
                         help='Random seed for reproducibility (default: random)')
-    parser.add_argument('--small-pillars', type=int, default=10,
-                        help='Number of small pillars 0.05x0.05m (default: 10)')
-    parser.add_argument('--large-pillars', type=int, default=2,
-                        help='Number of large pillars 0.1x0.1m (default: 2)')
     parser.add_argument('--margin', type=float, default=0.01,
                         help='Safety margin between pillars in meters (default: 0.01)')
     parser.add_argument('--xml-output', type=str, default=None,
@@ -306,20 +328,26 @@ def main():
         args.yaml_output = str(src_dir / 'dualarm_mprc' / 'dualarm_reactive_control' /
                                'config' / 'collision_env_my_task.yaml')
 
+    # Calculate totals from zones
+    total_small = sum(z.num_small for z in CollisionEnvGenerator.ZONES)
+    total_large = sum(z.num_large for z in CollisionEnvGenerator.ZONES)
+
     print("=" * 60)
-    print("Random Static Obstacle Generator")
+    print("Random Static Obstacle Generator (Zone-based)")
     print("=" * 60)
-    print(f"Small pillars: {args.small_pillars} (0.05x0.05m)")
-    print(f"Large pillars: {args.large_pillars} (0.1x0.1m, H=0.2m)")
-    print(f"Position range: X=[{CollisionEnvGenerator.X_MIN}, {CollisionEnvGenerator.X_MAX}], "
-          f"Y=[{CollisionEnvGenerator.Y_MIN}, {CollisionEnvGenerator.Y_MAX}]")
+    print(f"Total: {total_small} small (0.05x0.05m), {total_large} large (0.1x0.1m, H=0.2m)")
     print(f"Safety margin: {args.margin}m")
+    print("Zones:")
+    for z in CollisionEnvGenerator.ZONES:
+        large_info = f", {z.num_large} LARGE" if z.num_large > 0 else ""
+        print(f"  {z.name}: X=[{z.x_min}, {z.x_max}], Y=[{z.y_min}, {z.y_max}] "
+              f"→ {z.num_small} SMALL{large_info}")
     print("=" * 60)
     print()
 
     # Generate pillars
     generator = CollisionEnvGenerator(seed=args.seed, margin=args.margin)
-    pillars = generator.generate_pillars(num_small=args.small_pillars, num_large=args.large_pillars)
+    pillars = generator.generate_pillars()
 
     if pillars is None:
         print("\nError: Failed to generate valid configuration")

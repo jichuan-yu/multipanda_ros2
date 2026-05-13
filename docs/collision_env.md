@@ -30,23 +30,96 @@
 
 ---
 
-## 3. 环境障碍物映射逻辑
+## 3. 自动化生成器
 
-### 3.1 静态柱体环境（当前配置）
+### 3.1 概述
 
-当前环境使用 **9 个静态长方形柱体** 固定在地面上，形成可扩展和密集的障碍物环境。柱体规格定义在 `collision_env.txt` 中：
+手动配置碰撞环境繁琐且容易出错。系统提供了 **自动化生成器** `generate_collision_env.py`，可自动生成随机非重叠的柱状障碍物配置，并同步更新 MuJoCo XML 和 MPRC YAML 文件。
 
-| # | X (m) | Y (m) | Length (m) | Width (m) | Height (m) |
-|---|-------|-------|------------|-----------|------------|
-| 1 | 0.2 | 0.0 | 0.05 | 0.05 | 0.6 |
-| 2 | 0.3 | 0.4 | 0.05 | 0.05 | 0.5 |
-| 3 | 0.35 | -0.35 | 0.05 | 0.05 | 0.4 |
-| 4 | 0.5 | 0.25 | 0.05 | 0.05 | 0.3 |
-| 5 | 0.55 | -0.1 | 0.1 | 0.1 | 0.2 |
-| 6 | 0.65 | 0.2 | 0.05 | 0.05 | 0.6 |
-| 7 | 0.75 | -0.4 | 0.05 | 0.05 | 0.5 |
-| 8 | 0.8 | 0.0 | 0.10 | 0.10 | 0.2 |
-| 9 | 0.9 | 0.2 | 0.05 | 0.05 | 0.6 |
+**位置**: `src/multipanda_ros2/tools/generate_collision_env.py`
+
+### 3.2 使用方法
+
+```bash
+# 进入工作目录
+cd /home/xiaozy24/dual_panda_ws
+
+# 生成默认配置（12个柱体：10个小柱 + 2个大柱）
+python3 src/multipanda_ros2/tools/generate_collision_env.py
+
+# 使用指定种子生成（可复现）
+python3 src/multipanda_ros2/tools/generate_collision_env.py --seed 42
+
+# 预览配置而不写入文件
+python3 src/multipanda_ros2/tools/generate_collision_env.py --dry-run
+
+# 自定义安全间距
+python3 src/multipanda_ros2/tools/generate_collision_env.py --margin 0.02
+```
+
+### 3.3 当前区域配置
+
+生成器使用 **6 个预定义区域** 来放置障碍物：
+
+| 区域 | X 范围 (m) | Y 范围 (m) | 柱体数量 |
+|------|------------|------------|----------|
+| Zone1_center | [0.2, 0.4] | [-0.05, 0.05] | 1 小柱 |
+| Zone2_left_rear | [0.2, 0.4] | [-0.45, -0.4] | 1 小柱 |
+| Zone3_left_front | [0.2, 0.4] | [0.4, 0.45] | 1 小柱 |
+| Zone4_middle | [0.4, 0.6] | [-0.4, 0.4] | 3 小柱 + 1 大柱 |
+| Zone5_right_middle | [0.6, 0.75] | [-0.3, 0.3] | 2 小柱 + 1 大柱 |
+| Zone6_right_front | [0.75, 0.85] | [-0.2, 0.2] | 2 小柱 |
+
+**总计**: 10 小柱 (0.05×0.05m) + 2 大柱 (0.1×0.1m) = 12 个柱体
+
+- **小柱**: 尺寸 0.05×0.05m，高度随机选择 {0.3, 0.4, 0.5, 0.6, 0.7}m
+- **大柱**: 尺寸 0.1×0.1m，固定高度 0.2m
+- **坐标精度**: 所有 X、Y 坐标为 0.01 的整数倍
+
+### 3.4 自定义生成参数
+
+如需修改生成参数（区域范围、柱体数量、尺寸等），请编辑生成器源码：
+
+**关键修改位置**:
+
+1. **修改区域定义** (约第 87-100 行):
+   ```python
+   ZONES = [
+       # 格式: Zone(x_min, x_max, y_min, y_max, num_small, num_large, name)
+       Zone(0.2, 0.4, -0.05, 0.05, 1, 0, "Zone1_center"),
+       # 添加或修改区域...
+   ]
+   ```
+
+2. **修改柱体尺寸** (约第 76-84 行):
+   ```python
+   SMALL_SIZE = 0.05      # 小柱边长
+   LARGE_SIZE = 0.1       # 大柱边长
+   SMALL_HEIGHTS = [0.3, 0.4, 0.5, 0.6, 0.7]  # 小柱高度选项
+   LARGE_HEIGHT = 0.2     # 大柱固定高度
+   ```
+
+3. **修改安全间距** (约第 102 行):
+   ```python
+   def __init__(self, seed: int = None, margin: float = 0.01, ...):
+   ```
+
+### 3.5 生成器输出
+
+运行生成器后会自动更新两个文件：
+
+| 文件 | 路径 |
+|------|------|
+| MuJoCo XML | `src/multipanda_ros2/franka_description/mujoco/franka/objects.xml` |
+| MPRC YAML | `src/dualarm_mprc/dualarm_reactive_control/config/collision_env_my_task.yaml` |
+
+---
+
+## 4. 环境障碍物映射逻辑
+
+### 4.1 静态柱体环境（当前配置）
+
+当前环境使用 **12 个静态长方形柱体** 固定在地面上，形成可扩展和密集的障碍物环境。
 
 当在仿真中添加一个静态柱体时，必须在两个地方同时定义：
 
@@ -75,7 +148,7 @@
 - MuJoCo 的 `size` 是半长宽（Half-extent），而 MPRC 的 `dimensions` 是全长度
 - 柱体中心 Z 坐标 = 柱体高度 / 2
 
-### 3.2 动态障碍物（已弃用，保留参考）
+### 4.2 动态障碍物（已弃用，保留参考）
 
 旧版配置使用动态球体障碍物，现已替换为静态柱体。如需恢复动态障碍物，请参考：
 
@@ -99,7 +172,7 @@
 
 ---
 
-## 4. 双臂系统的几何对齐
+## 5. 双臂系统的几何对齐
 
 在双臂系统中，基座的平移位置对避障计算至关重要：
 
@@ -111,7 +184,7 @@
 
 ---
 
-## 5. 常见调试问题
+## 6. 常见调试问题
 
 - **虚假障碍物 (Phantom Obstacle)**: 如果在 MuJoCo 中删除了物体但未修改 `collision_env_my_task.yaml`，机器人会避让一个看不见的"空气墙"。
 - **碰撞球重叠**: 如果日志显示 `Setting Robot Base to: 0, 0, 0`，说明双臂计算基座未正确加载参数，会导致避障逻辑完全错乱。
@@ -120,20 +193,27 @@
 
 ---
 
-## 6. 维护规范
+## 7. 维护规范
 
 每次修改仿真场景或机器人构型（如更换手爪）后，请按以下顺序执行：
-1. 修改 `src/` 下对应的 `.xml`, `.yaml` 或 `.xacro`。
-2. 执行 `colcon build --packages-select <相关包名>` 同步到 `install` 目录。
-3. 通过 `ros2 launch` 启动，并在 RViz 中确认 `collision_env_markers` 话题的柱体显示情况。
+
+1. **使用生成器或手动修改** `src/` 下对应的 `.xml`, `.yaml`
+2. **编译**:
+   ```bash
+   docker exec -it multipanda-container bash
+   cd /home/xiaozy24/dual_panda_ws
+   source /opt/ros/humble/setup.bash
+   colcon build --packages-select franka_description dual_arm_reactive_control
+   ```
+3. **测试**: 通过 `ros2 launch` 启动仿真，并在 RViz 中确认 `collision_env_markers` 话题的柱体显示情况
 
 ---
 
-## 7. 配置文件位置
+## 8. 配置文件位置
 
 | 文件 | 路径 |
 |------|------|
-| 柱体规格定义 | `src/multipanda_ros2/docs/collision_env.txt` |
+| 自动化生成器 | `src/multipanda_ros2/tools/generate_collision_env.py` |
 | MuJoCo 障碍物 | `src/multipanda_ros2/franka_description/mujoco/franka/objects.xml` |
 | MPRC 碰撞配置 | `src/dualarm_mprc/dualarm_reactive_control/config/collision_env_my_task.yaml` |
 | 机器人碰撞球 | `src/dualarm_mprc/dualarm_reactive_control/config/panda_collision_spheres.yaml` |

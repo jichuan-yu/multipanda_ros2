@@ -8,7 +8,8 @@
         <geom name="sphere_01" type="sphere" size="0.1" rgba="0 1 0 1"/>
     </body> -->
 
-    <body name="dyn_sphere_1" pos="0.2 0.0 0.6" gravcomp="1">
+    <!-- Old dynamic spheres (kept for reference) -->
+    <!-- <body name="dyn_sphere_1" pos="0.2 0.0 0.6" gravcomp="1">
         <freejoint name="dyn_sphere_1_joint"/>
         <geom name="dyn_sphere_1" type="sphere" size="0.05" rgba="1 0 0 1" mass="0.1"/>
     </body>
@@ -19,7 +20,58 @@
     <body name="dyn_sphere_3" pos="0.6 0.0 0.6" gravcomp="1">
         <freejoint name="dyn_sphere_3_joint"/>
         <geom name="dyn_sphere_3" type="sphere" size="0.05" rgba="1 0 0 1" mass="0.1"/>
-    </body>
+    </body> -->
+    <!-- End of old dynamic spheres -->
+
+    <!-- Static pillars for scalable and cluttered environment -->
+    <!-- Format: X Y length width height (from collision_env.txt) -->
+    <!-- MuJoCo size = half-extents [length/2, width/2, height/2], pos Z = height/2 -->
+
+    <!-- Pillar 1: X=0.2, Y=0.0, L=0.05, W=0.05, H=0.6 -->
+    <geom name="pillar_01" type="box" size="0.025 0.025 0.3" pos="0.2 0.0 0.3"
+          friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
+          rgba="0.2 0.4 0.8 1"/>
+
+    <!-- Pillar 2: X=0.3, Y=0.4, L=0.05, W=0.05, H=0.5 -->
+    <geom name="pillar_02" type="box" size="0.025 0.025 0.25" pos="0.3 0.4 0.25"
+          friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
+          rgba="0.2 0.4 0.8 1"/>
+
+    <!-- Pillar 3: X=0.35, Y=-0.35, L=0.05, W=0.05, H=0.4 -->
+    <geom name="pillar_03" type="box" size="0.025 0.025 0.2" pos="0.35 -0.35 0.2"
+          friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
+          rgba="0.2 0.4 0.8 1"/>
+
+    <!-- Pillar 4: X=0.5, Y=0.25, L=0.05, W=0.05, H=0.3 -->
+    <geom name="pillar_04" type="box" size="0.025 0.025 0.15" pos="0.5 0.25 0.15"
+          friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
+          rgba="0.2 0.4 0.8 1"/>
+
+    <!-- Pillar 5: X=0.55, Y=-0.1, L=0.1, W=0.1, H=0.2 -->
+    <geom name="pillar_05" type="box" size="0.05 0.05 0.1" pos="0.55 -0.1 0.1"
+          friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
+          rgba="0.2 0.4 0.8 1"/>
+
+    <!-- Pillar 6: X=0.65, Y=0.2, L=0.05, W=0.05, H=0.6 -->
+    <geom name="pillar_06" type="box" size="0.025 0.025 0.3" pos="0.65 0.2 0.3"
+          friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
+          rgba="0.2 0.4 0.8 1"/>
+
+    <!-- Pillar 7: X=0.75, Y=-0.4, L=0.05, W=0.05, H=0.5 -->
+    <geom name="pillar_07" type="box" size="0.025 0.025 0.25" pos="0.75 -0.4 0.25"
+          friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
+          rgba="0.2 0.4 0.8 1"/>
+
+    <!-- Pillar 8: X=0.8, Y=0.0, L=0.1, W=0.1, H=0.2 -->
+    <geom name="pillar_08" type="box" size="0.05 0.05 0.1" pos="0.8 0.0 0.1"
+          friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
+          rgba="0.2 0.4 0.8 1"/>
+
+    <!-- Pillar 9: X=0.9, Y=0.2, L=0.05, W=0.05, H=0.6 -->
+    <geom name="pillar_09" type="box" size="0.025 0.025 0.3" pos="0.9 0.2 0.3"
+          friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
+          rgba="0.2 0.4 0.8 1"/>
+    <!-- End of static pillars -->
 
     <!-- <body name="obj_box_02" pos="0.5 0.1 0.25">
         <geom name="obj_box_02" type="box" size="0.03 0.03 0.05" solimp="0.998 0.998 0.001" solref="0.001 1" density="500" rgba="1 0.56 0.43 1"/>
@@ -27,19 +79,19 @@
     </body>  -->
     <!-- <body name="obj_box_01" pos="0.0 0.0 0.25">
         <geom name="obj_box_01" fromto="0.0 0.0 0.5  0.0 0.0 0.0"  size="0.04" type="box" rgba="1 0.56 0.43 1"/>
-    </body> 
+    </body>
 
     <body name="obj_box_02" pos="0.0 0.0 0.25">
         <geom name="obj_box_02" fromto="0.0 0.0 0.5  0.0 0.0 0.0"  size="0.04" type="box" rgba="1 0.56 0.43 1"/>
-    </body> 
+    </body>
 
     <body name="obj_box_03" pos="0.0 0.0 0.25">
         <geom name="obj_box_03" fromto="0.0 0.0 0.5  0.0 0.0 0.0"  size="0.04" type="box" rgba="1 0.56 0.43 1"/>
-    </body> 
+    </body>
 
     <body name="obj_box_04" pos="0.0 0.0 0.25">
         <geom name="obj_box_04" fromto="0.0 0.0 0.5  0.0 0.0 0.0"  size="0.04" type="box" rgba="1 0.56 0.43 1"/>
-    </body> 
+    </body>
 
     <body name="obj_box_05" pos="0.0 0.0 0.25">
         <geom name="obj_box_05" fromto="0.0 0.0 0.5  0.0 0.0 0.0"  size="0.04" type="box" rgba="1 0.56 0.43 1"/>
@@ -53,23 +105,23 @@
 
     <!-- <body name="obj_cylinder_01" pos="0.0 0.0 0.25">
         <geom name="obj_cylinder_01" fromto="0.0 0.0 0.5  0.0 0.0 0.0" size="0.04" type="cylinder" rgba="1 0.56 0.43 1"/>
-    </body> 
+    </body>
 
     <body name="obj_cylinder_02" pos="0.0 0.0 0.25">
         <geom name="obj_cylinder_02" fromto="0.0 0.0 0.5  0.0 0.0 0.0" size="0.04" type="cylinder" rgba="1 0.56 0.43 1"/>
-    </body> 
+    </body>
 
     <body name="obj_cylinder_03" pos="0.0 0.0 0.25">
         <geom name="obj_cylinder_03" fromto="0.0 0.0 0.5  0.0 0.0 0.0" size="0.04" type="cylinder" rgba="1 0.56 0.43 1"/>
-    </body> 
+    </body>
 
     <body name="obj_cylinder_04" pos="0.0 0.0 0.25">
         <geom name="obj_cylinder_04" fromto="0.0 0.0 0.5  0.0 0.0 0.0" size="0.04" type="cylinder" rgba="1 0.56 0.43 1"/>
-    </body> 
+    </body>
 
     <body name="obj_cylinder_05" pos="0.0 0.0 0.25">
         <geom name="obj_cylinder_05" fromto="0.0 0.0 0.5  0.0 0.0 0.0" size="0.04" type="cylinder" rgba="1 0.56 0.43 1"/>
     </body>  -->
-    
+
   </worldbody>
 </mujocoinclude>

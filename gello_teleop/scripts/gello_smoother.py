@@ -13,10 +13,10 @@ class GelloSmootherConfig:
     target_joint_topic: str = '/joint_impedance/joints_desired'
     joint_state_topic: str = '/panda/joint_states'
     publish_hz: float = 100.0
-    smooth_threshold: float = 0.5  # 误差大于此值时开始平滑（弧度）
-    full_tracking_threshold: float = 0.05  # 误差小于此值时完全跟踪（弧度）
-    max_velocity: float = 0.3  # 最大关节速度（弧度/秒）
-    max_acceleration: float = 1.0  # 最大关节加速度（弧度/秒²）
+    smooth_threshold: float = 0.5  
+    full_tracking_threshold: float = 0.05  
+    max_velocity: float = 0.3  
+    max_acceleration: float = 1.0  
     joint_limits: np.ndarray = field(
         default_factory=lambda: np.array([
             [-2.8973, 2.8973],
@@ -34,6 +34,114 @@ class GelloSmootherConfig:
             raise ValueError('joint_limits must be shape (7, 2)')
 
 
+class JointSmoothTrajectory:
+    def __init__(self, start_pos, end_pos, max_vel, max_acc):
+        self.start_pos = start_pos
+        self.end_pos = end_pos
+        self.max_vel = max_vel
+        self.max_acc = max_acc
+        self.distance = abs(end_pos - start_pos)
+        
+        if self.distance < 0.0001:
+            self._is_finished = True
+            self.duration = 0.0
+            return
+        
+        self._is_finished = False
+        self.calculate_trajectory()
+    
+    def calculate_trajectory(self):
+        d = self.distance
+        v_max = self.max_vel
+        a_max = self.max_acc
+        
+        t_acc = v_max / a_max
+        d_acc = 0.5 * a_max * t_acc ** 2
+        
+        if 2 * d_acc >= d:
+            t_acc = np.sqrt(d / a_max)
+            self.t_jerk = t_acc
+            self.t_accel = t_acc
+            self.t_const = 0.0
+            self.t_decel = t_acc
+            self.duration = 2 * t_acc
+            self.v_peak = a_max * t_acc
+        else:
+            self.t_jerk = t_acc
+            self.t_accel = t_acc
+            self.t_const = (d - 2 * d_acc) / v_max
+            self.t_decel = t_acc
+            self.duration = 2 * t_acc + self.t_const
+            self.v_peak = v_max
+        
+        self.sign = 1.0 if (self.end_pos - self.start_pos) >= 0 else -1.0
+    
+    def get_position(self, t):
+        if self._is_finished or self.distance < 0.0001:
+            return self.end_pos
+        
+        t = max(0.0, min(t, self.duration))
+        
+        if t <= self.t_jerk:
+            s = self.s_curve_accel(t)
+        elif t <= self.t_jerk + self.t_accel:
+            s = self.const_accel(t - self.t_jerk)
+        elif t <= self.t_jerk + self.t_accel + self.t_const:
+            s = self.const_vel(t - self.t_jerk - self.t_accel)
+        elif t <= self.duration - self.t_jerk:
+            s = self.const_decel(t - self.duration + self.t_jerk + self.t_decel)
+        else:
+            s = self.s_curve_decel(t - self.duration + self.t_jerk)
+        
+        return self.start_pos + self.sign * s
+    
+    def s_curve_accel(self, t):
+        T = self.t_jerk
+        a_max = self.max_acc
+        return (a_max / (6 * T ** 3)) * t ** 4 * (3 * T - t)
+    
+    def const_accel(self, t):
+        v_peak = self.v_peak
+        T_jerk = self.t_jerk
+        a_max = self.max_acc
+        s_jerk = (a_max / 24) * T_jerk ** 2
+        v_jerk = (a_max / 6) * T_jerk ** 2 / T_jerk
+        return s_jerk + v_jerk * t + 0.5 * a_max * t ** 2
+    
+    def const_vel(self, t):
+        v_peak = self.v_peak
+        T_jerk = self.t_jerk
+        T_acc = self.t_accel
+        a_max = self.max_acc
+        s_jerk = (a_max / 24) * T_jerk ** 2
+        v_jerk = (a_max / 6) * T_jerk
+        s_acc = s_jerk + v_jerk * T_acc + 0.5 * a_max * T_acc ** 2
+        v_acc = v_jerk + a_max * T_acc
+        return s_acc + v_acc * t
+    
+    def const_decel(self, t):
+        d = self.distance
+        v_peak = self.v_peak
+        T_jerk = self.t_jerk
+        a_max = self.max_acc
+        s_jerk = (a_max / 24) * T_jerk ** 2
+        v_jerk = (a_max / 6) * T_jerk
+        s_acc = s_jerk + v_jerk * self.t_accel + 0.5 * a_max * self.t_accel ** 2
+        s_const = s_acc + v_peak * self.t_const
+        v_current = v_peak - a_max * t
+        return s_const + v_peak * t - 0.5 * a_max * t ** 2
+    
+    def s_curve_decel(self, t):
+        d = self.distance
+        T = self.t_jerk
+        a_max = self.max_acc
+        return d - (a_max / (6 * T ** 3)) * t ** 4 * (3 * T - t)
+    
+    @property
+    def is_finished(self):
+        return self._is_finished
+
+
 class GelloSmootherNode(Node):
     def __init__(self, config: GelloSmootherConfig = None):
         super().__init__('gello_smoother')
@@ -49,18 +157,16 @@ class GelloSmootherNode(Node):
 
         self.arm_joint_names = [f'{self.arm_id}_joint{i + 1}' for i in range(7)]
         
-        # 当前状态
         self.q_current = None
         self.q_target_raw = None
         self.q_target_smooth = None
-        self.q_velocity = np.zeros(7, dtype=float)
         
-        # 状态标志
         self.joint_states_received = False
         self.raw_target_received = False
-        self.in_smooth_mode = False
+        self.in_full_tracking = False
+        self.trajectories = None
+        self.trajectory_start_time = None
 
-        # 订阅机械臂关节状态
         self.joint_state_sub = self.create_subscription(
             JointState,
             self.config.joint_state_topic,
@@ -68,7 +174,6 @@ class GelloSmootherNode(Node):
             10,
         )
 
-        # 订阅原始目标（来自GELLO）
         self.raw_target_sub = self.create_subscription(
             JointState,
             self.config.source_joint_topic,
@@ -76,14 +181,12 @@ class GelloSmootherNode(Node):
             10,
         )
 
-        # 发布平滑后的目标
         self.smooth_target_pub = self.create_publisher(
             JointState,
             self.config.target_joint_topic,
             10
         )
 
-        # 定时器执行平滑计算
         self.timer = self.create_timer(self.publish_period, self.timer_callback)
 
         self.get_logger().info('Gello Smoother Node initialized.')
@@ -102,7 +205,6 @@ class GelloSmootherNode(Node):
             self.q_current = q_arm
             self.joint_states_received = True
             
-            # 初始化平滑目标为当前位置
             if self.q_target_smooth is None:
                 self.q_target_smooth = q_arm.copy()
         except Exception as exc:
@@ -113,8 +215,36 @@ class GelloSmootherNode(Node):
             if len(msg.position) >= 7:
                 self.q_target_raw = np.array(msg.position[:7], dtype=float)
                 self.raw_target_received = True
+                
+                if not self.in_full_tracking and self.q_current is not None:
+                    self.check_and_start_smooth()
         except Exception as exc:
             self.get_logger().warn(f'Failed to parse raw target: {exc}')
+
+    def check_and_start_smooth(self):
+        errors = np.abs(self.q_target_raw - self.q_current)
+        max_error = np.max(errors)
+        
+        if max_error > self.smooth_threshold:
+            self.start_smooth_trajectory()
+        else:
+            self.in_full_tracking = True
+            self.get_logger().info(f'Direct full tracking (max error: {max_error:.3f} rad)')
+
+    def start_smooth_trajectory(self):
+        self.trajectories = []
+        for i in range(7):
+            start_pos = float(self.q_current[i])
+            end_pos = float(self.q_target_raw[i])
+            traj = JointSmoothTrajectory(start_pos, end_pos, self.max_velocity, self.max_acceleration)
+            self.trajectories.append(traj)
+        
+        max_duration = max(t.duration for t in self.trajectories)
+        self.trajectory_start_time = self.get_clock().now().nanoseconds / 1e9
+        
+        self.get_logger().info(f'Starting S-curve smooth trajectory')
+        self.get_logger().info(f'Max error: {np.max(np.abs(self.q_target_raw - self.q_current)):.3f} rad')
+        self.get_logger().info(f'Trajectory duration: {max_duration:.2f} s')
 
     def timer_callback(self):
         if not self.joint_states_received or not self.raw_target_received:
@@ -123,88 +253,44 @@ class GelloSmootherNode(Node):
         if self.q_current is None or self.q_target_raw is None:
             return
 
-        # 计算当前位置与原始目标的误差
-        error = self.q_target_raw - self.q_current
-        error_norm = np.linalg.norm(error)
-
-        # 判断工作模式
-        if error_norm < self.full_tracking_threshold:
-            # 完全跟踪模式
+        if self.in_full_tracking:
             self.q_target_smooth = self.q_target_raw.copy()
-            self.q_velocity = np.zeros(7)
-            if self.in_smooth_mode:
-                self.in_smooth_mode = False
-                self.get_logger().info(f'Switched to full tracking mode (error: {error_norm:.3f} rad)')
-        
-        elif error_norm > self.smooth_threshold:
-            # 平滑过渡模式
-            self.in_smooth_mode = True
-            self.smooth_transition()
-        
-        else:
-            # 过渡区域，继续平滑
-            if self.in_smooth_mode:
-                self.smooth_transition()
-            else:
-                # 刚进入过渡区域，开始平滑
-                self.in_smooth_mode = True
-                self.get_logger().info(f'Switched to smooth mode (error: {error_norm:.3f} rad)')
-                self.smooth_transition()
-
-        # 应用关节限位
-        self.q_target_smooth = np.clip(
-            self.q_target_smooth, 
-            self.joint_limits[:, 0], 
-            self.joint_limits[:, 1]
-        )
-
-        # 发布平滑后的目标
-        self.publish_target()
-
-    def smooth_transition(self):
-        """梯形速度规划平滑过渡"""
-        # 计算目标方向
-        error = self.q_target_raw - self.q_target_smooth
-        error_norm = np.linalg.norm(error)
-        
-        if error_norm < 0.001:
+            self.publish_target()
             return
 
-        direction = error / error_norm
-
-        # 计算期望速度（受最大速度限制）
-        desired_velocity = direction * min(self.max_velocity, error_norm / self.publish_period)
-
-        # 计算速度变化（受最大加速度限制）
-        velocity_change = desired_velocity - self.q_velocity
-        max_velocity_change = self.max_acceleration * self.publish_period
-        
-        velocity_change = np.clip(
-            velocity_change, 
-            -max_velocity_change, 
-            max_velocity_change
-        )
-
-        # 更新速度
-        self.q_velocity += velocity_change
-        self.q_velocity = np.clip(self.q_velocity, -self.max_velocity, self.max_velocity)
-
-        # 更新位置
-        self.q_target_smooth += self.q_velocity * self.publish_period
-
-        # 防止超过目标
-        remaining_error = self.q_target_raw - self.q_target_smooth
-        if np.dot(remaining_error, self.q_velocity) < 0:
-            # 已经超过目标，直接设置为目标
-            self.q_target_smooth = self.q_target_raw.copy()
-            self.q_velocity = np.zeros(7)
+        if self.trajectories is not None and self.trajectory_start_time is not None:
+            current_time = self.get_clock().now().nanoseconds / 1e9
+            elapsed = current_time - self.trajectory_start_time
+            
+            all_finished = True
+            for i in range(7):
+                self.q_target_smooth[i] = self.trajectories[i].get_position(elapsed)
+                if not self.trajectories[i].is_finished and elapsed < self.trajectories[i].duration:
+                    all_finished = False
+            
+            self.q_target_smooth = np.clip(
+                self.q_target_smooth, 
+                self.joint_limits[:, 0], 
+                self.joint_limits[:, 1]
+            )
+            
+            self.publish_target()
+            
+            if all_finished:
+                self.in_full_tracking = True
+                self.trajectories = None
+                self.trajectory_start_time = None
+                self.get_logger().info('Smooth trajectory completed, switching to full tracking')
+        else:
+            self.q_target_smooth = self.q_current.copy()
+            self.publish_target()
 
     def publish_target(self):
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.name = self.arm_joint_names
         msg.position = self.q_target_smooth.tolist()
-        msg.velocity = self.q_velocity.tolist()
+        msg.velocity = [0.0] * len(self.arm_joint_names)
         self.smooth_target_pub.publish(msg)
 
 

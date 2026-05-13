@@ -75,6 +75,9 @@ python3 src/multipanda_ros2/tools/generate_collision_env.py --margin 0.02
 - **小柱**: 尺寸 0.05×0.05m，高度随机选择 {0.3, 0.4, 0.5, 0.6, 0.7}m
 - **大柱**: 尺寸 0.1×0.1m，固定高度 0.2m
 - **坐标精度**: 所有 X、Y 坐标为 0.01 的整数倍
+- **截面类型**: 每个柱体随机选择 **Box (矩形)** 或 **Cylinder (圆形)** 截面，概率各 50%
+  - 圆形截面直径 = min(原长, 原宽)，即小柱直径 0.05m，大柱直径 0.1m
+  - 重叠检测统一按矩形截面进行，安全条件自然满足
 
 ### 3.4 自定义生成参数
 
@@ -119,33 +122,54 @@ python3 src/multipanda_ros2/tools/generate_collision_env.py --margin 0.02
 
 ### 4.1 静态柱体环境（当前配置）
 
-当前环境使用 **12 个静态长方形柱体** 固定在地面上，形成可扩展和密集的障碍物环境。
+当前环境使用 **12 个静态柱体** 固定在地面上，每个柱体随机选择 **矩形 (Box)** 或 **圆形 (Cylinder)** 截面。
 
-当在仿真中添加一个静态柱体时，必须在两个地方同时定义：
+#### 矩形柱体 (Box)
 
-1.  **MuJoCo (XML)**: 使用静态 `<geom>` 元素（无 body/joint，固定到地面）
-    ```xml
-    <geom name="pillar_01" type="box" size="0.025 0.025 0.3" pos="0.2 0.0 0.3"
-          friction="2 0.005 0.0001" rgba="0.2 0.4 0.8 1"/>
-    ```
-    - `size`: 半长宽高，即 `[length/2, width/2, height/2]`
-    - `pos`: 柱体中心位置，Z 轴为 `height/2`
+**MuJoCo (XML)**:
+```xml
+<geom name="pillar_01" type="box" size="0.025 0.025 0.3" pos="0.2 0.0 0.3"
+      friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
+      rgba="0.2 0.4 0.8 1"/>
+```
+- `size`: 半长宽高，即 `[length/2, width/2, height/2]`
 
-2.  **MPRC Config (YAML)**:
-    ```yaml
-    - id: "pillar_01"
-      type: "Box"
-      dimensions: [0.05, 0.05, 0.6]  # 全长、全宽、全高
-      pose:
-        position: [0.2, 0.0, 0.3]     # X, Y, height/2
-        orientation: [0.0, 0.0, 0.0, 1.0]
-    ```
-    - `dimensions`: 全尺寸 `[length, width, height]`（与 MuJoCo 不同）
-    - `position`: 柱体中心位置，与 MuJoCo 保持一致
+**MPRC Config (YAML)**:
+```yaml
+- id: "pillar_01"
+  type: "Box"
+  dimensions: [0.05, 0.05, 0.6]  # 全长、全宽、全高
+  pose:
+    position: [0.2, 0.0, 0.3]     # X, Y, height/2
+    orientation: [0.0, 0.0, 0.0, 1.0]
+```
+
+#### 圆形柱体 (Cylinder)
+
+**MuJoCo (XML)**:
+```xml
+<geom name="pillar_02" type="cylinder" size="0.025 0.15" pos="0.3 0.0 0.15"
+      friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
+      rgba="0.2 0.4 0.8 1"/>
+```
+- `size`: `[radius, height/2]`，即 `[直径/2, 高度/2]`
+- 对于 0.05×0.05m 的小柱：`size="0.025 0.15"` (半径 0.025m)
+- 对于 0.1×0.1m 的大柱：`size="0.05 0.1"` (半径 0.05m)
+
+**MPRC Config (YAML)**:
+```yaml
+- id: "pillar_02"
+  type: "Cylinder"
+  dimensions: [0.05, 0.4]  # 直径、高度
+  pose:
+    position: [0.3, 0.0, 0.2]     # X, Y, height/2
+    orientation: [0.0, 0.0, 0.0, 1.0]
+```
 
 **注意**：
 - 静态障碍物使用 `<geom>` 直接放置在 worldbody 中，无需 `<body>` 和 `<joint>`
-- MuJoCo 的 `size` 是半长宽（Half-extent），而 MPRC 的 `dimensions` 是全长度
+- 圆形柱体的 `radius = min(length, width) / 2`
+- 重叠检测统一按矩形截面进行
 - 柱体中心 Z 坐标 = 柱体高度 / 2
 
 ### 4.2 动态障碍物（已弃用，保留参考）

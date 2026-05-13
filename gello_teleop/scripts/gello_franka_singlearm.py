@@ -12,10 +12,10 @@ from gello.agents.gello_agent import GelloAgent, DynamixelRobotConfig
 class GelloFrankaSingleArmConfig:
     arm_id: str = 'panda'
     joint_state_topic: str = '/panda/joint_states'
-    target_joint_topic: str = '/joint_impedance/joints_desired'
+    target_joint_topic: str = '/gello/joints_desired'  # 发布到中间话题，由平滑脚本处理
     gello_port: str = '/dev/ttyUSB0'
     publish_hz: float = 50.0
-    startup_joint_threshold: float = 0.2
+    startup_joint_threshold: float = 1.0  # 放宽启动检查，平滑脚本会处理差异
     joint_offsets: np.ndarray = field(
         default_factory=lambda: np.array([
             1.0 * np.pi,

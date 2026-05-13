@@ -9,55 +9,55 @@
     </body> -->
 
     <!-- Auto-generated static pillars -->
-    <!-- Format: X Y length width height -->
-    <!-- MuJoCo size = half-extents [length/2, width/2, height/2], pos Z = height/2 -->
+    <!-- Type: 0=Box, 1=Cylinder -->
+    <!-- For cylinders: diameter = min(length, width), fromto defines height -->
 
-    <!-- pillar_01: X=0.24, Y=0.03, L=0.05, W=0.05, H=0.4 -->
-    <geom name="pillar_01" type="box" size="0.025 0.025 0.2" pos="0.24 0.03 0.20"
+    <!-- pillar_01: X=0.22, Y=-0.01, Type=CYLINDER, H=0.3 -->
+    <geom name="pillar_01" type="cylinder" size="0.025 0.150" pos="0.22 -0.01 0.15"
           friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
           rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_02: X=0.31, Y=-0.44, L=0.05, W=0.05, H=0.5 -->
-    <geom name="pillar_02" type="box" size="0.025 0.025 0.25" pos="0.31 -0.44 0.25"
+    <!-- pillar_02: X=0.28, Y=-0.42, Type=BOX, H=0.3 -->
+    <geom name="pillar_02" type="box" size="0.025 0.025 0.150" pos="0.28 -0.42 0.15"
           friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
           rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_03: X=0.32, Y=0.43, L=0.05, W=0.05, H=0.4 -->
-    <geom name="pillar_03" type="box" size="0.025 0.025 0.2" pos="0.32 0.43 0.20"
+    <!-- pillar_03: X=0.23, Y=0.42, Type=BOX, H=0.5 -->
+    <geom name="pillar_03" type="box" size="0.025 0.025 0.250" pos="0.23 0.42 0.25"
           friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
           rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_04: X=0.53, Y=0.20, L=0.05, W=0.05, H=0.3 -->
-    <geom name="pillar_04" type="box" size="0.025 0.025 0.15" pos="0.53 0.20 0.15"
+    <!-- pillar_04: X=0.41, Y=-0.15, Type=CYLINDER, H=0.4 -->
+    <geom name="pillar_04" type="cylinder" size="0.025 0.200" pos="0.41 -0.15 0.20"
           friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
           rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_05: X=0.46, Y=-0.01, L=0.05, W=0.05, H=0.3 -->
-    <geom name="pillar_05" type="box" size="0.025 0.025 0.15" pos="0.46 -0.01 0.15"
+    <!-- pillar_05: X=0.42, Y=-0.36, Type=CYLINDER, H=0.2 -->
+    <geom name="pillar_05" type="cylinder" size="0.050 0.100" pos="0.42 -0.36 0.10"
           friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
           rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_06: X=0.43, Y=0.34, L=0.05, W=0.05, H=0.4 -->
-    <geom name="pillar_06" type="box" size="0.025 0.025 0.2" pos="0.43 0.34 0.20"
+    <!-- pillar_06: X=0.43, Y=0.33, Type=BOX, H=0.4 -->
+    <geom name="pillar_06" type="box" size="0.025 0.025 0.200" pos="0.43 0.33 0.20"
           friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
           rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_07: X=0.46, Y=0.08, L=0.1, W=0.1, H=0.2 -->
-    <geom name="pillar_07" type="box" size="0.05 0.05 0.1" pos="0.46 0.08 0.10"
+    <!-- pillar_07: X=0.58, Y=0.06, Type=CYLINDER, H=0.5 -->
+    <geom name="pillar_07" type="cylinder" size="0.025 0.250" pos="0.58 0.06 0.25"
           friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
           rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_08: X=0.73, Y=-0.26, L=0.05, W=0.05, H=0.6 -->
-    <geom name="pillar_08" type="box" size="0.025 0.025 0.3" pos="0.73 -0.26 0.30"
+    <!-- pillar_08: X=0.68, Y=-0.01, Type=CYLINDER, H=0.2 -->
+    <geom name="pillar_08" type="cylinder" size="0.050 0.100" pos="0.68 -0.01 0.10"
           friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
           rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_09: X=0.66, Y=0.25, L=0.1, W=0.1, H=0.2 -->
-    <geom name="pillar_09" type="box" size="0.05 0.05 0.1" pos="0.66 0.25 0.10"
+    <!-- pillar_09: X=0.60, Y=0.24, Type=CYLINDER, H=0.6 -->
+    <geom name="pillar_09" type="cylinder" size="0.025 0.300" pos="0.60 0.24 0.30"
           friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
           rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_10: X=0.72, Y=-0.07, L=0.05, W=0.05, H=0.7 -->
-    <geom name="pillar_10" type="box" size="0.025 0.025 0.35" pos="0.72 -0.07 0.35"
+    <!-- pillar_10: X=0.70, Y=0.08, Type=CYLINDER, H=0.5 -->
+    <geom name="pillar_10" type="cylinder" size="0.025 0.250" pos="0.70 0.08 0.25"
           friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
           rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_11: X=0.77, Y=-0.15, L=0.05, W=0.05, H=0.7 -->
-    <geom name="pillar_11" type="box" size="0.025 0.025 0.35" pos="0.77 -0.15 0.35"
+    <!-- pillar_11: X=0.80, Y=0.14, Type=CYLINDER, H=0.7 -->
+    <geom name="pillar_11" type="cylinder" size="0.025 0.350" pos="0.80 0.14 0.35"
           friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
           rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_12: X=0.82, Y=0.03, L=0.05, W=0.05, H=0.3 -->
-    <geom name="pillar_12" type="box" size="0.025 0.025 0.15" pos="0.82 0.03 0.15"
+    <!-- pillar_12: X=0.82, Y=-0.17, Type=BOX, H=0.6 -->
+    <geom name="pillar_12" type="box" size="0.025 0.025 0.300" pos="0.82 -0.17 0.30"
           friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
           rgba="0.2 0.4 0.8 1"/>
 

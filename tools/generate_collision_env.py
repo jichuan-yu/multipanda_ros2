@@ -47,6 +47,7 @@ class Pillar:
     length: float  # Length along X (meters)
     width: float  # Width along Y (meters)
     height: float  # Height along Z (meters)
+    pillar_type: int = 0  # 0 = rectangular (box), 1 = circular (cylinder)
 
     @property
     def name(self) -> str:
@@ -68,6 +69,16 @@ class Pillar:
     def z_position(self) -> float:
         """Z position for center of pillar (height/2 above ground)."""
         return self.half_height
+
+    @property
+    def radius(self) -> float:
+        """For circular pillars: radius = min(length, width) / 2"""
+        return min(self.length, self.width) / 2
+
+    @property
+    def type_name(self) -> str:
+        """Human-readable type name."""
+        return "cylinder" if self.pillar_type == 1 else "box"
 
 
 class CollisionEnvGenerator:
@@ -121,6 +132,7 @@ class CollisionEnvGenerator:
     def boxes_overlap(self, p1: Pillar, p2: Pillar) -> bool:
         """
         Check if two pillars overlap (including safety margin).
+        Always uses rectangular footprint for overlap detection.
 
         Args:
             p1: First pillar
@@ -132,6 +144,7 @@ class CollisionEnvGenerator:
         dx = abs(p1.x - p2.x)
         dy = abs(p1.y - p2.y)
 
+        # Use original rectangle dimensions for overlap check
         min_dist_x = (p1.length + p2.length) / 2 + self.margin
         min_dist_y = (p1.width + p2.width) / 2 + self.margin
 
@@ -159,6 +172,9 @@ class CollisionEnvGenerator:
         Returns:
             Placed pillar, or None if placement failed
         """
+        # Randomly assign pillar type: 0 (box) or 1 (cylinder) with equal probability
+        pillar_type = random.randint(0, 1)
+
         for _ in range(self.max_retries):
             # Generate random position within zone bounds, rounded to 0.01
             x = round(random.uniform(zone.x_min, zone.x_max), 2)
@@ -170,7 +186,8 @@ class CollisionEnvGenerator:
                 y=y,
                 length=length,
                 width=width,
-                height=height
+                height=height,
+                pillar_type=pillar_type
             )
 
             if not self.check_overlap_with_existing(pillar, existing):
@@ -219,8 +236,9 @@ class CollisionEnvGenerator:
                 pillar.index = pillar_index
                 pillar_index += 1
                 pillars.append(pillar)
+                type_str = "CYLINDER" if pillar.pillar_type == 1 else "BOX"
                 print(f"  Placed {pillar.name}: X={pillar.x:.2f}, Y={pillar.y:.2f}, "
-                      f"Size={length}x{width}, H={height}, Zone={pillar_zone.name}")
+                      f"Size={length}x{width}, H={height}, Type={type_str}, Zone={pillar_zone.name}")
 
         return pillars
 
@@ -245,14 +263,26 @@ def generate_mujoco_xml(pillars: List[Pillar]) -> str:
 
     lines.append('')
     lines.append('    <!-- Auto-generated static pillars -->')
-    lines.append('    <!-- Format: X Y length width height -->')
-    lines.append('    <!-- MuJoCo size = half-extents [length/2, width/2, height/2], pos Z = height/2 -->')
+    lines.append('    <!-- Type: 0=Box, 1=Cylinder -->')
+    lines.append('    <!-- For cylinders: diameter = min(length, width), fromto defines height -->')
     lines.append('')
 
     for p in pillars:
-        lines.append(f'    <!-- {p.name}: X={p.x:.2f}, Y={p.y:.2f}, L={p.length}, W={p.width}, H={p.height} -->')
-        lines.append(f'    <geom name="{p.name}" type="box" '
-                     f'size="{p.half_length} {p.half_width} {p.half_height}" '
+        if p.pillar_type == 1:
+            # Cylinder: use fromto to define vertical orientation
+            # MuJoCo cylinder size is [radius, height*0.5]
+            type_str = "CYLINDER"
+            geom_type = "cylinder"
+            size = f"{p.radius:.3f} {p.half_height:.3f}"
+            # For cylinder, pos is center, same as box
+        else:
+            type_str = "BOX"
+            geom_type = "box"
+            size = f"{p.half_length:.3f} {p.half_width:.3f} {p.half_height:.3f}"
+
+        lines.append(f'    <!-- {p.name}: X={p.x:.2f}, Y={p.y:.2f}, Type={type_str}, H={p.height} -->')
+        lines.append(f'    <geom name="{p.name}" type="{geom_type}" '
+                     f'size="{size}" '
                      f'pos="{p.x:.2f} {p.y:.2f} {p.z_position:.2f}"')
         lines.append(f'          friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"')
         lines.append(f'          rgba="0.2 0.4 0.8 1"/>')
@@ -273,15 +303,26 @@ def generate_mprc_yaml(pillars: List[Pillar]) -> str:
         '',
         'collision_objects:',
         '  # Auto-generated static pillars',
-        '  # Format: X Y length width height',
-        '  # MPRC dimensions: full [length, width, height], position Z = height/2',
+        '  # Type: Box (rectangular) or Cylinder (circular)',
+        '  # For Box: dimensions = [length, width, height]',
+        '  # For Cylinder: dimensions = [diameter, height]',
         '',
     ]
 
     for p in pillars:
+        if p.pillar_type == 1:
+            # Cylinder: diameter = min(length, width)
+            obj_type = "Cylinder"
+            diameter = min(p.length, p.width) / 2 # MPRC expects diameter to be radius, so we divide by 2
+            dimensions = f"[{diameter}, {p.height}]  # diameter, height"
+        else:
+            # Box
+            obj_type = "Box"
+            dimensions = f"[{p.length}, {p.width}, {p.height}]  # length, width, height"
+
         lines.append(f'  - id: "{p.name}"')
-        lines.append(f'    type: "Box"')
-        lines.append(f'    dimensions: [{p.length}, {p.width}, {p.height}]  # full length, width, height')
+        lines.append(f'    type: "{obj_type}"')
+        lines.append(f'    dimensions: {dimensions}')
         lines.append(f'    pose:')
         lines.append(f'      position: [{p.x:.2f}, {p.y:.2f}, {p.z_position:.2f}]     # X, Y, height/2')
         lines.append(f'      orientation: [0.0, 0.0, 0.0, 1.0]')

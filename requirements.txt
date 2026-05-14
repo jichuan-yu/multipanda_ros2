@@ -1,0 +1,6 @@
+numpy>=1.21.0
+open3d>=0.15.0
+sensor-msgs>=4.0.0
+# 对于 rosbag2_py，需要系统已安装 ROS2 Humble，本文件不直接列出
+# 以下为可选（如果改用 rosbags 库，可取消注释）：
+# rosbags>=0.10.0

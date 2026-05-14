@@ -13,6 +13,7 @@ install(DIRECTORY mujoco launch urdf
 
 install(PROGRAMS
   scripts/camera_viewer.py
+  scripts/depth_trigger.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

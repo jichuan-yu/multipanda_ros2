@@ -4,32 +4,44 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
+import sys
+import yaml
+from pathlib import Path
 
 from gello.agents.gello_agent import GelloAgent, DynamixelRobotConfig
+
+
+def load_gello_config(config_path: str):
+    """Load GELLO configuration from YAML file."""
+    config_path = Path(config_path)
+    if not config_path.exists():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+    
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f)
+    
+    agent_config = config.get("agent", {})
+    dynamixel_config = agent_config.get("dynamixel_config", {})
+    
+    return {
+        "port": agent_config.get("port", "/dev/ttyUSB0"),
+        "joint_ids": tuple(dynamixel_config.get("joint_ids", (1, 2, 3, 4, 5, 6, 7))),
+        "joint_offsets": tuple(dynamixel_config.get("joint_offsets", (
+            1 * np.pi, 1 * np.pi, 0 * np.pi, 1 * np.pi, 1 * np.pi, 1 * np.pi, 0.25 * np.pi
+        ))),
+        "joint_signs": tuple(dynamixel_config.get("joint_signs", (1.0, -1.0, 1.0, 1.0, 1.0, -1.0, 1.0))),
+        "gripper_config": dynamixel_config.get("gripper_config", None),
+    }
 
 
 @dataclass
 class GelloFrankaSingleArmConfig:
     arm_id: str = 'panda'
     joint_state_topic: str = '/panda/joint_states'
-    target_joint_topic: str = '/gello/joints_desired'  # 发布到中间话题，由平滑脚本处理
+    target_joint_topic: str = '/joint_impedance/joints_desired'
     gello_port: str = '/dev/ttyUSB0'
     publish_hz: float = 50.0
-    startup_joint_threshold: float = 1.0  # 放宽启动检查，平滑脚本会处理差异
-    joint_offsets: np.ndarray = field(
-        default_factory=lambda: np.array([
-            1.0 * np.pi,
-            1.0 * np.pi,
-            0.0 * np.pi,
-            1.0 * np.pi,
-            1.0 * np.pi,
-            1.0 * np.pi,
-            0.25 * np.pi,
-        ], dtype=float)
-    )
-    joint_signs: np.ndarray = field(
-        default_factory=lambda: np.array([1.0, -1.0, 1.0, 1.0, 1.0, -1.0, 1.0], dtype=float)
-    )
+    startup_joint_threshold: float = 1.0
     joint_limits: np.ndarray = field(
         default_factory=lambda: np.array([
             [-2.8973, 2.8973],
@@ -53,19 +65,9 @@ class GelloFrankaSingleArmConfig:
         ], dtype=float)
     )
 
-    def __post_init__(self):
-        if self.joint_offsets.shape != (7,):
-            raise ValueError('joint_offsets must be length 7')
-        if self.joint_signs.shape != (7,):
-            raise ValueError('joint_signs must be length 7')
-        if self.joint_limits.shape != (7, 2):
-            raise ValueError('joint_limits must be shape (7, 2)')
-
 
 class GelloFrankaSingleArmNode(Node):
-    INIT_TIMEOUT_SEC = 2.0
-
-    def __init__(self, config: GelloFrankaSingleArmConfig = None):
+    def __init__(self, config: GelloFrankaSingleArmConfig = None, gello_config_path: str = None):
         super().__init__('gello_franka_singlearm')
 
         self.config = config if config is not None else GelloFrankaSingleArmConfig()
@@ -73,9 +75,6 @@ class GelloFrankaSingleArmNode(Node):
         self.joint_state_topic = self.config.joint_state_topic
         self.target_joint_topic = self.config.target_joint_topic
         self.publish_hz = float(self.config.publish_hz)
-        self.startup_joint_threshold = float(self.config.startup_joint_threshold)
-        self.joint_offsets = np.asarray(self.config.joint_offsets, dtype=float)
-        self.joint_signs = np.asarray(self.config.joint_signs, dtype=float)
         self.joint_limits = np.asarray(self.config.joint_limits, dtype=float)
         self.default_joint_target = np.asarray(self.config.default_joint_target, dtype=float)
 
@@ -93,35 +92,52 @@ class GelloFrankaSingleArmNode(Node):
 
         self.joint_publisher = self.create_publisher(JointState, self.target_joint_topic, 10)
 
-        init_start = self.get_clock().now().nanoseconds / 1e9
-        while (not self.joint_states_received and (self.get_clock().now().nanoseconds / 1e9 - init_start) < self.INIT_TIMEOUT_SEC):
-            rclpy.spin_once(self, timeout_sec=0.05)
-
-        if not self.joint_states_received:
-            raise RuntimeError(
-                f'Timeout waiting for {self.joint_state_topic} (>{self.INIT_TIMEOUT_SEC:.1f}s). '
-                'Cannot initialize startup sync check.'
-            )
+        # Load GELLO configuration from YAML or use defaults
+        if gello_config_path:
+            self.get_logger().info(f"Loading GELLO config from: {gello_config_path}")
+            gello_config = load_gello_config(gello_config_path)
+        else:
+            self.get_logger().info("Using default GELLO configuration")
+            gello_config = {
+                "port": "/dev/ttyUSB0",
+                "joint_ids": (1, 2, 3, 4, 5, 6, 7),
+                "joint_offsets": (1 * np.pi, 1 * np.pi, 0 * np.pi, 1 * np.pi, 1 * np.pi, 1 * np.pi, 0.25 * np.pi),
+                "joint_signs": (1.0, -1.0, 1.0, 1.0, 1.0, -1.0, 1.0),
+                "gripper_config": None,
+            }
 
         dynamixel_config = DynamixelRobotConfig(
-            joint_ids=(1, 2, 3, 4, 5, 6, 7),
-            joint_offsets=tuple(self.joint_offsets.tolist()),
-            joint_signs=tuple(self.joint_signs.tolist()),
-            gripper_config=None,
+            joint_ids=gello_config["joint_ids"],
+            joint_offsets=gello_config["joint_offsets"],
+            joint_signs=gello_config["joint_signs"],
+            gripper_config=gello_config["gripper_config"],
         )
 
         try:
             self.gello_agent = GelloAgent(
-                port=self.config.gello_port,
+                port=gello_config["port"],
                 dynamixel_config=dynamixel_config,
                 real=True,
             )
         except Exception as exc:
             raise RuntimeError(f'Failed to initialize Gello Agent: {exc}')
 
-        self._startup_joint_check()
+        # Log the loaded configuration
+        self.get_logger().info(f"GELLO Port: {gello_config['port']}")
+        self.get_logger().info(f"Joint offsets: {gello_config['joint_offsets']}")
+        self.get_logger().info(f"Joint signs: {gello_config['joint_signs']}")
 
-        self.get_logger().info('Gello Franka single-arm teleop node initialized.')
+        gello_joints = self.gello_agent.act({})
+        if gello_joints is None or len(gello_joints) < 7:
+            raise RuntimeError('Failed to read initial Gello joint positions')
+        q_first = np.asarray(gello_joints[:7], dtype=float)
+        self.get_logger().info(
+            'First Gello joint read (after offset correction): ' +
+            ', '.join(f'{float(val):.4f}' for val in q_first)
+        )
+
+        self.create_timer(1.0 / max(self.publish_hz, 1.0), self.timer_callback)
+        self.get_logger().info('Gello Franka single-arm teleop node initialized (direct control mode).')
 
     def joint_state_callback(self, msg: JointState):
         try:
@@ -142,43 +158,6 @@ class GelloFrankaSingleArmNode(Node):
         except Exception as exc:
             self.get_logger().warn(f'Failed to parse joint_states: {exc}')
 
-    def _startup_joint_check(self):
-        if self.q_current is None:
-            raise RuntimeError('No current robot joint state available for startup check.')
-
-        gello_joints = self.gello_agent.act({})
-        if gello_joints is None or len(gello_joints) < 7:
-            raise RuntimeError('Failed to read initial Gello joint positions for startup check.')
-
-        q_desired = np.asarray(gello_joints[:7], dtype=float)
-        difference = np.abs(q_desired - self.q_current)
-        default_difference = np.abs(q_desired - self.default_joint_target)
-
-        self.get_logger().info(
-            'First Gello joint read: ' + ', '.join(f'{float(val):.4f}' for val in q_desired)
-        )
-        self.get_logger().info(
-            'Deviation to default joint target: ' + ', '.join(
-                f'{float(diff):.4f} rad' for diff in default_difference
-            )
-        )
-
-        if np.any(difference > self.startup_joint_threshold):
-            diff_str = ', '.join(
-                f'{name}: {float(diff):.4f} rad'
-                for name, diff in zip(self.arm_joint_names, difference)
-            )
-            raise RuntimeError(
-                'Gello and Franka joint states differ too much at startup. '
-                f'Max difference: {float(np.max(difference)):.4f} rad. '
-                f'Per-joint differences: {diff_str}. '
-                'Check controller limits, robot pose, and Gello calibration before enabling motion.'
-            )
-
-        self.get_logger().info(
-            f'Startup joint sync check passed. Max difference: {float(np.max(difference)):.4f} rad.'
-        )
-
     def _publish_joint_command(self, q_desired):
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
@@ -188,17 +167,16 @@ class GelloFrankaSingleArmNode(Node):
         self.joint_publisher.publish(msg)
 
     def timer_callback(self):
-        if self.q_current is None:
-            return
-
         try:
             gello_joints = self.gello_agent.act({})
             if gello_joints is None or len(gello_joints) < 7:
                 self.get_logger().warn('Invalid Gello joint reading, skipping publish.')
                 return
 
-            q_desired = np.asarray(gello_joints[:7], dtype=float)
-            self._publish_joint_command(q_desired)
+            q_target = np.asarray(gello_joints[:7], dtype=float)
+            q_target = np.clip(q_target, self.joint_limits[:, 0], self.joint_limits[:, 1])
+
+            self._publish_joint_command(q_target)
         except Exception as exc:
             self.get_logger().error(f'Error publishing joint command: {exc}')
 
@@ -214,12 +192,35 @@ class GelloFrankaSingleArmNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = None
+    
+    # Parse command line arguments
+    import argparse
+    parser = argparse.ArgumentParser(description='GELLO Franka Single Arm ROS2 Bridge')
+    parser.add_argument('--config', type=str, default=None, help='Path to GELLO YAML config file')
+    parsed_args, _ = parser.parse_known_args(args)
+
+    # Set default config path if not provided
+    config_path = parsed_args.config
+    if config_path is None:
+        # Only read from package config directory
+        script_dir = Path(__file__).resolve().parent
+        package_config = script_dir.parent / 'config' / 'yam_auto_generated.yaml'
+        
+        if package_config.exists():
+            config_path = str(package_config)
+            print(f"Using package config: {config_path}")
+        else:
+            print(f"Config not found: {package_config}")
+            print("Using hardcoded default configuration")
+
     try:
-        node = GelloFrankaSingleArmNode()
-        node.create_timer(1.0 / max(node.publish_hz, 1.0), node.timer_callback)
+        node = GelloFrankaSingleArmNode(gello_config_path=config_path)
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
     finally:
         if node is not None:
             node.destroy_node()

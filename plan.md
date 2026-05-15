@@ -1,11 +1,42 @@
-先声明：本文件中碰撞对由一对碰撞体组成，本文件中碰撞体指两个机械臂的各30个包络球体和12个柱状（包括方柱、圆柱）障碍物
-在src/dualarm_mprc/dualarm_reactive_control/src/dual_arm_safe_controller_sim.cpp中创建消息类型描述collision_pair_dis,定期发布给src/dualarm_mprc/dualarm_reactive_control/src/collision_env_visualizer.cpp,包含所有碰撞对的距离及其上相距最近的两点
-在src/dualarm_mprc/dualarm_reactive_control/src/dual_arm_safe_controller_sim.cpp中已经存在计算距离的方法，在此基础上增加发布功能即可
-在src/dualarm_mprc/dualarm_reactive_control/src/collision_env_visualizer.cpp的可视化中，
-对于每一个碰撞对（每个机械臂有30个球体，共12个柱状障碍物，每个障碍物都是单独的一个碰撞体，即一共30*30+2*30*12个碰撞对）:
-A.如果距离大于d_active_,则将碰撞对双方都默认可视化(即当前逻辑)
-B.如果距离在d_active_到d_safe_之间，碰撞对双方均可视化为半透明红色，透明度A随距离线性变化，d_active_时为0.4，d_safe_时为1.0
-C.如果距离小于d_safe，则将碰撞对双方都可视化为不透明红色（A=1.0）
-注：以上优先级C>B>A,对于B内部,A越大优先级越高
-例如： 001球与002球触发A,001球与003球触发C,001球与004球触发B，最后001球为不透明红色，002球默认可视化，003球为不透明红色，004球为半透明红色
+# 碰撞检测算法优化计划
+
+## 优化目标
+针对复杂环境下的 `dual_arm_safe_controller_sim` 碰撞检测流水线进行优化。当前的遍历式或基于 SMIN 的方法在球体数量较多时计算压力过大，需要提高实时性。
+
+## 优化策略
+
+### 1. 机器人运动学优化 (`PandaRobot`)
+- **批量数据访问**：实现一次性获取所有碰撞球中心（`Matrix3Xd`）和半径（`VectorXd`）的方法，以便进行向量化运算。
+- **高效雅可比计算**：优化 `getCollisionSpheres_Jacobians`，在一次运动学正解过程中更新所有球体的雅可比矩阵，避免重复计算变换矩阵。
+
+### 2. 双臂相互碰撞（自碰）优化
+- **点对点距离简化**：将复杂的形状距离调用替换为标量计算 `(p1-p2).norm() - (r1+r2)`。
+- **碰撞对过滤（白名单/黑名单）**：建立机制跳过那些物理上不可能碰撞的对（例如相邻连杆、因工作空间限制无法触及的区域）。
+- **SMIN 保证连续性**：在双臂碰撞中维持平滑最小值（SMIN）方法，确保为 HQP 求解器提供可微且连续的距离函数。
+
+### 3. 环境碰撞优化 (COAL/FCL)
+- **宽相（Broadphase）分组**：利用 COAL 的宽相检测功能，将“机器人组”与“环境组”进行整体检测，快速剔除无关物体。
+- **计算解耦**：在 `ConstraintManager` 中将双臂自碰（使用自定义优化逻辑）与环境碰撞（使用 COAL/FCL 逻辑）分离处理。
+
+### 4. 控制器集成
+- **重构 `ConstraintManager`**：清理 `collision_avoidance_constraint_CBF`，调用专门的自碰和环境碰撞流水线。
+- **性能评估**：监控 `collision_computation_time_` 和 HQP 求解器的成功率。
+
+## 任务清单
+
+- [ ] **任务 1：分析与评估**
+    - [x] 复核当前的 `robot2RobotDistanceGradient` 和 SMIN 实现。
+    - [ ] 探索 COAL 的 Broadphase API 以实现组间距离计算。
+- [ ] **任务 2：PandaRobot 接口扩展**
+    - [ ] 为 `PandaRobot` 添加批量获取碰撞球数据的接口。
+- [ ] **任务 3：碰撞对过滤机制**
+    - [ ] 定义双臂碰撞的 `ignored_pairs` 忽略列表。
+- [ ] **任务 4：高性能双臂自碰逻辑**
+    - [ ] 实现向量化的、带过滤功能的优化版 `robot2RobotDistanceGradient`。
+- [ ] **任务 5：系统集成与重构**
+    - [ ] 修改 `ConstraintManager` 以适配新的计算流程。
+- [ ] **任务 6：验证与调优**
+    - [ ] 对比优化前后的计算耗时，确保仿真中无安全违规。
+
+
 

@@ -1,4 +1,11 @@
-在将src/dualarm_mprc接入src/multipanda_ros2的任务中：
-过去采用了将实时指令等分包装成轨迹的方法，以适配mprc的标准输入接口
-但是为了更好的实现mprc的性能，请按照如下要求工作：
-1. 将mprc控制器由原有的获得轨迹输入进行避障计算改为获得单目标点进行避障计算
+先声明：本文件中碰撞对由一对碰撞体组成，本文件中碰撞体指两个机械臂的各30个包络球体和12个柱状（包括方柱、圆柱）障碍物
+在src/dualarm_mprc/dualarm_reactive_control/src/dual_arm_safe_controller_sim.cpp中创建消息类型描述collision_pair_dis,定期发布给src/dualarm_mprc/dualarm_reactive_control/src/collision_env_visualizer.cpp,包含所有碰撞对的距离及其上相距最近的两点
+在src/dualarm_mprc/dualarm_reactive_control/src/dual_arm_safe_controller_sim.cpp中已经存在计算距离的方法，在此基础上增加发布功能即可
+在src/dualarm_mprc/dualarm_reactive_control/src/collision_env_visualizer.cpp的可视化中，
+对于每一个碰撞对（每个机械臂有30个球体，共12个柱状障碍物，每个障碍物都是单独的一个碰撞体，即一共30*30+2*30*12个碰撞对）:
+A.如果距离大于d_active_,则将碰撞对双方都默认可视化(即当前逻辑)
+B.如果距离在d_active_到d_safe_之间，碰撞对双方均可视化为半透明红色，透明度A随距离线性变化，d_active_时为0.4，d_safe_时为1.0
+C.如果距离小于d_safe，则将碰撞对双方都可视化为不透明红色（A=1.0）
+注：以上优先级C>B>A,对于B内部,A越大优先级越高
+例如： 001球与002球触发A,001球与003球触发C,001球与004球触发B，最后001球为不透明红色，002球默认可视化，003球为不透明红色，004球为半透明红色
+

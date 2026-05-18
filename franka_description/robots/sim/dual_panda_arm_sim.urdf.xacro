@@ -68,7 +68,7 @@
       </geometry>
     </collision>
     <collision>
-      <origin xyz="0.072659 0.000255 0.001474" rpy="0 0 0"/>
+      <origin xyz="0.072659 0 0.001474" rpy="0 0 0"/>
       <geometry>
         <sphere radius="0.032"/>
       </geometry>
@@ -103,7 +103,7 @@
       </geometry>
     </collision>
     <collision>
-      <origin xyz="0.072659 0.000255 0.001474" rpy="0 0 0"/>
+      <origin xyz="0.072659 0.0 0.001474" rpy="0 0 0"/>
       <geometry>
         <sphere radius="0.032"/>
       </geometry>

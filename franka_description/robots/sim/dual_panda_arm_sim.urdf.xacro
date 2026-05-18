@@ -39,6 +39,53 @@
     <xacro:include filename="$(find franka_description)/robots/common/hand.xacro"/>
     <xacro:hand ns="$(arg arm_id_2)" rpy="0 0 ${-pi/4}" connected_to="$(arg arm_id_2)_link8" safety_distance="0.03"/>
   </xacro:if>
+
+  <!-- left_arm_cam -->
+  <joint name="$(arg arm_id_1)_camera_joint" type="fixed">
+    <parent link="$(arg arm_id_1)_hand"/>
+    <child link="left_real_camera"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="left_real_camera">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://franka_description/meshes/visual/camera_part1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="cam_L1"><color rgba="1.0 1.0 1.0 1.0"/></material>
+    </visual>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://franka_description/meshes/visual/camera_part2.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="cam_L2"><color rgba="1.0 1.0 1.0 1.0"/></material>
+    </visual>
+  </link>
+
+  <!-- right_arm_cam -->
+  <joint name="$(arg arm_id_2)_camera_joint" type="fixed">
+    <parent link="$(arg arm_id_2)_hand"/>
+    <child link="right_real_camera"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="right_real_camera">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://franka_description/meshes/visual/camera_part1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="cam_R1"><color rgba="1.0 1.0 1.0 1.0"/></material>
+    </visual>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://franka_description/meshes/visual/camera_part2.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="cam_R2"><color rgba="1.0 1.0 1.0 1.0"/></material>
+    </visual>
+  </link>
+
   <xacro:include filename="$(find franka_description)/robots/sim/dual_panda_arm_sim.ros2_control.xacro"/>
   <xacro:dual_panda_mjros_ros2_control 
       ns_1="$(arg arm_id_1)" 

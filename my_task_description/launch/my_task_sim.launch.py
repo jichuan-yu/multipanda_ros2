@@ -170,20 +170,6 @@ def generate_launch_description():
             parameters=[{'source_list': jsp_source_list, 'rate': 30}],
     )
 
-    node_left_camera_tf = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        arguments=['0', '0', '0', '0.93969262', '0.34202014', '0', '0', 'mj_left_link8', 'left_real_camera'],
-        output='screen',
-    )
-
-    node_right_camera_tf = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        arguments=['0', '0', '0', '0.93969262', '0.34202014', '0', '0', 'mj_right_link8', 'right_real_camera'],
-        output='screen',
-    )
-
     def make_pointcloud_node(cam_name):
         cam_ns = f'/mujoco_server/cameras/{cam_name}'
         return Node(
@@ -239,8 +225,6 @@ def generate_launch_description():
 
         node_robot_state_publisher,
         node_joint_state_publisher,
-        node_left_camera_tf,
-        node_right_camera_tf,
         *pointcloud_nodes,
 
         Node(

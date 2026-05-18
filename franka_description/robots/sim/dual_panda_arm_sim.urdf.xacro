@@ -61,6 +61,18 @@
       </geometry>
       <material name="cam_L2"><color rgba="1.0 1.0 1.0 1.0"/></material>
     </visual>
+    <collision>
+      <origin xyz="0.110674 0 0.043860" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="0.034"/>
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="0.072659 0.000255 0.001474" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="0.032"/>
+      </geometry>
+    </collision>
   </link>
 
   <!-- right_arm_cam -->
@@ -84,6 +96,18 @@
       </geometry>
       <material name="cam_R2"><color rgba="1.0 1.0 1.0 1.0"/></material>
     </visual>
+    <collision>
+      <origin xyz="0.110674 0.0 0.043860" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="0.034"/>
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="0.072659 0.000255 0.001474" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="0.032"/>
+      </geometry>
+    </collision>
   </link>
 
   <xacro:include filename="$(find franka_description)/robots/sim/dual_panda_arm_sim.ros2_control.xacro"/>

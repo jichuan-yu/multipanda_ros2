@@ -48,7 +48,6 @@ add_library(
         src/subscriber/joint_impedance_controller.cpp
         src/subscriber/multi_joint_impedance_controller.cpp
         src/subscriber/multi_cartesian_impedance_controller.cpp
-        src/subscriber/dualarm_mprc_controller.cpp
         )
         
 

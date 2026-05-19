@@ -62,7 +62,7 @@ class CartesianImpedanceExampleController : public controller_interface::Control
   Matrix4d desired;
   Matrix6d stiffness;
   Matrix6d damping;
-  double n_stiffness;
+  Vector7d n_stiffness;
 };
 
 }  // namespace franka_example_controllers

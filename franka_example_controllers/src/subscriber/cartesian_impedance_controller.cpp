@@ -4,10 +4,12 @@
 #include <cmath>
 #include <exception>
 #include <string>
+#include <algorithm>
+#include <vector>
 #include <franka/model.h>
 
 inline void pseudoInverse(const Eigen::MatrixXd& M_, Eigen::MatrixXd& M_pinv_, bool damped = true) {
-    double lambda_ = damped ? 0.2 : 0.0;
+    double lambda_ = damped ? 0.1 : 0.0;
 
     Eigen::JacobiSVD<Eigen::MatrixXd> svd(M_, Eigen::ComputeFullU | Eigen::ComputeFullV);
     Eigen::JacobiSVD<Eigen::MatrixXd>::SingularValuesType sing_vals_ = svd.singularValues();
@@ -75,16 +77,26 @@ controller_interface::return_type CartesianImpedanceController::update(
   tau_d.setZero();
   tau_task << jacobian.transpose() * (-stiffness*error - damping*(jacobian*qD));
 
-  Eigen::MatrixXd jacobian_transpose_pinv;
+    Eigen::MatrixXd jacobian_transpose_pinv;
     pseudoInverse(jacobian.transpose(), jacobian_transpose_pinv);
-  tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) -
-                      jacobian.transpose() * jacobian_transpose_pinv) *
-                         (n_stiffness * (desired_qn - q) -
-                          (2.0 * sqrt(n_stiffness)) * qD);
+    // nullspace stiffness/damping as per-joint gains
+    Eigen::Matrix<double,7,7> N_diag = n_stiffness.asDiagonal();
+    Eigen::Matrix<double,7,7> D_diag = (2.0 * n_stiffness.array().sqrt()).matrix().asDiagonal();
+    tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) -
+                 jacobian.transpose() * jacobian_transpose_pinv) *
+                   (N_diag * (desired_qn - q) - D_diag * qD);
 
   tau_d <<  tau_task + coriolis + tau_nullspace;
+
+  std::array<double, 7> tau_d_calculated{};
   for (int i = 0; i < num_joints; ++i) {
-    command_interfaces_[i].set_value(tau_d(i));
+    tau_d_calculated[i] = tau_d(i);
+  }
+  const std::array<double, 7> tau_d_saturated =
+      saturateTorqueRate(tau_d_calculated, robot_state.tau_J_d);
+
+  for (int i = 0; i < num_joints; ++i) {
+    command_interfaces_[i].set_value(tau_d_saturated[i]);
   }
 
   if (ee_pose_publisher_) {
@@ -120,10 +132,10 @@ controller_interface::return_type CartesianImpedanceController::update(
 CallbackReturn CartesianImpedanceController::on_init() {
   try {
     auto_declare<std::string>("arm_id", "panda");
-    auto_declare<double>("pos_stiff", 100);
-    auto_declare<double>("rot_stiff", 10);
+      auto_declare<std::vector<double>>("pos_stiff", std::vector<double>{100.0, 100.0, 100.0, 10.0, 10.0, 10.0});
+      auto_declare<std::vector<double>>("n_stiffness", std::vector<double>(7, 10.0));
     sub_desired_cartesian_ = get_node()->create_subscription<geometry_msgs::msg::PoseStamped>(
-      "/cartesian_impedance/target_pose", 1,
+      "/cartesian_impedance/pose_desired", 1,
       std::bind(&CartesianImpedanceController::desiredCartesianCallback, this, std::placeholders::_1)
     );
   } catch (const std::exception& e) {
@@ -136,14 +148,25 @@ CallbackReturn CartesianImpedanceController::on_init() {
 CallbackReturn CartesianImpedanceController::on_configure(
     const rclcpp_lifecycle::State& /*previous_state*/) {
   arm_id_ = get_node()->get_parameter("arm_id").as_string();
-  pos_stiff = get_node()->get_parameter("pos_stiff").as_double();
-  rot_stiff = get_node()->get_parameter("rot_stiff").as_double();
+  // pos_stiff must be a 6-element array
+  std::vector<double> pos_vec;
+  if (!get_node()->get_parameter("pos_stiff", pos_vec) || pos_vec.size() != 6) {
+    throw std::runtime_error("pos_stiff must be a 6-element array");
+  }
+  for (int i = 0; i < 6; ++i) pos_stiff(i) = pos_vec[i];
+
+  // n_stiffness must be a 7-element array
+  std::vector<double> n_vec;
+  if (!get_node()->get_parameter("n_stiffness", n_vec) || n_vec.size() != 7) {
+    throw std::runtime_error("n_stiffness must be a 7-element array");
+  }
+  for (int i = 0; i < 7; ++i) n_stiffness(i) = n_vec[i];
   franka_robot_model_ = std::make_unique<franka_semantic_components::FrankaRobotModel>(
       franka_semantic_components::FrankaRobotModel(arm_id_ + "/robot_model",
                                                    arm_id_));
   ee_pose_publisher_ = get_node()->create_publisher<geometry_msgs::msg::PoseStamped>(
       "/cartesian_impedance/ee_pose", 1);
-    external_wrench_publisher_ = get_node()->create_publisher<geometry_msgs::msg::WrenchStamped>(
+  external_wrench_publisher_ = get_node()->create_publisher<geometry_msgs::msg::WrenchStamped>(
       "/cartesian_impedance/external_wrench", 1);
   auto parameters = get_node()->list_parameters({}, 10);
   return CallbackReturn::SUCCESS;
@@ -157,14 +180,25 @@ CallbackReturn CartesianImpedanceController::on_activate(
   desired_orientation = Quaterniond(desired.block<3,3>(0,0));
   desired_qn = Vector7d(franka_robot_model_->getRobotState()->q.data());
 
-  stiffness.setIdentity();
-  stiffness.topLeftCorner(3, 3) << pos_stiff * Matrix3d::Identity();
-  stiffness.bottomRightCorner(3, 3) << rot_stiff * Matrix3d::Identity();
-  // Simple critical damping
-  damping.setIdentity();
-  damping.topLeftCorner(3,3) << 2 * sqrt(pos_stiff) * Matrix3d::Identity();
-  damping.bottomRightCorner(3, 3) << 0.8 * 2 * sqrt(rot_stiff) * Matrix3d::Identity();
-  n_stiffness = 10.0;
+  RCLCPP_INFO(get_node()->get_logger(), "CartesianImpedanceController on_activate:");
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "  desired_qn = " << desired_qn.transpose());
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "  pos_stiff  = " << pos_stiff.transpose());
+
+  // Set stiffness diagonal from 6-element pos_stiff (first 3 translational, last 3 rotational)
+  stiffness.setZero();
+  for (int i = 0; i < 6; ++i) {
+    stiffness(i, i) = pos_stiff(i);
+  }
+  // Simple critical damping: diagonal values 2*sqrt(k) for translational and 0.8*2*sqrt(k_rot) for rotational
+  damping.setZero();
+  for (int i = 0; i < 3; ++i) {
+    damping(i, i) = 2.0 * std::sqrt(std::max(pos_stiff(i), 0.0));
+  }
+  for (int i = 3; i < 6; ++i) {
+    damping(i, i) = 0.5 * 2.0 * std::sqrt(std::max(pos_stiff(i), 0.0));
+  }
+
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "  damping    = " << damping.diagonal().transpose());
 
   return CallbackReturn::SUCCESS;
 }
@@ -185,6 +219,18 @@ void CartesianImpedanceController::desiredCartesianCallback(
       msg.pose.orientation.x,
       msg.pose.orientation.y,
       msg.pose.orientation.z);
+}
+
+std::array<double, 7> CartesianImpedanceController::saturateTorqueRate(
+    const std::array<double, 7>& tau_d_calculated,
+    const std::array<double, 7>& tau_J_d) const {
+  std::array<double, 7> tau_d_saturated{};
+  for (int i = 0; i < num_joints; ++i) {
+    const double difference = tau_d_calculated[i] - tau_J_d[i];
+    tau_d_saturated[i] = tau_J_d[i] +
+        std::max(std::min(difference, delta_tau_max_), -delta_tau_max_);
+  }
+  return tau_d_saturated;
 }
 
 }  // namespace franka_example_controllers

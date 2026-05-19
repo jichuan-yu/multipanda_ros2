@@ -10,3 +10,4 @@ build/*
 install/*
 test/*
 instruction.md
+__pycache__/

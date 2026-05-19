@@ -24,6 +24,7 @@ find_package(hardware_interface REQUIRED)
 find_package(franka_semantic_components REQUIRED)
 find_package(generate_parameter_library)
 find_package(franka_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(multi_mode_control_msgs REQUIRED)
 find_package(multi_mode_controller REQUIRED)
 find_package(visualization_msgs REQUIRED)
@@ -68,6 +69,7 @@ ament_target_dependencies(
         franka_semantic_components
         multi_mode_control_msgs
         multi_mode_controller
+        sensor_msgs
         std_msgs
         visualization_msgs
 )
@@ -132,5 +134,6 @@ ament_export_dependencies(
         hardware_interface
         franka_hardware
         multi_mode_control_msgs
+        sensor_msgs
 )
 ament_package()

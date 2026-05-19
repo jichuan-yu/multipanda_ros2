@@ -69,28 +69,28 @@ cartesian_impedance_example_controller:
 cartesian_impedance_controller:
   ros__parameters:
     arm_id: panda
-    pos_stiff: 100.0
-    rot_stiff: 10.0
+    pos_stiff: [100.0, 100.0, 100.0, 10.0, 10.0, 10.0]
+    n_stiffness: [10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]
 
 joint_impedance_controller:
   ros__parameters:
     arm_id: panda
     k_gains:
-      - 24.0
-      - 24.0
-      - 24.0
-      - 24.0
-      - 10.0
-      - 6.0
-      - 2.0
+      - 600.0
+      - 600.0
+      - 600.0
+      - 600.0
+      - 250.0
+      - 150.0
+      - 50.0
     d_gains:
-      - 2.0
-      - 2.0
-      - 2.0
-      - 1.0
-      - 1.0
-      - 1.0
-      - 0.5
+      - 30.0
+      - 30.0
+      - 30.0
+      - 12.0
+      - 12.0
+      - 12.0
+      - 6.0
 
 multi_mode_controller:
   ros__parameters:

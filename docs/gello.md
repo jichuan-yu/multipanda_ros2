@@ -14,23 +14,19 @@ GELLO 遥操作是一种基于舵机臂的遥操作方案，用于在 MuJoCo 仿
 
 ### 3.1 安装 gello_software（核心依赖）
 
-选择一个您喜欢的安装目录（示例位置）：
+选择一个安装目录（示例位置）：
 
 ```bash
-# 创建安装目录（可自定义路径）
+# 创建安装目录并克隆仓库
 mkdir -p ~/gello_software
+git clone https://github.com/wuphilipp/gello_software.git ~/gello_software
+
+# 进入仓库目录
 cd ~/gello_software
 
-# 克隆 gello_software 仓库
-git clone https://github.com/wuphilipp/gello_software.git gello_software
-
 # 初始化并更新子模块（包含 Dynamixel SDK）
-cd gello_software
 git submodule init
 git submodule update
-
-# 安装仓库依赖
-pip install -r requirements.txt --no-deps
 
 # 安装 gello_software（开发模式）
 pip install -e .
@@ -38,8 +34,6 @@ pip install -e .
 # 安装 Dynamixel SDK（使用仓库中的子模块版本）
 pip install -e third_party/DynamixelSDK/python
 ```
-
-> **说明**：如果你希望把依赖也尽量交给 conda 管理，可以先在环境里安装基础包（例如 `conda install -c conda-forge pip numpy scipy pyserial`），再执行后面的 `pip install -r requirements.txt` 和可编辑安装命令。
 
 > **说明**：安装目录可自行选择，无需固定位置。建议选择非工作空间目录（如 `~/gello_software`），避免与 ROS2 工作空间冲突。
 
@@ -115,7 +109,7 @@ python3 gello_franka_ros2.py
 
 ### 5.2 单臂遥操作脚本
 
-适用于控制单臂 Franka 机械臂，直接控制无需平滑。
+适用于控制单臂 Franka 机械臂。
 
 **终端 1：启动单臂仿真**
 ```bash

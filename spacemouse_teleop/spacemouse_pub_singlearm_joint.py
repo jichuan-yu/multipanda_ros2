@@ -65,9 +65,9 @@ class SpacemouseConfig:
     scale_rot: float = 0.2
     deadzone: float = 0.05
     gripper_open_width: float = 0.08
-    gripper_close_width: float = 0.0
+    gripper_close_width: float = 0.03
     gripper_speed: float = 0.1
-    gripper_force: float = 10.0
+    gripper_force: float = 20.0
     motion_mapping: np.ndarray = field(
         default_factory=lambda: np.array(
             [
@@ -344,8 +344,9 @@ class SpaceMouseJointTeleopNode(Node):
         
         self.ee_task.set_target(pin.SE3(target_pose[0:3, 0:3], target_pose[0:3, 3]))
         posture_target = self.configuration.q.copy()
-        for i, q_index in enumerate(self.arm_joint_q_indices):
-            posture_target[q_index] = self.posture_q_arm[i]
+        # Set posture task targets for the arm joints to maintain current posture
+        # for i, q_index in enumerate(self.arm_joint_q_indices):
+        #     posture_target[q_index] = self.posture_q_arm[i]
         self.posture_task.set_target(posture_target)
 
         velocity = pink.solve_ik(

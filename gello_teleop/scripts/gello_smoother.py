@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import numpy as np
 
 
@@ -6,10 +5,8 @@ class Smoother:
     def __init__(
         self,
         publish_hz: float = 100.0,
-        max_velocity: float = 0.3,
-        max_acceleration: float = 1.0,
-        position_tolerance: float = 0.001,
-        smooth_threshold: float = 0.5,
+        max_velocity: float = 0.1,
+        position_tolerance: float = 0.05,
         joint_limits: np.ndarray = None,
         logger=None
     ):
@@ -26,47 +23,46 @@ class Smoother:
 
         self.publish_period = 1.0 / publish_hz
         self.max_velocity = max_velocity
-        self.max_acceleration = max_acceleration
         self.position_tolerance = position_tolerance
-        self.smooth_threshold = smooth_threshold
         self.joint_limits = np.asarray(joint_limits, dtype=float)
         self.logger = logger
 
+        # 原始目标（来自 GELLO 或键盘）
         self.q_target_raw = np.zeros(7, dtype=float)
+        # 平滑后的命令（由 update() 自己演化，不会被实际位置覆盖）
         self.q_target_smooth = np.zeros(7, dtype=float)
-        self.q_velocity = np.zeros(7, dtype=float)
+        # 实际关节位置（仅存储，不干扰平滑输出）
+        self.q_actual = np.zeros(7, dtype=float)
 
-        self.s_curve_phase = np.zeros(7, dtype=int)
-        self.s_curve_start_pos = np.zeros(7, dtype=float)
-        self.s_curve_end_pos = np.zeros(7, dtype=float)
-        self.s_curve_total_dist = np.zeros(7, dtype=float)
-        self.s_curve_accel_time = np.zeros(7, dtype=float)
-        self.s_curve_decel_time = np.zeros(7, dtype=float)
-        self.s_curve_const_time = np.zeros(7, dtype=float)
-        self.s_curve_elapsed_time = np.zeros(7, dtype=float)
-
+        # 状态标志
         self.follower_enabled = False
         self.target_received = False
-        self.has_started = False
         self.in_full_tracking = False
 
+    # ---------- 位置设置 ----------
     def set_initial_position(self, initial_pos: np.ndarray):
-        self.q_target_smooth = np.asarray(initial_pos, dtype=float).copy()
-        self.q_target_raw = np.asarray(initial_pos, dtype=float).copy()
+        """初始化平滑器起点（通常在收到首次实际关节反馈时调用）"""
+        pos = np.asarray(initial_pos, dtype=float)
+        self.q_target_raw = pos.copy()
+        self.q_target_smooth = pos.copy()
+        self.q_actual = pos.copy()
 
-    def set_follower_enabled(self, enabled: bool):
-        was_enabled = self.follower_enabled
-        self.follower_enabled = enabled
-
-        if enabled and not was_enabled:
-            self.has_started = True
-            self._start_smooth()
+    def set_actual_position(self, actual_pos: np.ndarray):
+        """更新实际关节位置（仅记录，不影响平滑命令）"""
+        self.q_actual = np.asarray(actual_pos, dtype=float)
 
     def set_target(self, target: np.ndarray):
+        """设置原始目标（来自主端设备）"""
         self.q_target_raw = np.asarray(target, dtype=float)
         self.target_received = True
 
-    def update(self):
+    def set_follower_enabled(self, enabled: bool):
+        """使能或禁用平滑跟随"""
+        self.follower_enabled = enabled
+
+    # ---------- 核心更新 ----------
+    def update(self) -> np.ndarray:
+        """返回平滑后的关节命令"""
         if not self.target_received:
             return self.q_target_smooth.copy()
 
@@ -75,20 +71,32 @@ class Smoother:
 
         if self.in_full_tracking:
             self.q_target_smooth = self.q_target_raw.copy()
-            self.q_velocity = np.zeros(7)
             return self.q_target_smooth.copy()
 
-        all_joints_completed = True
-        for i in range(7):
-            completed = self._update_s_curve_joint(i)
-            if not completed:
-                all_joints_completed = False
+        error = self.q_target_raw - self.q_target_smooth
+        error_norm = np.linalg.norm(error)
 
-        if all_joints_completed and not self.in_full_tracking:
+        # 全跟踪：误差足够小，直接锁定目标
+        if error_norm < self.position_tolerance:
             self.in_full_tracking = True
             if self.logger:
-                self.logger.info('Tracking state: Switched to full tracking mode')
+                self.logger.info('Entering full tracking mode')
+            self.q_target_smooth = self.q_target_raw.copy()
+            return self.q_target_smooth.copy()
 
+        # 匀速移动，最后一步直接到位
+        step = self.max_velocity * self.publish_period
+        move = np.zeros(7)
+        for i in range(7):
+            if abs(error[i]) < step:          # 不足一步，直接取误差值
+                move[i] = error[i]
+            elif abs(error[i]) > 1e-6:
+                direction = np.sign(error[i])
+                move[i] = direction * step
+
+        self.q_target_smooth += move
+
+        # 限位裁剪
         for i in range(7):
             self.q_target_smooth[i] = np.clip(
                 self.q_target_smooth[i],
@@ -98,81 +106,15 @@ class Smoother:
 
         return self.q_target_smooth.copy()
 
-    def _start_smooth(self):
-        for i in range(7):
-            self._start_joint_smooth(i)
+    # ---------- 状态查询 ----------
+    def current_mode(self) -> str:
+        """返回当前工作模式（用于调试显示）"""
+        if not self.target_received:
+            return "idle"
+        if not self.follower_enabled:
+            return "waiting"
 
-    def _start_joint_smooth(self, joint_idx):
-        self.s_curve_start_pos[joint_idx] = self.q_target_smooth[joint_idx]
-        self.s_curve_end_pos[joint_idx] = self.q_target_raw[joint_idx]
-        self.s_curve_total_dist[joint_idx] = abs(self.s_curve_end_pos[joint_idx] - self.s_curve_start_pos[joint_idx])
-        self.s_curve_elapsed_time[joint_idx] = 0.0
-        self._calculate_s_curve_params(joint_idx)
-        self.s_curve_phase[joint_idx] = 0
-
-    def _calculate_s_curve_params(self, joint_idx):
-        distance = self.s_curve_total_dist[joint_idx]
-
-        if distance < 0.0001:
-            self.s_curve_phase[joint_idx] = 3
-            return
-
-        accel_distance = 0.5 * self.max_acceleration * (self.max_velocity / self.max_acceleration) ** 2
-
-        if distance <= 2 * accel_distance:
-            self.s_curve_accel_time[joint_idx] = np.sqrt(distance / self.max_acceleration)
-            self.s_curve_decel_time[joint_idx] = self.s_curve_accel_time[joint_idx]
-            self.s_curve_const_time[joint_idx] = 0.0
-        else:
-            self.s_curve_accel_time[joint_idx] = self.max_velocity / self.max_acceleration
-            self.s_curve_decel_time[joint_idx] = self.s_curve_accel_time[joint_idx]
-            remaining_distance = distance - 2 * accel_distance
-            self.s_curve_const_time[joint_idx] = remaining_distance / self.max_velocity
-
-    def _update_s_curve_joint(self, joint_idx):
-        if self.s_curve_phase[joint_idx] == 3:
-            return True
-
-        self.s_curve_elapsed_time[joint_idx] += self.publish_period
-        elapsed = self.s_curve_elapsed_time[joint_idx]
-        start_pos = self.s_curve_start_pos[joint_idx]
-        end_pos = self.s_curve_end_pos[joint_idx]
-        accel_time = self.s_curve_accel_time[joint_idx]
-        const_time = self.s_curve_const_time[joint_idx]
-        decel_time = self.s_curve_decel_time[joint_idx]
-
-        direction = 1.0 if end_pos > start_pos else -1.0
-
-        if elapsed < accel_time:
-            t = elapsed / accel_time
-            normalized_vel = np.sin(np.pi / 2 * t)
-            vel = direction * self.max_velocity * normalized_vel
-            pos = start_pos + direction * self.max_velocity * accel_time * (1 - np.cos(np.pi / 2 * t)) / (np.pi / 2)
-            self.s_curve_phase[joint_idx] = 0
-
-        elif elapsed < accel_time + const_time:
-            t = elapsed - accel_time
-            vel = direction * self.max_velocity
-            accel_dist = direction * self.max_velocity * accel_time * (2 / np.pi)
-            pos = start_pos + accel_dist + vel * t
-            self.s_curve_phase[joint_idx] = 1
-
-        elif elapsed < accel_time + const_time + decel_time:
-            t = (elapsed - accel_time - const_time) / decel_time
-            normalized_vel = np.cos(np.pi / 2 * t)
-            vel = direction * self.max_velocity * normalized_vel
-            accel_dist = direction * self.max_velocity * accel_time * (2 / np.pi)
-            const_dist = direction * self.max_velocity * const_time
-            decel_dist = direction * self.max_velocity * decel_time * (np.sin(np.pi / 2 * t) / (np.pi / 2))
-            pos = start_pos + accel_dist + const_dist + decel_dist
-            self.s_curve_phase[joint_idx] = 2
-
-        else:
-            pos = end_pos
-            vel = 0.0
-            self.s_curve_phase[joint_idx] = 3
-
-        self.q_target_smooth[joint_idx] = pos
-        self.q_velocity[joint_idx] = vel
-
-        return self.s_curve_phase[joint_idx] == 3
+        error_norm = np.linalg.norm(self.q_target_raw - self.q_target_smooth)
+        if error_norm < self.position_tolerance:
+            return "full_tracking"
+        return "tracking"

@@ -6,6 +6,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64
 import sys
+import time
 import yaml
 import warnings
 from pathlib import Path
@@ -15,6 +16,7 @@ from gello_smoother import Smoother  # 新增导入平滑器
 
 
 MAX_GRIPPER_OPEN = 0.08
+STARTUP_FEEDBACK_WAIT_SEC = 10.0
 
 
 def load_gello_config(config_path: str):
@@ -57,12 +59,16 @@ def load_gello_config(config_path: str):
 @dataclass
 class GelloFrankaSingleArmConfig:
     arm_id: str = 'panda'
-    joint_state_topic: str = '/joint_states'
+    # joint_state_topic: str = '/joint_states' # Simulation topic
+    joint_state_topic: str = '/panda/joint_states' # Real Robot topic
+
+    gripper_topic: str = '/panda_gripper/width_desired' 
+
     target_joint_topic: str = '/joint_impedance/joints_desired'
-    gripper_topic: str = '/panda_gripper/width_desired'
-    gello_port: str = '/dev/ttyUSB1'
+    gello_config_path: str = '../config/gello_arm1.yaml'
     publish_hz: float = 50.0
     startup_joint_threshold: float = 1.0
+    enable_smoother: bool = True
     joint_limits: np.ndarray = field(
         default_factory=lambda: np.array([
             [-2.8973, 2.8973],
@@ -74,47 +80,45 @@ class GelloFrankaSingleArmConfig:
             [-2.8973, 2.8973],
         ], dtype=float)
     )
-    default_joint_target: np.ndarray = field(
-        default_factory=lambda: np.array([
-            0.0,
-            -0.785398,
-            0.0,
-            -2.35619,
-            0.0,
-            1.5708,
-            0.785398,
-        ], dtype=float)
-    )
+
 
 
 class GelloFrankaSingleArmNode(Node):
-    def __init__(self, config: GelloFrankaSingleArmConfig = None, gello_config_path: str = None):
+    def __init__(self, config: GelloFrankaSingleArmConfig = None):
         super().__init__('gello_franka_singlearm')
 
         self.config = config if config is not None else GelloFrankaSingleArmConfig()
+        self.gello_config_path = self.config.gello_config_path
+        if not self.gello_config_path:
+            raise RuntimeError('gello_config_path is required and cannot be empty')
         self.arm_id = self.config.arm_id
         self.joint_state_topic = self.config.joint_state_topic
         self.target_joint_topic = self.config.target_joint_topic
         self.gripper_topic = self.config.gripper_topic
         self.publish_hz = float(self.config.publish_hz)
+        self.startup_joint_threshold = float(self.config.startup_joint_threshold)
         self.joint_limits = np.asarray(self.config.joint_limits, dtype=float)
-        self.default_joint_target = np.asarray(self.config.default_joint_target, dtype=float)
+        self.enable_smoother = self.config.enable_smoother
 
         self.arm_joint_names = [f'{self.arm_id}_joint{i + 1}' for i in range(7)]
         self.q_current = None
         self.joint_states_received = False
         self._missing_joint_state_logged = False
 
-        # 新增：平滑器及初始化状态
-        self.smoother = Smoother(
-            publish_hz=self.publish_hz,
-            max_velocity=0.3,
-            position_tolerance=0.05,
-            joint_limits=self.joint_limits,
-            logger=self.get_logger()
-        )
+        # 平滑器及初始化状态
+        self.smoother = None
         self.smoother_initialized = False
         self.latest_raw_target = None  # 从 GELLO 获取的最新原始目标关节
+        self.startup_gello_joint_target = None
+        
+        if self.enable_smoother:
+            self.smoother = Smoother(
+                publish_hz=self.publish_hz,
+                max_velocity=0.15,
+                position_tolerance=0.05,
+                joint_limits=self.joint_limits,
+                logger=self.get_logger()
+            )
 
         self.joint_state_sub = self.create_subscription(
             JointState,
@@ -126,19 +130,8 @@ class GelloFrankaSingleArmNode(Node):
         self.joint_publisher = self.create_publisher(JointState, self.target_joint_topic, 10)
         self.gripper_publisher = self.create_publisher(Float64, self.gripper_topic, 10)
 
-        # Load GELLO configuration from YAML or use defaults
-        if gello_config_path:
-            self.get_logger().info(f"Loading GELLO config from: {gello_config_path}")
-            gello_config = load_gello_config(gello_config_path)
-        else:
-            self.get_logger().info("Using default GELLO configuration")
-            gello_config = {
-                "port": "/dev/ttyUSB1",
-                "joint_ids": (1, 2, 3, 4, 5, 6, 7),
-                "joint_offsets": (1 * np.pi, 1 * np.pi, 0 * np.pi, 1 * np.pi, 1 * np.pi, 1 * np.pi, 0.25 * np.pi),
-                "joint_signs": (1.0, -1.0, 1.0, 1.0, 1.0, -1.0, 1.0),
-                "gripper_config": (8, 195, 152),
-            }
+        self.get_logger().info(f"Loading GELLO config from: {self.gello_config_path}")
+        gello_config = load_gello_config(self.gello_config_path)
 
         dynamixel_config = DynamixelRobotConfig(
             joint_ids=gello_config["joint_ids"],
@@ -160,19 +153,56 @@ class GelloFrankaSingleArmNode(Node):
         self.get_logger().info(f"GELLO Port: {gello_config['port']}")
         self.get_logger().info(f"Joint offsets: {gello_config['joint_offsets']}")
         self.get_logger().info(f"Joint signs: {gello_config['joint_signs']}")
+        self.get_logger().info(f"Smoother enabled: {self.enable_smoother}")
 
         gello_joints = self.gello_agent.act({})
         if gello_joints is None or len(gello_joints) < 7:
             raise RuntimeError('Failed to read initial Gello joint positions')
         q_first = np.asarray(gello_joints[:7], dtype=float)
+        self.startup_gello_joint_target = q_first
         self.get_logger().info(
             'First Gello joint read (after offset correction): ' +
             ', '.join(f'{float(val):.4f}' for val in q_first)
         )
 
+        self._wait_for_startup_joint_alignment()
+
         self.create_timer(1.0 / max(self.publish_hz, 1.0), self.timer_callback)
         self.joint_print_timer = self.create_timer(1, self.joint_print_callback)
-        self.get_logger().info('Gello Franka single-arm teleop node initialized (direct control mode with smoother).')
+        if not self.enable_smoother:
+            self.joint_states_received = True
+        
+        mode_info = 'with smoother' if self.enable_smoother else 'direct control'
+        self.get_logger().info(f'Gello Franka single-arm teleop node initialized ({mode_info} mode).')
+
+    def _wait_for_startup_joint_alignment(self):
+        if self.startup_gello_joint_target is None:
+            raise RuntimeError('Startup Gello joint target is not available')
+
+        deadline = time.monotonic() + STARTUP_FEEDBACK_WAIT_SEC
+
+        while self.q_current is None and time.monotonic() < deadline and rclpy.ok():
+            rclpy.spin_once(self, timeout_sec=0.1)
+
+        if self.q_current is None:
+            raise RuntimeError(
+                f'Timed out waiting for initial joint_state feedback for startup alignment check '
+                f'after {STARTUP_FEEDBACK_WAIT_SEC:.1f}s.'
+            )
+
+        joint_delta = np.abs(self.q_current - self.startup_gello_joint_target)
+        max_delta = float(np.max(joint_delta))
+        if max_delta > self.startup_joint_threshold:
+            raise RuntimeError(
+                'Startup alignment check failed: '
+                f'max joint delta {max_delta:.4f} rad exceeds threshold {self.startup_joint_threshold:.4f} rad. '
+                f'controller={self.q_current.tolist()}, gello={self.startup_gello_joint_target.tolist()}'
+            )
+
+        self.get_logger().info(
+            'Startup alignment check passed: '
+            f'max joint delta {max_delta:.4f} rad <= threshold {self.startup_joint_threshold:.4f} rad.'
+        )
 
     def joint_print_callback(self):
         try:
@@ -204,22 +234,28 @@ class GelloFrankaSingleArmNode(Node):
             q_arm = np.array([msg.position[idx] for idx in indices], dtype=float)
             self.q_current = q_arm
 
-            # 将实际关节位置送给平滑器
-            self.smoother.set_actual_position(q_arm)
+            if self.enable_smoother and self.smoother is not None:
+                # 将实际关节位置送给平滑器
+                self.smoother.set_actual_position(q_arm)
 
-            if not self.joint_states_received:
-                # 第一次接收到实际关节状态时初始化平滑器
-                self.joint_states_received = True
-                # 设置平滑器初始位置为当前实际位置
-                self.smoother.set_initial_position(q_arm)
-                # 如果已经有来自 GELLO 的目标，则用目标，否则以当前实际位置为初始目标
-                initial_target = self.latest_raw_target if self.latest_raw_target is not None else q_arm.copy()
-                self.smoother.set_target(initial_target)
-                self.smoother.set_follower_enabled(True)
-                self.smoother_initialized = True
-                self.get_logger().info(
-                    'Smoother initialized from actual robot joint positions.'
-                )
+                if not self.joint_states_received:
+                    # 第一次接收到实际关节状态时初始化平滑器
+                    self.joint_states_received = True
+                    # 设置平滑器初始位置为当前实际位置
+                    self.smoother.set_initial_position(q_arm)
+                    # 如果已经有来自 GELLO 的目标，则用目标，否则以当前实际位置为初始目标
+                    initial_target = self.latest_raw_target if self.latest_raw_target is not None else q_arm.copy()
+                    self.smoother.set_target(initial_target)
+                    self.smoother.set_follower_enabled(True)
+                    self.smoother_initialized = True
+                    self.get_logger().info(
+                        'Smoother initialized from actual robot joint positions.'
+                    )
+            else:
+                # 不使用平滑器时，只要收到关节状态就认为初始化完成
+                if not self.joint_states_received:
+                    self.joint_states_received = True
+                    self.get_logger().info('Joint states received (direct control mode).')
 
         except Exception as exc:
             self.get_logger().warn(f'Failed to parse joint_states: {exc}')
@@ -243,13 +279,18 @@ class GelloFrankaSingleArmNode(Node):
             q_target_raw = np.clip(q_target_raw, self.joint_limits[:, 0], self.joint_limits[:, 1])
             self.latest_raw_target = q_target_raw
 
-            # 只有在平滑器初始化完成（已收到实际关节反馈）后才发布平滑后的指令
-            if self.smoother_initialized and self.q_current is not None:
-                self.smoother.set_target(q_target_raw)
-                smoothed_joints = self.smoother.update()
-                self._publish_joint_command(smoothed_joints)
+            # 只有在初始化完成（已收到实际关节反馈）后才发布指令
+            if self.joint_states_received:
+                if self.enable_smoother and self.smoother is not None and self.smoother_initialized:
+                    # 使用平滑器模式
+                    self.smoother.set_target(q_target_raw)
+                    smoothed_joints = self.smoother.update()
+                    self._publish_joint_command(smoothed_joints)
+                else:
+                    # 直接控制模式，不使用平滑器
+                    self._publish_joint_command(q_target_raw)
             else:
-                # 平滑器未初始化时不发布关节指令（等待实际关节反馈）
+                # 未初始化时不发布关节指令（等待实际关节反馈）
                 pass
 
             if not hasattr(self, '_debug_counter'):
@@ -268,7 +309,6 @@ class GelloFrankaSingleArmNode(Node):
                 self.gripper_publisher.publish(msg)
             
             if self._debug_counter % 50 == 0:
-                # 打印的仍然是原始目标（或平滑后？这里保持打印原始目标以观察 GELLO 输出）
                 joints_str = ', '.join(f'{j:.4f}' for j in q_target_raw)
                 self.get_logger().info(f'Joints: [{joints_str}]{gripper_info}')
         except Exception as exc:
@@ -285,40 +325,15 @@ class GelloFrankaSingleArmNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = None
-    
-    # Parse command line arguments
-    import argparse
-    parser = argparse.ArgumentParser(description='GELLO Franka Single Arm ROS2 Bridge')
-    parser.add_argument('--config', type=str, default=None, help='Path to GELLO YAML config file')
-    parser.add_argument('--gripper-topic', type=str, default=None, help='ROS2 topic for gripper control')
-    parsed_args, _ = parser.parse_known_args(args)
-
-    # Set default config path if not provided
-    config_path = parsed_args.config
-    if config_path is None:
-        # Only read from package config directory
-        script_dir = Path(__file__).resolve().parent
-        package_config = script_dir.parent / 'config' / 'yam_auto_generated.yaml'
-        
-        if package_config.exists():
-            config_path = str(package_config)
-            print(f"Using package config: {config_path}")
-        else:
-            print(f"Config not found: {package_config}")
-            print("Using hardcoded default configuration")
-
     try:
-        # Create config with optional gripper topic override
-        config_kwargs = {}
-        if parsed_args.gripper_topic:
-            config_kwargs['gripper_topic'] = parsed_args.gripper_topic
-        
-        config = GelloFrankaSingleArmConfig(**config_kwargs)
-        node = GelloFrankaSingleArmNode(config=config, gello_config_path=config_path)
+        config = GelloFrankaSingleArmConfig()
+        node = GelloFrankaSingleArmNode(config=config)
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
+    except RuntimeError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
     except FileNotFoundError as e:
         print(f"Error: {e}")
         sys.exit(1)

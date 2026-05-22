@@ -165,6 +165,25 @@ def generate_launch_description():
             arguments=['joint_state_broadcaster', '-c', concatenate_ns(ns, 'controller_manager', True)],
             output='screen',
         ),
+        
+        # Left arm gripper action bridge for simulation
+        Node(
+            package='franka_example_controllers',
+            executable='gripper_action_bridge',
+            name='mj_left_gripper_action_bridge',
+            output='screen',
+            parameters=[{'arm_id': 'mj_left', 'use_sim': True}],
+        ),
+        
+        # Right arm gripper action bridge for simulation
+        Node(
+            package='franka_example_controllers',
+            executable='gripper_action_bridge',
+            name='mj_right_gripper_action_bridge',
+            output='screen',
+            parameters=[{'arm_id': 'mj_right', 'use_sim': True}],
+        ),
+
         Node(package='rviz2',
              executable='rviz2',
              name='rviz2',

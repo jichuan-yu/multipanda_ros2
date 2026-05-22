@@ -65,7 +65,7 @@ def generate_launch_description():
         executable='gripper_action_bridge',
         name='gripper_action_bridge',
         output='screen',
-        parameters=[{'arm_id': 'panda'}],
+        parameters=[{'arm_id': 'panda', 'use_sim': False}],
         condition=IfCondition(load_gripper),
     )
 

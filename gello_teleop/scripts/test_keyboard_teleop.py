@@ -69,7 +69,7 @@ KEY_BINDINGS = {
 
 
 class KeyboardTeleopNode(Node):
-    def __init__(self, joint_state_topic='/joint_states'):
+    def __init__(self, joint_state_topic='/joint_states', enable_smoother=True):
         super().__init__('keyboard_teleop_test')
         
         # Initialize joint angles
@@ -78,6 +78,7 @@ class KeyboardTeleopNode(Node):
         self.max_gripper_open = 0.09
         self.joint_state_topic = joint_state_topic
         self.actual_joints_received = False
+        self.enable_smoother = enable_smoother
         
         # Publishers
         self.joint_publisher = self.create_publisher(
@@ -98,34 +99,46 @@ class KeyboardTeleopNode(Node):
         )
         
         # Smoother for joint command output (same params as gello_franka_singlearm.py)
-        self.smoother = Smoother(
-            publish_hz=50.0,
-            max_velocity=0.15,
-            position_tolerance=0.05,
-            joint_limits=JOINT_LIMITS,
-            logger=self.get_logger()
-        )
-        self.smoother.set_initial_position(self.current_joints.copy())
-        self.smoother.set_target(self.current_joints)
+        self.smoother = None
+        if self.enable_smoother:
+            self.smoother = Smoother(
+                publish_hz=50.0,
+                max_velocity=0.05,
+                position_tolerance=0.05,
+                joint_limits=JOINT_LIMITS,
+                logger=self.get_logger()
+            )
+            self.smoother.set_initial_position(self.current_joints.copy())
+            self.smoother.set_target(self.current_joints)
         
         # Timer for publishing
         self.timer = self.create_timer(0.02, self.timer_callback)
         
-        self.get_logger().info('Keyboard teleop test node started')
+        mode_info = 'with smoother' if self.enable_smoother else 'direct control'
+        self.get_logger().info(f'Keyboard teleop test node started ({mode_info} mode)')
         self.get_logger().info('Gripper publisher topic: /panda_gripper/width_desired (via action bridge)')
+        
+        # Direct control mode doesn't need to wait for joint state feedback
+        if not self.enable_smoother:
+            self.actual_joints_received = True
         
     def timer_callback(self):
         if not self.actual_joints_received:
             return
 
-        # Publish smoothed joint commands
-        self.smoother.set_target(self.current_joints)
-        smoothed_joints = self.smoother.update()
+        # Publish joint commands
+        if self.enable_smoother and self.smoother is not None:
+            # Use smoother
+            self.smoother.set_target(self.current_joints)
+            target_joints = self.smoother.update()
+        else:
+            # Direct control
+            target_joints = self.current_joints
 
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.name = [f'panda_joint{i+1}' for i in range(7)]
-        msg.position = smoothed_joints.tolist()
+        msg.position = target_joints.tolist()
         msg.velocity = [0.0] * 7
         self.joint_publisher.publish(msg)
     
@@ -150,7 +163,8 @@ class KeyboardTeleopNode(Node):
                 JOINT_LIMITS[joint_idx, 0],
                 JOINT_LIMITS[joint_idx, 1]
             )
-            self.smoother.set_target(self.current_joints)
+            if self.enable_smoother and self.smoother is not None:
+                self.smoother.set_target(self.current_joints)
     
     def update_gripper(self, delta):
         self.gripper_value += delta
@@ -162,7 +176,8 @@ class KeyboardTeleopNode(Node):
     def reset(self):
         self.current_joints = DEFAULT_JOINTS.copy()
         self.gripper_value = 0.0
-        self.smoother.set_target(self.current_joints)
+        if self.enable_smoother and self.smoother is not None:
+            self.smoother.set_target(self.current_joints)
         self.send_gripper_command(self.max_gripper_open)
 
     def joint_state_callback(self, msg):
@@ -170,14 +185,19 @@ class KeyboardTeleopNode(Node):
             indices = [msg.name.index(f'panda_joint{i+1}') for i in range(7) if f'panda_joint{i+1}' in msg.name]
             if len(indices) == 7:
                 actual_joints = np.array([msg.position[i] for i in indices], dtype=float)
-                self.smoother.set_actual_position(actual_joints)
+                
+                if self.enable_smoother and self.smoother is not None:
+                    self.smoother.set_actual_position(actual_joints)
 
                 if not self.actual_joints_received:
                     self.actual_joints_received = True
-                    self.get_logger().info('Received first actual joint feedback, initializing smoother from real robot position.')
-                    self.smoother.set_initial_position(actual_joints)
-                    self.smoother.set_target(self.current_joints)
-                    self.smoother.set_follower_enabled(True)
+                    if self.enable_smoother and self.smoother is not None:
+                        self.get_logger().info('Received first actual joint feedback, initializing smoother from real robot position.')
+                        self.smoother.set_initial_position(actual_joints)
+                        self.smoother.set_target(self.current_joints)
+                        self.smoother.set_follower_enabled(True)
+                    else:
+                        self.get_logger().info('Received first actual joint feedback (direct control mode).')
         except Exception:
             pass
 
@@ -185,6 +205,7 @@ class KeyboardTeleopNode(Node):
 def parse_args():
     parser = argparse.ArgumentParser(description='Keyboard teleoperation test with real robot feedback.')
     parser.add_argument('--joint-state-topic', default='/joint_states', help='ROS2 topic for real robot joint state feedback.')
+    parser.add_argument('--no-smoother', action='store_true', help='Disable smoother and use direct control mode.')
     return parser.parse_args()
 
 
@@ -238,7 +259,15 @@ def print_joint_state(joints, gripper_value, mode: str = None):
 def keyboard_thread(node):
     """Keyboard input handling thread."""
     print_help()
-    print_joint_state(node.current_joints, node.gripper_value, node.smoother.current_mode())
+    
+    # Get mode text based on smoother availability
+    def get_mode_text():
+        if node.enable_smoother and node.smoother is not None:
+            return node.smoother.current_mode()
+        else:
+            return "DIRECT"
+    
+    print_joint_state(node.current_joints, node.gripper_value, get_mode_text())
     
     try:
         while rclpy.ok():
@@ -269,7 +298,7 @@ def keyboard_thread(node):
                     delta = direction * GRIPPER_STEP
                     node.update_gripper(delta)
             
-            print_joint_state(node.current_joints, node.gripper_value, node.smoother.current_mode())
+            print_joint_state(node.current_joints, node.gripper_value, get_mode_text())
     
     except KeyboardInterrupt:
         print("\n\nExiting...")
@@ -278,7 +307,11 @@ def keyboard_thread(node):
 def main(args=None):
     parsed_args = parse_args()
     rclpy.init(args=args)
-    node = KeyboardTeleopNode(joint_state_topic=parsed_args.joint_state_topic)
+    # Only override enable_smoother if --no-smoother is explicitly specified
+    config_kwargs = {'joint_state_topic': parsed_args.joint_state_topic}
+    if parsed_args.no_smoother:
+        config_kwargs['enable_smoother'] = False
+    node = KeyboardTeleopNode(**config_kwargs)
     
     # Start keyboard thread
     kb_thread = threading.Thread(target=keyboard_thread, args=(node,))

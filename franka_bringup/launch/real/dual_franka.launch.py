@@ -178,14 +178,26 @@ def generate_launch_description():
             arguments=['right_robot_model_broadcaster'],
             output='screen',
         ),
-        # IncludeLaunchDescription(
-        #     PythonLaunchDescriptionSource([PathJoinSubstitution(
-        #         [FindPackageShare('franka_gripper'), 'launch', 'gripper.launch.py'])]),
-        #     launch_arguments={robot_ip_1_parameter_name: robot_ip_1,
-        #                       use_fake_hardware_parameter_name: use_fake_hardware}.items(),
-        #     condition=IfCondition(load_gripper_1)
-
-        # ),
+        
+        # Left arm gripper action bridge
+        Node(
+            package='franka_example_controllers',
+            executable='gripper_action_bridge',
+            name='left_gripper_action_bridge',
+            output='screen',
+            parameters=[{'arm_id': 'left', 'use_sim': False}],
+            condition=IfCondition(load_gripper_1),
+        ),
+        
+        # Right arm gripper action bridge
+        Node(
+            package='franka_example_controllers',
+            executable='gripper_action_bridge',
+            name='right_gripper_action_bridge',
+            output='screen',
+            parameters=[{'arm_id': 'right', 'use_sim': False}],
+            condition=IfCondition(load_gripper_2),
+        ),
 
         Node(package='rviz2',
              executable='rviz2',

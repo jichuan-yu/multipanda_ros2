@@ -77,7 +77,7 @@ def generate_launch_description():
     # Joint state publisher setup
     jsp_source_list = [concatenate_ns(ns, 'joint_states', True)]
     if(load_gripper):
-        jsp_source_list.append(concatenate_ns(ns, 'panda_gripper_sim_node/joint_states', True))
+        jsp_source_list.append(concatenate_ns(ns, 'panda_gripper/joint_states', True))
 
     node_joint_state_publisher = Node( # RVIZ dependency
             package='joint_state_publisher',

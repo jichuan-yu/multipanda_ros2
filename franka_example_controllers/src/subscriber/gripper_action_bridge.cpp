@@ -23,6 +23,10 @@ public:
         // Parameter for arm selection, could be left or right
         this->declare_parameter<std::string>("arm_id", "left");
         std::string arm_id_ = this->get_parameter("arm_id").as_string();
+        
+        // Parameter for simulation mode
+        this->declare_parameter<bool>("use_sim", true);
+        bool use_sim_ = this->get_parameter("use_sim").as_bool();
 
         auto node_prefix = arm_id_ + "_gripper";
         
@@ -33,10 +37,11 @@ public:
         auto sub_topic_stop = arm_id_ + "_gripper/stop_desired";
 
         // Action / Service Names
-        auto action_move = node_prefix + "/move";
-        auto action_grasp = node_prefix + "/grasp";
-        auto action_homing = node_prefix + "/homing";
-        auto service_stop = node_prefix + "/stop";
+        std::string action_server_suffix = use_sim_ ? "_sim_node" : "";
+        auto action_move = node_prefix + action_server_suffix + "/move";
+        auto action_grasp = node_prefix + action_server_suffix + "/grasp";
+        auto action_homing = node_prefix + action_server_suffix + "/homing";
+        auto service_stop = node_prefix + action_server_suffix + "/stop";
 
         // Subscribers
         move_sub_ = this->create_subscription<std_msgs::msg::Float64>(

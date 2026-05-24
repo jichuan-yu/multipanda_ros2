@@ -18,6 +18,8 @@ JOINT_POSITION_INCREMENT = 0
 JOINT_VELOCITY = 1
 TASK_SPACE_INCREMENT = 2
 TASK_SPACE_VELOCITY = 3
+JOINT_POSITION = 4           # Absolute joint position
+TASK_SPACE_POSE = 5          # Absolute task space pose
 
 # Arm selector constants
 LEFT_ARM = 1
@@ -38,6 +40,8 @@ class BaseTeleopNode(Node):
     JOINT_VELOCITY = JOINT_VELOCITY
     TASK_SPACE_INCREMENT = TASK_SPACE_INCREMENT
     TASK_SPACE_VELOCITY = TASK_SPACE_VELOCITY
+    JOINT_POSITION = JOINT_POSITION
+    TASK_SPACE_POSE = TASK_SPACE_POSE
 
     # Panda joint limits
     JOINT_LIMITS_LOWER = np.array([-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973])
@@ -113,10 +117,13 @@ class BaseTeleopNode(Node):
 
         Message format: [data14, command_type, arm_selector, allow_safety_violation]
         - data14: 14 data elements (format depends on command_type)
-          * Joint space: [left_joint1-7, right_joint1-7]
-          * Task space: [left_x,y,z,qx,qy,qz, right_x,y,z,qx,qy,qz, 0, 0]
+          * Joint space (increment/velocity): [left_joint1-7, right_joint1-7]
+          * Joint space (absolute): [left_joint1-7, right_joint1-7]
+          * Task space (increment/velocity): [left_x,y,z,qx,qy,qz, right_x,y,z,qx,qy,qz, 0, 0]
+          * Task space (absolute): [left_x,y,z,qx,qy,qz,qw, right_x,y,z,qx,qy,qz,qw]
         - command_type: 0=JOINT_POSITION_INCREMENT, 1=JOINT_VELOCITY,
-                       2=TASK_SPACE_INCREMENT, 3=TASK_SPACE_VELOCITY
+                       2=TASK_SPACE_INCREMENT, 3=TASK_SPACE_VELOCITY,
+                       4=JOINT_POSITION, 5=TASK_SPACE_POSE
         - arm_selector: 1=LEFT_ARM, 2=RIGHT_ARM, 3=BOTH_ARMS
         - allow_safety_violation: 0.0=false, 1.0=true
 
@@ -134,7 +141,7 @@ class BaseTeleopNode(Node):
         """
         msg = Float64MultiArray()
 
-        if command_type in [JOINT_POSITION_INCREMENT, JOINT_VELOCITY]:
+        if command_type in [JOINT_POSITION_INCREMENT, JOINT_VELOCITY, JOINT_POSITION]:
             # Joint space command: 14 joint values
             data = np.zeros(14)
 
@@ -162,6 +169,19 @@ class BaseTeleopNode(Node):
 
             # Indices 12-13 are padding (unused) for task space commands
             data[12:14] = 0.0
+
+        elif command_type == TASK_SPACE_POSE:
+            # Task space absolute pose: 14 elements (quaternions instead of rotation vectors)
+            # [left_x,y,z,qx,qy,qz,qw, right_x,y,z,qx,qy,qz,qw]
+            data = np.zeros(14)
+
+            if left_ee_delta is not None:
+                data[0:7] = left_ee_delta
+            # else: already zeros
+
+            if right_ee_delta is not None:
+                data[7:14] = right_ee_delta
+            # else: already zeros
         else:
             self.get_logger().warn(f"Unknown command type: {command_type}")
             data = np.zeros(14)

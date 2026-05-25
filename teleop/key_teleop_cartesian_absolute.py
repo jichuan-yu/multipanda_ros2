@@ -101,15 +101,15 @@ class KeyCartesianAbsoluteTeleop(BaseTeleopNode):
         self.ee_pose_received = False
 
         # ACTUAL end-effector poses from /ee_pose topic (position + quaternion [w, x, y, z])
-        # Default: identity orientation at origin
+        # Default home position
         self.actual_ee_poses = {
             'left': {
-                'position': np.array([0.5, 0.0, 0.5]),
-                'quaternion': np.array([1.0, 0.0, 0.0, 0.0])  # [w, x, y, z]
+                'position': np.array([0.307, 0.26, 0.487]),
+                'quaternion': np.array([0.0, 1.0, 0.0, 0.0])  # [w, x, y, z] - 180° X rotation
             },
             'right': {
-                'position': np.array([0.5, 0.0, -0.5]),
-                'quaternion': np.array([1.0, 0.0, 0.0, 0.0])  # [w, x, y, z]
+                'position': np.array([0.307, -0.26, 0.487]),
+                'quaternion': np.array([0.0, 1.0, 0.0, 0.0])  # [w, x, y, z] - 180° X rotation
             }
         }
 
@@ -124,12 +124,12 @@ class KeyCartesianAbsoluteTeleop(BaseTeleopNode):
         self.print_usage()
         self.target_ee_poses = {
             'left': {
-                'position': np.array([0.5, 0.0, 0.5]),
-                'quaternion': np.array([1.0, 0.0, 0.0, 0.0])  # [w, x, y, z]
+                'position': np.array([0.307, 0.26, 0.487]),
+                'quaternion': np.array([0.0, 1.0, 0.0, 0.0])  # [w, x, y, z] - 180° X rotation
             },
             'right': {
-                'position': np.array([0.5, 0.0, -0.5]),
-                'quaternion': np.array([1.0, 0.0, 0.0, 0.0])  # [w, x, y, z]
+                'position': np.array([0.307, -0.26, 0.487]),
+                'quaternion': np.array([0.0, 1.0, 0.0, 0.0])  # [w, x, y, z] - 180° X rotation
             }
         }
 

@@ -1,65 +1,10 @@
 <mujocoinclude>
   <worldbody>
-    <!-- <body name="obj_box_01" pos="0.5 -0.13 0.061">
-        <geom name="obj_box_01" type="box" size="0.03 0.03 0.03" friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1" density="100" rgba="1 0.56 0.43 1"/>
-        <joint name="obj_box_01_joint" type="free" damping="0.0005"/>
-    </body>
-    <body name="sphere_01" pos="0.5 0 0.8" mocap="true">
-        <geom name="sphere_01" type="sphere" size="0.1" rgba="0 1 0 1"/>
-    </body> -->
-
-    <!-- Auto-generated static pillars -->
-    <!-- Type: 0=Box, 1=Cylinder -->
-    <!-- For cylinders: diameter = min(length, width), fromto defines height -->
-
-    <!-- pillar_01: X=0.22, Y=-0.01, Type=CYLINDER, H=0.3 -->
-    <geom name="pillar_01" type="cylinder" size="0.025 0.150" pos="0.22 -0.01 0.15"
+    <!-- Fixed obstacle plate for collision avoidance testing -->
+    <!-- Box: center at (0.6, 0, 0), size (0.1, 0.8, 0.8) -> half-extents (0.05, 0.4, 0.4) -->
+    <geom name="obstacle_plate" type="box" size="0.05 0.4 0.4" pos="0.6 0.0 0.4"
           friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
-          rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_02: X=0.28, Y=-0.42, Type=BOX, H=0.3 -->
-    <geom name="pillar_02" type="box" size="0.025 0.025 0.150" pos="0.28 -0.42 0.15"
-          friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
-          rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_03: X=0.23, Y=0.42, Type=BOX, H=0.5 -->
-    <geom name="pillar_03" type="box" size="0.025 0.025 0.250" pos="0.23 0.42 0.25"
-          friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
-          rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_04: X=0.41, Y=-0.15, Type=CYLINDER, H=0.4 -->
-    <geom name="pillar_04" type="cylinder" size="0.025 0.200" pos="0.41 -0.15 0.20"
-          friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
-          rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_05: X=0.42, Y=-0.36, Type=CYLINDER, H=0.2 -->
-    <geom name="pillar_05" type="cylinder" size="0.050 0.100" pos="0.42 -0.36 0.10"
-          friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
-          rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_06: X=0.43, Y=0.33, Type=BOX, H=0.4 -->
-    <geom name="pillar_06" type="box" size="0.025 0.025 0.200" pos="0.43 0.33 0.20"
-          friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
-          rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_07: X=0.58, Y=0.06, Type=CYLINDER, H=0.5 -->
-    <geom name="pillar_07" type="cylinder" size="0.025 0.250" pos="0.58 0.06 0.25"
-          friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
-          rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_08: X=0.68, Y=-0.01, Type=CYLINDER, H=0.2 -->
-    <geom name="pillar_08" type="cylinder" size="0.050 0.100" pos="0.68 -0.01 0.10"
-          friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
-          rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_09: X=0.60, Y=0.24, Type=CYLINDER, H=0.6 -->
-    <geom name="pillar_09" type="cylinder" size="0.025 0.300" pos="0.60 0.24 0.30"
-          friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
-          rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_10: X=0.70, Y=0.08, Type=CYLINDER, H=0.5 -->
-    <geom name="pillar_10" type="cylinder" size="0.025 0.250" pos="0.70 0.08 0.25"
-          friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
-          rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_11: X=0.80, Y=0.14, Type=CYLINDER, H=0.7 -->
-    <geom name="pillar_11" type="cylinder" size="0.025 0.350" pos="0.80 0.14 0.35"
-          friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
-          rgba="0.2 0.4 0.8 1"/>
-    <!-- pillar_12: X=0.82, Y=-0.17, Type=BOX, H=0.6 -->
-    <geom name="pillar_12" type="box" size="0.025 0.025 0.300" pos="0.82 -0.17 0.30"
-          friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
-          rgba="0.2 0.4 0.8 1"/>
+          rgba="0.8 0.3 0.3 1"/>
 
   </worldbody>
 </mujocoinclude>

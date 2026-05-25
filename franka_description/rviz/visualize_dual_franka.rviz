@@ -234,7 +234,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Best Effort
-        Value: /mujoco_server/cameras/left_arm_cam/depth/color/points
+        Value: /mujoco_server/cameras/left_arm_cam/points
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
@@ -267,7 +267,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Best Effort
-        Value: /mujoco_server/cameras/right_arm_cam/depth/color/points
+        Value: /mujoco_server/cameras/right_arm_cam/points
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
@@ -300,7 +300,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Best Effort
-        Value: /mujoco_server/cameras/fixed_cam/depth/color/points
+        Value: /mujoco_server/cameras/fixed_cam/points
       Use Fixed Frame: true
       Use rainbow: true
       Value: true

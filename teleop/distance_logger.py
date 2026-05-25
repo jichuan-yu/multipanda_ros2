@@ -7,7 +7,7 @@ Subscribes to /min_distance topic: [d_left, d_right, safe_idx_left, safe_idx_rig
 
 Usage:
     source ~/myenv/bin/activate
-    python3 src/multipanda_ros2/teleop/distance_logger.py --safety on
+    python3 src/multipanda_ros2/teleop/distance_logger.py --output test_results/test1.csv
 """
 
 import rclpy
@@ -22,28 +22,20 @@ from pathlib import Path
 class DistanceLogger(Node):
     """Log minimum distance to CSV file using controller's pre-computed data."""
 
-    def __init__(self, safety: str, output_dir: str = '/home/xiaozy24/dual_panda_ws/test_results'):
+    def __init__(self, output_file: str):
         super().__init__('distance_logger')
 
-        self.safety = safety
-        self.output_dir = Path(output_dir)
+        self.output_file = Path(output_file)
         self.start_time = None
         self.row_count = 0
 
         # Create output directory
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.output_file.parent.mkdir(parents=True, exist_ok=True)
 
-        # Create CSV files for left and right arms
-        self.files = {}
-        self.writers = {}
-        for arm in ['left', 'right']:
-            filename = f"{arm}_arm_safety_{self.safety}.csv"
-            filepath = self.output_dir / filename
-            f = open(filepath, 'w', newline='')
-            writer = csv.writer(f)
-            writer.writerow(['time', 'min_distance'])
-            self.files[arm] = f
-            self.writers[arm] = writer
+        # Create single CSV file with both arms data
+        self.f = open(self.output_file, 'w', newline='')
+        self.writer = csv.writer(self.f)
+        self.writer.writerow(['time', 'd_left', 'd_right', 'safe_idx_left', 'safe_idx_right'])
 
         # Subscribe to minimum distance topic from controller
         # Format: [d_left, d_right, safe_idx_left, safe_idx_right]
@@ -54,8 +46,7 @@ class DistanceLogger(Node):
             10
         )
 
-        self.get_logger().info(f"Logging to {self.output_dir}")
-        self.get_logger().info(f"Safety: {safety}")
+        self.get_logger().info(f"Logging to {self.output_file}")
 
     def distance_callback(self, msg):
         """Process minimum distance data from controller."""
@@ -68,38 +59,38 @@ class DistanceLogger(Node):
         current_time = round(current_time, 3)
 
         # Extract data: [d_left, d_right, safe_idx_left, safe_idx_right]
-        if len(msg.data) >= 2:
+        if len(msg.data) >= 4:
             d_left = msg.data[0]
             d_right = msg.data[1]
+            safe_idx_left = msg.data[2]
+            safe_idx_right = msg.data[3]
 
             # Log to CSV (3 decimal places)
-            self.writers['left'].writerow([current_time, round(d_left, 3)])
-            self.writers['right'].writerow([current_time, round(d_right, 3)])
-            self.row_count += 2
+            self.writer.writerow([
+                current_time,
+                round(d_left, 3),
+                round(d_right, 3),
+                round(safe_idx_left, 3),
+                round(safe_idx_right, 3)
+            ])
+            self.row_count += 1
 
     def close(self):
-        """Close all files."""
-        for f in self.files.values():
-            f.close()
+        """Close file."""
+        self.f.close()
         self.get_logger().info(f"Logged {self.row_count} rows total")
 
 
 def main(args=None):
     parser = argparse.ArgumentParser(description='Log minimum distance from MPRC controller')
-    parser.add_argument('--safety', type=str, choices=['on', 'off'], required=True,
-                        help='Safety status (on/off)')
-    parser.add_argument('--output-dir', type=str, default='/home/xiaozy24/dual_panda_ws/test_results',
-                        help='Output directory for CSV files')
+    parser.add_argument('--output', type=str, default='/home/xiaozy24/dual_panda_ws/test_results/distance.csv',
+                        help='Output CSV file path')
     parser_args = parser.parse_args(args)
 
     rclpy.init(args=args)
 
     try:
-        node = DistanceLogger(
-            safety=parser_args.safety,
-            output_dir=parser_args.output_dir
-        )
-
+        node = DistanceLogger(output_file=parser_args.output)
         rclpy.spin(node)
 
     except KeyboardInterrupt:

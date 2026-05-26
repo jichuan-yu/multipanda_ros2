@@ -2,8 +2,7 @@
 
 ## 1. 概述
 
-GELLO 遥操作是一种基于舵机臂的双臂遥操作方案，用于在 MuJoCo 仿真中控制 Franka 机械臂。本方案支持两种控制模式：基础关节阻抗控制和完整安全控制（带碰撞检测）。
-
+GELLO 遥操作是一种基于舵机臂的遥操作方案，用于在 MuJoCo 仿真中控制 Franka 机械臂。支持单臂和双臂两种配置。
 
 ## 2. 系统要求
 
@@ -21,10 +20,6 @@ GELLO 遥操作是一种基于舵机臂的双臂遥操作方案，用于在 MuJo
 # 创建安装目录（可自定义路径）
 mkdir -p ~/gello_software
 cd ~/gello_software
-
-# 创建并激活 conda 环境（Python 3.11）
-conda create -n panda python=3.11 -y
-conda activate panda
 
 # 克隆 gello_software 仓库
 git clone https://github.com/wuphilipp/gello_software.git gello_software
@@ -50,12 +45,13 @@ pip install -e third_party/DynamixelSDK/python
 
 ### 3.2 获取遥操作脚本
 
-脚本已包含在 `multipanda_ros2` 仓库中。
-如果您已经有 `dual_panda_ws` 工作空间，只需克隆 `gello_teleop` 目录：
+脚本已包含在 `multipanda_ros2` 仓库中：
 
-脚本位置：
-```bash
-~/dual_panda_ws/src/multipanda_ros2/gello_teleop/scripts/gello_franka_ros2.py
+```
+~/dual_panda_ws/src/multipanda_ros2/gello_teleop/scripts/
+├── gello_franka_ros2.py        # 双臂遥操作脚本
+├── gello_franka_singlearm.py   # 单臂遥操作脚本
+└── gello_smoother.py           # 平滑器
 ```
 
 ## 4. 硬件设置
@@ -70,7 +66,7 @@ pip install -e third_party/DynamixelSDK/python
 ls -l /dev/ttyUSB* /dev/ttyACM* 2>/dev/null
 ```
 
-通常 GELLO 设备会被识别为 `/dev/ttyUSB0`。请查脚本中设备路径是否正确
+通常 GELLO 设备会被识别为 `/dev/ttyUSB0`。请确认脚本中设备路径是否正确。
 
 ### 4.3 设置权限（已有权限可跳过）
 
@@ -83,90 +79,33 @@ newgrp dialout
 
 ## 5. 运行指南
 
-### 5.0 仿真模式选择
+### 5.1 双臂遥操作脚本
 
-根据需求选择启动方式：
+适用于控制双臂 Franka 机械臂，支持三种控制模式，带平滑功能。
 
-| 模式 | 适用场景 | 启动命令 |
-|------|---------|---------|
-| **基础模式** | 快速测试、关节级控制 | `ros2 launch franka_bringup dual_franka_sim.launch.py` |
-| **完整模式** | 完整实验、带安全控制 | `ros2 launch my_task_description my_task_sim.launch.py use_rviz:=true` |
-
-> **默认配置**：当前脚本默认使用基础模式，发布话题为 `/dual_joint_impedance/joints_desired`，配合关节阻抗控制器使用。
->
-> **切换模式**：如需切换模式，需手动修改脚本中的发布话题。编辑 `scripts/gello_franka_ros2.py`，修改 `self.joint_publisher` 的话题名称：
-> - 基础模式：`/dual_joint_impedance/joints_desired`
-> - 完整模式：`/dualarm_teleop_cmd`
-
-### 5.1 方式一：基础模式（关节阻抗控制）
-
-适合快速测试 GELLO 功能：
-
-**终端 1：启动仿真**
+**终端 1：启动双臂仿真**
 ```bash
 source /opt/ros/humble/setup.bash
 source ~/dual_panda_ws/install/setup.bash
 ros2 launch franka_bringup dual_franka_sim.launch.py
 ```
 
-**终端 2：启动关节阻抗控制器**
+**终端 2：启动双臂关节阻抗控制器**
 ```bash
 source /opt/ros/humble/setup.bash
 source ~/dual_panda_ws/install/setup.bash
 ros2 run controller_manager spawner dual_joint_impedance_controller
 ```
 
-**终端 3：启动 GELLO 遥操作**
+**终端 3：启动双臂遥操作脚本**
 ```bash
 source /opt/ros/humble/setup.bash
 source ~/dual_panda_ws/install/setup.bash
-cd ~/dual_panda_ws/src/multipanda_ros2/gello_teleop
-python3 scripts/gello_franka_ros2.py
+cd ~/dual_panda_ws/src/multipanda_ros2/gello_teleop/scripts
+python3 gello_franka_ros2.py
 ```
 
-### 5.2 方式二：完整模式（带安全控制）
-
-适合完整实验，包含碰撞检测和相机：
-
-**终端 1：启动完整仿真**
-```bash
-source /opt/ros/humble/setup.bash
-source ~/dual_panda_ws/install/setup.bash
-ros2 launch my_task_description my_task_sim.launch.py use_rviz:=true
-```
-
-**终端 2：Web 视频服务器**
-```bash
-source /opt/ros/humble/setup.bash
-ros2 run web_video_server web_video_server
-# 访问 http://localhost:8080 查看相机
-```
-
-**终端 3：碰撞体可视化**
-```bash
-source /opt/ros/humble/setup.bash
-source ~/dual_panda_ws/install/setup.bash
-ros2 run dual_arm_reactive_control collision_env_visualizer_node --ros-args -p base_frame:=world
-```
-
-**终端 4：双臂安全控制器**
-```bash
-source /opt/ros/humble/setup.bash
-source ~/dual_panda_ws/install/setup.bash
-ros2 run dual_arm_reactive_control main_sim_node
-```
-
-**终端 5：启动 GELLO 遥操作**
-```bash
-source /opt/ros/humble/setup.bash
-source ~/dual_panda_ws/install/setup.bash
-cd ~/dual_panda_ws/src/multipanda_ros2/gello_teleop
-python3 scripts/gello_franka_ros2.py
-```
-
-## 6. 控制模式配置
-
-编辑 `scripts/gello_franka_ros2.py` 中的 `CONTROL_MODE` 变量：
+**控制模式**：编辑 `gello_franka_ros2.py` 中的 `CONTROL_MODE` 变量：
 
 | 模式 | 值 | 说明 |
 |------|-----|------|
@@ -174,134 +113,125 @@ python3 scripts/gello_franka_ros2.py
 | `RIGHT_ARM` | 2 | 只控制右臂，左臂保持默认位置 |
 | `BOTH_ARMS` | 3 | 双臂镜像控制（默认） |
 
-## 7. 标定说明
+### 5.2 单臂遥操作脚本
 
-### 7.1 标定原理
+适用于控制单臂 Franka 机械臂，直接控制无需平滑。
 
-GELLO 舵机臂的关节角度需要与 Franka 机械臂对齐。标定偏移已预先计算并集成到脚本中：
-
-```python
-# 固定标定偏移（π/2 倍数）
-joint_offsets = (
-    1 * np.pi,        # 关节1
-    1 * np.pi,        # 关节2
-    2 * np.pi,        # 关节3
-    1 * np.pi,        # 关节4
-    1 * np.pi,        # 关节5
-    1 * np.pi,        # 关节6
-    1.25 * np.pi,     # 关节7
-)
+**终端 1：启动单臂仿真**
+```bash
+source /opt/ros/humble/setup.bash
+source ~/dual_panda_ws/install/setup.bash
+ros2 launch franka_bringup franka_control_sim.launch.py controller_name:=joint_impedance_controller
 ```
 
-### 7.2 重新标定（如需）
+**终端2 ：启动单臂遥操作脚本**
+```bash
+source /opt/ros/humble/setup.bash
+source ~/dual_panda_ws/install/setup.bash
+cd ~/dual_panda_ws/src/multipanda_ros2/gello_teleop/scripts
+python3 gello_franka_singlearm.py
+```
 
-运行官方标定脚本：
+## 6. 标定说明
+
+### 6.1 标定原理
+
+GELLO 舵机臂的关节角度需要与 Franka 机械臂对齐。标定偏移存储在 YAML 配置文件中，脚本启动时自动加载。
+
+配置文件位置：
+```
+~/dual_panda_ws/src/multipanda_ros2/gello_teleop/config/yam_auto_generated.yaml
+```
+
+配置文件格式：
+```yaml
+agent:
+  port: "/dev/ttyUSB0"
+  dynamixel_config:
+    joint_ids: [1, 2, 3, 4, 5, 6, 7]
+    joint_offsets: [3.14159, 3.14159, 0.0, 3.14159, 3.14159, 3.14159, 3.92699]
+    joint_signs: [1.0, -1.0, 1.0, 1.0, 1.0, -1.0, 1.0]
+```
+
+### 6.2 重新标定步骤
+
+**Step 1: 准备工作**
+1. 将 GELLO 设备连接到电脑
+2. 将 GELLO 摆放到**官方指定的标准标定姿态**：
+
+   ![GELLO 标定标准姿态](../gello_teleop/img/fr3_gello_calib_pose.jpeg)
+
+
+**Step 2: 运行标定脚本**
 
 ```bash
-cd ~/libraries/gello/gello_software/ros2/src/franka_gello_state_publisher/scripts/
-python3 get_offsets.py --port /dev/ttyUSB0
+cd ~/gello_software
+python scripts/generate_yam_config.py \
+  --output-path ~/dual_panda_ws/src/multipanda_ros2/gello_teleop/config/yam_auto_generated.yaml
 ```
 
-## 8. 话题说明
+**参数说明**：
+- `--output-path`: 指定输出配置文件路径（必须指向工作空间内的配置文件）
+- `--port`: 手动指定 USB 端口（如自动检测失败时使用）
+
+**示例（手动指定端口）**：
+```bash
+python scripts/generate_yam_config.py \
+  --port /dev/ttyUSB0 \
+  --output-path ~/dual_panda_ws/src/multipanda_ros2/gello_teleop/config/yam_auto_generated.yaml
+```
+
+**Step 3: 验证标定结果**
+
+启动遥操作脚本，观察终端输出的配置加载信息：
+```bash
+cd ~/dual_panda_ws/src/multipanda_ros2/gello_teleop/scripts
+python3 gello_franka_singlearm.py
+```
+
+终端应显示：
+```
+Using package config: /home/botao/dual_panda_ws/src/multipanda_ros2/gello_teleop/config/yam_auto_generated.yaml
+[INFO] [gello_franka_singlearm]: GELLO configuration loaded successfully
+```
+
+### 6.3 标定脚本功能说明
+
+标定脚本会自动完成以下工作：
+1. **端口检测**：自动查找 FTDI USB 设备，支持多设备选择
+2. **偏移量计算**：遍历搜索使 GELLO 在标准姿势时读取角度最接近 0 的偏移量
+3. **夹爪配置**：检测并记录夹爪的开合角度
+4. **配置生成**：生成硬件和仿真两种配置文件
+
+## 7. 话题说明
+
+### 双臂脚本话题
 
 | 话题 | 类型 | 说明 |
 |------|------|------|
-| `/dualarm_teleop_cmd` | `std_msgs/Float64MultiArray` | 遥操作命令输出（14 个关节角度） |
-| `/dual_joint_impedance/joints_desired` | `std_msgs/Float64MultiArray` | 基础模式关节目标 |
+| `/dual_joint_impedance/joints_desired` | `Float64MultiArray` | 双臂关节目标（14个关节角度） |
 
-## 9. 文件结构
+### 单臂脚本话题
+
+| 话题 | 类型 | 说明 |
+|------|------|------|
+| `/joint_impedance/joints_desired` | `JointState` | 单臂关节目标 |
+| `/panda/joint_states` | `JointState` | 单臂关节状态反馈 |
+
+## 8. 文件结构
 
 ```
 ~/dual_panda_ws/src/multipanda_ros2/
 ├── gello_teleop/
+│   ├── config/
+│   │   └── yam_auto_generated.yaml  # GELLO 标定配置文件
 │   └── scripts/
-│       └── gello_franka_ros2.py    # 主遥操作脚本
-├── teleop/                         # 其他遥操作方式
-│   ├── key_teleop_joint.py
-│   ├── spacemouse_teleop_cartesian.py
-│   └── ...
+│       ├── gello_franka_ros2.py     # 双臂遥操作脚本
+│       ├── gello_franka_singlearm.py # 单臂遥操作脚本
+│       └── gello_smoother.py         # 平滑器
 └── docs/
-    ├── gello.md                    # 本说明文档
-    ├── RUN_SIM.md
-    └── teleop.md
+    └── gello.md                     # 本说明文档
 ```
 
-## 10. 故障排查
-
-### 10.1 USB 设备无法识别
-
-```bash
-# 检查设备
-lsusb
-# 检查驱动
-lsmod | grep ftdi
-# 加载驱动
-sudo modprobe ftdi_sio
-sudo modprobe usbserial
-```
-
-### 10.2 权限问题
-
-```bash
-sudo chmod 666 /dev/ttyUSB0
-```
-
-### 10.3 关节跟踪不顺畅
-
-**问题现象**：GELLO 小幅度运动时从臂关节无响应，或跟随幅度小。
-
-**解决方案**：调整关节阻抗控制器的刚度（k_gain）和阻尼（d_gain）参数。
-
-编辑控制器配置文件：
-```bash
-vim ~/dual_panda_ws/src/multipanda_ros2/franka_bringup/config/sim/dual_sim_controllers.yaml
-```
-
-找到 `dual_joint_impedance_example_controller` 部分，增大从臂（arm_2）的关节增益：
-
-```yaml
-dual_joint_impedance_example_controller:
-  ros__parameters:
-    arm_count: 2
-    arm_2:  # 从臂
-      arm_id: mj_right
-      k_gains:  # 刚度增益，增大可提高跟踪力度
-        - 24.0
-        - 24.0
-        - 24.0
-        - 24.0
-        - 10.0
-        - 6.0
-        - 2.0    # 关节7，可尝试增大到 5.0 或更高
-      d_gains:  # 阻尼增益，增大可提高响应速度
-        - 2.0
-        - 2.0
-        - 2.0
-        - 1.0
-        - 1.0
-        - 1.0
-        - 0.5    # 关节7，可尝试增大到 1.0 或更高
-```
-测试第七关节可能需要足够大的参数如15.0才能正常运行，其余关节可以运行但刚度较低，可以适当增大
-
-修改后重新编译工作空间：
-```bash
-cd ~/dual_panda_ws
-colcon build
-source install/setup.bash
-```
-
-
-### 10.4 仿真启动失败
-
-确保工作空间已正确编译：
-
-```bash
-cd ~/dual_panda_ws
-colcon build
-source install/setup.bash
-```
-
-
-**版本**: v1.0  
-**最后更新**: May 2026 
+**版本**: v1.0
+**最后更新**: May 2026

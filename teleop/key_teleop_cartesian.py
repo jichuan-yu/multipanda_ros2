@@ -15,21 +15,20 @@ Arm Selection:
   Z: Left arm
   X: Right arm
   B: Both arms
-Gripper:
-  C: Close
-  V: Open
 Step Size:
   [: Decrease step
   ]: Increase step
 
+Publishes: Float64MultiArray to /dualarm_teleop_cmd (standard ROS2 message)
+
 Usage:
     source ~/myenv/bin/activate
-    source /path/to/dual_panda_ws/install/setup.bash
-    python src/multipanda_ros2/teleop/key_teleop_cartesian.py
+    python3 src/multipanda_ros2/teleop/key_teleop_cartesian.py
 """
 
 import rclpy
 from rclpy.node import Node
+from std_msgs.msg import Float64MultiArray
 from sensor_msgs.msg import JointState
 import sys
 import select
@@ -39,22 +38,28 @@ import threading
 import numpy as np
 import argparse
 import time
+import os
 
-from .base_teleop import BaseTeleopNode
-from .utils.transformations import small_angle_to_delta_rotation, pose_to_msg
+# Add parent directory to path for imports
+if __name__ == '__main__':
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
+# Import base teleop node
+try:
+    from teleop.base_teleop import BaseTeleopNode
+except ImportError:
+    # Fallback for direct execution
+    from base_teleop import BaseTeleopNode
 
 
 class KeyCartesianTeleop(BaseTeleopNode):
     """Keyboard teleoperation for Cartesian space control."""
 
-    def __init__(self, step_position: float = 0.001, step_rotation: float = 0.01):
-        """
-        Initialize key Cartesian teleop node.
+    # Command type constants
+    TASK_SPACE_INCREMENT = 2
 
-        Args:
-            step_position: Position increment per keypress in meters
-            step_rotation: Rotation increment per keypress in radians
-        """
+    def __init__(self, step_position: float = 0.001, step_rotation: float = 0.01):
+        """Initialize key Cartesian teleop node."""
         super().__init__('key_cartesian_teleop', publish_rate=100.0)
 
         self.step_position = step_position
@@ -68,9 +73,6 @@ class KeyCartesianTeleop(BaseTeleopNode):
             self.joint_state_callback,
             10
         )
-
-        # Status timer
-        self.status_timer = self.create_timer(1.0, self.status_callback)
 
         self.print_usage()
 
@@ -100,74 +102,53 @@ Step Size:
 
 Ctrl-C to quit
 ========================================
-Waiting for joint states...
 """
         print(msg, flush=True)
 
     def status_callback(self):
         """Print status at 1Hz."""
-        if self.joint_states_received:
-            left_q = self.current_joint_states['left']
-            right_q = self.current_joint_states['right']
-            print(f"\r[{self.selected_arm.upper()}] Pos: {self.step_position:.4f}m | Rot: {self.step_rotation:.4f}rad | "
-                  f"L: [{left_q[0]:6.2f}, {left_q[1]:6.2f}, ...] | "
-                  f"R: [{right_q[0]:6.2f}, {right_q[1]:6.2f}, ...]   ",
-                  end='', flush=True)
+        print(f"\r[{self.selected_arm.upper()}] Pos: {self.step_position:.4f}m | Rot: {self.step_rotation:.4f}rad   ",
+              end='', flush=True)
 
     def joint_state_callback(self, msg):
         """Update current joint states from /joint_states."""
         try:
-            # Extract left arm joints
             left_indices = []
             for i in range(1, 8):
                 joint_name = f'mj_left_joint{i}'
                 if joint_name in msg.name:
                     left_indices.append(msg.name.index(joint_name))
 
-            # Extract right arm joints
             right_indices = []
             for i in range(1, 8):
                 joint_name = f'mj_right_joint{i}'
                 if joint_name in msg.name:
                     right_indices.append(msg.name.index(joint_name))
 
-            if len(left_indices) == 7:
-                self.current_joint_states['left'] = np.array([msg.position[i] for i in left_indices])
-
-            if len(right_indices) == 7:
-                self.current_joint_states['right'] = np.array([msg.position[i] for i in right_indices])
-
-            if not self.joint_states_received and len(left_indices) == 7 and len(right_indices) == 7:
-                self.joint_states_received = True
-                print(f"\nJoint states received. Ready for control!", flush=True)
+            if len(left_indices) == 7 and len(right_indices) == 7:
+                if not self.joint_states_received:
+                    self.joint_states_received = True
+                    print(f"Joint states received. Ready for control!\n", flush=True)
 
         except Exception as e:
             pass
 
     def update_from_key(self, key: str) -> bool:
-        """
-        Update pose based on key input.
-
-        Args:
-            key: Pressed key character
-
-        Returns:
-            True if command was published
-        """
+        """Update pose based on key input."""
         # Arm selection
         if key == 'z':
             if self.selected_arm != 'left':
-                self.selected_arm = 'left'
+                self.set_selected_arm('left')
                 print(f"\n[Switched to LEFT arm]", flush=True)
             return False
         elif key == 'x':
             if self.selected_arm != 'right':
-                self.selected_arm = 'right'
+                self.set_selected_arm('right')
                 print(f"\n[Switched to RIGHT arm]", flush=True)
             return False
         elif key == 'b':
             if self.selected_arm != 'both':
-                self.selected_arm = 'both'
+                self.set_selected_arm('both')
                 print(f"\n[Switched to BOTH arms]", flush=True)
             return False
 
@@ -229,38 +210,39 @@ Waiting for joint states...
             updated = True
 
         if updated:
-            self.publish_command(pos_delta, rot_delta)
+            self.publish_teleop_command(pos_delta, rot_delta)
             return True
 
         return False
 
-    def publish_command(self, pos_delta: np.ndarray, rot_delta: np.ndarray):
-        """
-        Publish Cartesian increment command.
+    def publish_teleop_command(self, pos_delta: np.ndarray, rot_delta: np.ndarray):
+        """Publish Cartesian increment as teleop command."""
+        # Prepare end-effector deltas for both arms
+        # Format: [x, y, z, qx, qy, qz] (6 elements per arm)
+        left_ee_delta = np.zeros(6)
+        right_ee_delta = np.zeros(6)
 
-        Args:
-            pos_delta: 3-element position increment [x, y, z]
-            rot_delta: 3-element rotation increment [roll, pitch, yaw]
-        """
+        if self.selected_arm in ['left', 'both']:
+            left_ee_delta[0:3] = pos_delta
+            left_ee_delta[3:6] = rot_delta  # Small angle approximation
+
+        if self.selected_arm in ['right', 'both']:
+            right_ee_delta[0:3] = pos_delta
+            right_ee_delta[3:6] = rot_delta
+
         # Clamp to safety limits
-        pos_delta = np.clip(pos_delta, -self.max_position_increment, self.max_position_increment)
-        rot_delta = np.clip(rot_delta, -self.max_rotation_increment, self.max_rotation_increment)
+        left_ee_delta[0:3] = np.clip(left_ee_delta[0:3], -self.max_position_increment, self.max_position_increment)
+        left_ee_delta[3:6] = np.clip(left_ee_delta[3:6], -self.max_rotation_increment, self.max_rotation_increment)
+        right_ee_delta[0:3] = np.clip(right_ee_delta[0:3], -self.max_position_increment, self.max_position_increment)
+        right_ee_delta[3:6] = np.clip(right_ee_delta[3:6], -self.max_rotation_increment, self.max_rotation_increment)
 
-        # Convert rotation to quaternion (small angle approximation)
-        rot_quat = small_angle_to_delta_rotation(rot_delta)
-
-        # Create Pose message
-        pose_msg = pose_to_msg(pos_delta, rot_quat)
-
-        # Create command message
-        left_pose = pose_msg if self.selected_arm in ['left', 'both'] else None
-        right_pose = pose_msg if self.selected_arm in ['right', 'both'] else None
-
+        # Create and publish command message
         msg = self.create_teleop_command(
             arm_selector=self.get_arm_selector(),
             command_type=self.TASK_SPACE_INCREMENT,
-            left_ee_delta=left_pose,
-            right_ee_delta=right_pose
+            left_ee_delta=left_ee_delta,
+            right_ee_delta=right_ee_delta,
+            allow_safety_violation=False
         )
 
         self.teleop_pub.publish(msg)
@@ -294,6 +276,9 @@ def main(args=None):
         step_rotation=parser_args.step_rotation
     )
     node.set_selected_arm(parser_args.arm)
+
+    # Create status timer
+    status_timer = node.create_timer(1.0, node.status_callback)
 
     settings = termios.tcgetattr(sys.stdin)
 

@@ -1,55 +1,61 @@
 #!/usr/bin/env python3
 """
 CSV trajectory playback for dual Panda robot in Cartesian/task space.
+Simulates teleoperation commands by playing back CSV data.
 
 CSV Format:
     timestamp,x_left,y_left,z_left,qx_left,qy_left,qz_left,qw_left,x_right,...,qw_right
 
+Publishes: Float64MultiArray to /dualarm_teleop_cmd (teleop interface)
+
 Usage:
     source ~/myenv/bin/activate
-    source /path/to/dual_panda_ws/install/setup.bash
-    python src/multipanda_ros2/teleop/csv_teleop_cartesian.py --csv-file trajectory.csv
+    python3 src/multipanda_ros2/teleop/csv_teleop_cartesian.py --csv-file trajectory.csv
 """
 
 import rclpy
 from rclpy.node import Node
+from std_msgs.msg import Float64MultiArray
 from sensor_msgs.msg import JointState
 import threading
 import numpy as np
 import argparse
 import time
 import csv
+import os
 
-from .base_teleop import BaseTeleopNode
-from .utils.transformations import pose_from_msg, quaternion_multiply, normalize_quaternion
+# Add parent directory to path for imports
+if __name__ == '__main__':
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
+# Import base teleop node
+try:
+    from teleop.base_teleop import BaseTeleopNode
+except ImportError:
+    # Fallback for direct execution
+    from base_teleop import BaseTeleopNode
 
 
 class CSVCartesianTeleop(BaseTeleopNode):
-    """CSV playback for Cartesian space control."""
+    """CSV playback for Cartesian space control via teleop interface."""
+
+    # Command type constants
+    TASK_SPACE_INCREMENT = 2
 
     def __init__(self, csv_file: str, loop: bool = False, publish_rate: float = 100.0):
-        """
-        Initialize CSV Cartesian teleop node.
-
-        Args:
-            csv_file: Path to CSV file with pose trajectories
-            loop: Whether to loop the trajectory
-            publish_rate: Publishing rate in Hz
-        """
+        """Initialize CSV Cartesian teleop node."""
         super().__init__('csv_cartesian_teleop', publish_rate=publish_rate)
 
         self.csv_file = csv_file
         self.loop = loop
         self.joint_states_received = False
+        self.current_index = 0
+        self.start_time = None
+        self.prev_poses = None
 
         # Load trajectory
         self.trajectory = self.load_csv(csv_file)
-        self.current_index = 0
-        self.start_time = None
-
-        # Previous poses for delta calculation
-        self.prev_left_pose = None
-        self.prev_right_pose = None
 
         # Subscriber for current joint states
         self.joint_state_sub = self.create_subscription(
@@ -60,10 +66,7 @@ class CSVCartesianTeleop(BaseTeleopNode):
         )
 
         # Control timer
-        self.control_timer = self.create_timer(
-            1.0 / publish_rate,
-            self.control_callback
-        )
+        self.control_timer = self.create_timer(1.0 / publish_rate, self.control_callback)
 
         self.get_logger().info(f'Loaded {len(self.trajectory)} points from {csv_file}')
         self.print_usage()
@@ -71,26 +74,46 @@ class CSVCartesianTeleop(BaseTeleopNode):
     def print_usage(self):
         msg = f"""
 ========================================
-CSV Task Space Playback
+CSV Task Space Teleop Playback
 ========================================
 File: {self.csv_file}
 Points: {len(self.trajectory)}
 Loop: {self.loop}
+Mode: Sending as teleop commands
 ========================================
 Playing trajectory...
 """
         print(msg, flush=True)
 
+    def quaternion_to_rotation_vector(self, qx, qy, qz, qw):
+        """Convert quaternion to rotation vector (small angle representation)."""
+        # Normalize
+        norm = np.sqrt(qx*qx + qy*qy + qz*qz + qw*qw)
+        if norm < 1e-6:
+            return np.array([0.0, 0.0, 0.0])
+        qx, qy, qz, qw = qx/norm, qy/norm, qz/norm, qw/norm
+
+        # For small rotations, convert quaternion to rotation vector
+        # If qw is close to 1, use small angle approximation
+        if qw > 0.9:
+            # Small angle: quaternion ≈ [1, theta/2 * axis]
+            # rotation vector ≈ 2 * [qx, qy, qz]
+            return 2.0 * np.array([qx, qy, qz])
+        else:
+            # For larger rotations, use full conversion
+            # rotation angle
+            angle = 2.0 * np.arccos(np.clip(qw, -1.0, 1.0))
+            if angle < 1e-6:
+                return np.array([0.0, 0.0, 0.0])
+            # rotation axis
+            sin_half_angle = np.sin(angle / 2.0)
+            if sin_half_angle < 1e-6:
+                return np.array([0.0, 0.0, 0.0])
+            axis = np.array([qx, qy, qz]) / sin_half_angle
+            return axis * angle
+
     def load_csv(self, csv_file: str) -> list:
-        """
-        Load pose trajectory from CSV file.
-
-        Args:
-            csv_file: Path to CSV file
-
-        Returns:
-            List of (timestamp, left_pos, left_quat, right_pos, right_quat) tuples
-        """
+        """Load pose trajectory from CSV file."""
         trajectory = []
         try:
             with open(csv_file, 'r') as f:
@@ -98,13 +121,22 @@ Playing trajectory...
                 headers = next(reader)  # Skip header
 
                 for row in reader:
-                    if len(row) >= 16:  # timestamp + 7 left (pos+quat) + 8 right
+                    if len(row) >= 15:  # timestamp + 7 left (pos+quat) + 7 right
                         timestamp = float(row[0])
+                        # Left arm: position + quaternion
                         left_pos = np.array([float(x) for x in row[1:4]])
-                        left_quat = normalize_quaternion(np.array([float(x) for x in row[4:8]]))
+                        left_quat = np.array([float(x) for x in row[4:8]])
+                        # Convert quaternion to rotation vector (6DOF: x,y,z + qx,qy,qz)
+                        left_rot = self.quaternion_to_rotation_vector(*left_quat)
+                        left_ee = np.concatenate([left_pos, left_rot])  # 6 elements
+
+                        # Right arm: position + quaternion
                         right_pos = np.array([float(x) for x in row[8:11]])
-                        right_quat = normalize_quaternion(np.array([float(x) for x in row[11:15]]))
-                        trajectory.append((timestamp, left_pos, left_quat, right_pos, right_quat))
+                        right_quat = np.array([float(x) for x in row[11:15]])
+                        right_rot = self.quaternion_to_rotation_vector(*right_quat)
+                        right_ee = np.concatenate([right_pos, right_rot])  # 6 elements
+
+                        trajectory.append((timestamp, left_ee, right_ee))
 
             return trajectory
 
@@ -115,45 +147,36 @@ Playing trajectory...
     def joint_state_callback(self, msg):
         """Update current joint states from /joint_states."""
         try:
-            # Extract left arm joints
             left_indices = []
             for i in range(1, 8):
                 joint_name = f'mj_left_joint{i}'
                 if joint_name in msg.name:
                     left_indices.append(msg.name.index(joint_name))
 
-            # Extract right arm joints
             right_indices = []
             for i in range(1, 8):
                 joint_name = f'mj_right_joint{i}'
                 if joint_name in msg.name:
                     right_indices.append(msg.name.index(joint_name))
 
-            if len(left_indices) == 7:
-                self.current_joint_states['left'] = np.array([msg.position[i] for i in left_indices])
-
-            if len(right_indices) == 7:
-                self.current_joint_states['right'] = np.array([msg.position[i] for i in right_indices])
-
-            if not self.joint_states_received and len(left_indices) == 7 and len(right_indices) == 7:
-                self.joint_states_received = True
-                print(f"Joint states received. Starting playback...", flush=True)
+            if len(left_indices) == 7 and len(right_indices) == 7:
+                if not self.joint_states_received:
+                    self.joint_states_received = True
+                    print(f"Joint states received. Starting playback...", flush=True)
 
         except Exception as e:
             pass
 
     def control_callback(self):
-        """Main control loop - publishes trajectory increments."""
+        """Main control loop - publishes trajectory increments as teleop commands."""
         if not self.trajectory or not self.joint_states_received:
             return
 
         # Initialize start time
         if self.start_time is None:
             self.start_time = time.time()
-            # Initialize previous poses
-            _, left_pos, left_quat, right_pos, right_quat = self.trajectory[0]
-            self.prev_left_pose = (left_pos, left_quat)
-            self.prev_right_pose = (right_pos, right_quat)
+            _, left_ee, right_ee = self.trajectory[0]
+            self.prev_poses = (left_ee.copy(), right_ee.copy())
             return
 
         # Get current trajectory time
@@ -170,9 +193,8 @@ Playing trajectory...
                 # Restart trajectory
                 self.start_time = time.time()
                 self.current_index = 0
-                _, left_pos, left_quat, right_pos, right_quat = self.trajectory[0]
-                self.prev_left_pose = (left_pos, left_quat)
-                self.prev_right_pose = (right_pos, right_quat)
+                _, left_ee, right_ee = self.trajectory[0]
+                self.prev_poses = (left_ee.copy(), right_ee.copy())
                 return
             else:
                 # Trajectory finished
@@ -181,87 +203,43 @@ Playing trajectory...
                 return
 
         # Get target pose
-        timestamp, left_pos, left_quat, right_pos, right_quat = self.trajectory[self.current_index]
+        timestamp, left_ee, right_ee = self.trajectory[self.current_index]
 
-        # Calculate deltas
-        left_pos_delta, left_quat_delta = self.calculate_pose_delta(
-            self.prev_left_pose, (left_pos, left_quat)
-        )
-        right_pos_delta, right_quat_delta = self.calculate_pose_delta(
-            self.prev_right_pose, (right_pos, right_quat)
-        )
+        # Calculate increment from previous pose
+        prev_left, prev_right = self.prev_poses
+        left_delta = left_ee - prev_left
+        right_delta = right_ee - prev_right
 
-        # Update previous poses
-        self.prev_left_pose = (left_pos.copy(), left_quat.copy())
-        self.prev_right_pose = (right_pos.copy(), right_quat.copy())
+        # Clamp increment to safety limits
+        max_pos_delta = 0.002  # meters
+        max_rot_delta = 0.01   # radians
 
-        # Publish command
-        self.publish_command(left_pos_delta, left_quat_delta, right_pos_delta, right_quat_delta)
+        left_delta[0:3] = np.clip(left_delta[0:3], -max_pos_delta, max_pos_delta)
+        left_delta[3:6] = np.clip(left_delta[3:6], -max_rot_delta, max_rot_delta)
+        right_delta[0:3] = np.clip(right_delta[0:3], -max_pos_delta, max_pos_delta)
+        right_delta[3:6] = np.clip(right_delta[3:6], -max_rot_delta, max_rot_delta)
+
+        # Publish as teleop command
+        self.publish_teleop_increment(left_delta, right_delta)
+
+        self.prev_poses = (left_ee.copy(), right_ee.copy())
 
         # Print progress
         progress = (self.current_index / len(self.trajectory)) * 100
         print(f"\rProgress: {progress:.1f}% | "
-              f"L: [{left_pos[0]:6.3f}, {left_pos[1]:6.3f}, {left_pos[2]:6.3f}] | "
-              f"R: [{right_pos[0]:6.3f}, {right_pos[1]:6.3f}, {right_pos[2]:6.3f}]   ",
+              f"L: [{left_ee[0]:6.3f}, {left_ee[1]:6.3f}, {left_ee[2]:6.3f}] | "
+              f"R: [{right_ee[0]:6.3f}, {right_ee[1]:6.3f}, {right_ee[2]:6.3f}]   ",
               end='', flush=True)
 
-    def calculate_pose_delta(self, prev_pose, curr_pose):
-        """
-        Calculate incremental pose change.
-
-        Args:
-            prev_pose: (position, quaternion) of previous pose
-            curr_pose: (position, quaternion) of current pose
-
-        Returns:
-            (position_delta, quaternion_delta)
-        """
-        prev_pos, prev_quat = prev_pose
-        curr_pos, curr_quat = curr_pose
-
-        # Position delta
-        pos_delta = curr_pos - prev_pos
-
-        # Rotation delta: delta_quat = curr * prev^(-1)
-        # For quaternions: inverse = [x, y, z, -w] if we want [x, y, z, w] format
-        # Actually quaternion inverse is [-x, -y, -z, w] for unit quaternions
-        prev_quat_inv = np.array([-prev_quat[0], -prev_quat[1], -prev_quat[2], prev_quat[3]])
-        quat_delta = quaternion_multiply(curr_quat, prev_quat_inv)
-
-        # For small rotations, quaternion is approximately [rx/2, ry/2, rz/2, 1]
-        # Extract rotation from this
-        return pos_delta, quat_delta
-
-    def publish_command(
-        self,
-        left_pos_delta: np.ndarray,
-        left_quat_delta: np.ndarray,
-        right_pos_delta: np.ndarray,
-        right_quat_delta: np.ndarray
-    ):
-        """
-        Publish Cartesian increment command.
-
-        Args:
-            left_pos_delta: 3-element left arm position increment
-            left_quat_delta: 4-element left arm quaternion increment
-            right_pos_delta: 3-element right arm position increment
-            right_quat_delta: 4-element right arm quaternion increment
-        """
-        # Clamp to safety limits
-        left_pos_delta = np.clip(left_pos_delta, -self.max_position_increment, self.max_position_increment)
-        right_pos_delta = np.clip(right_pos_delta, -self.max_position_increment, self.max_position_increment)
-
-        # Create Pose messages
-        from .utils.transformations import pose_to_msg
-        left_pose_msg = pose_to_msg(left_pos_delta, left_quat_delta)
-        right_pose_msg = pose_to_msg(right_pos_delta, right_quat_delta)
-
+    def publish_teleop_increment(self, left_delta: np.ndarray, right_delta: np.ndarray):
+        """Publish Cartesian increment as teleop command."""
+        # Create and publish teleop command
         msg = self.create_teleop_command(
             arm_selector=self.BOTH_ARMS,
             command_type=self.TASK_SPACE_INCREMENT,
-            left_ee_delta=left_pose_msg,
-            right_ee_delta=right_pose_msg
+            left_ee_delta=left_delta,
+            right_ee_delta=right_delta,
+            allow_safety_violation=False
         )
 
         self.teleop_pub.publish(msg)
@@ -286,11 +264,9 @@ def main(args=None):
             publish_rate=parser_args.rate
         )
 
-        # Spin in a separate thread
         thread = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)
         thread.start()
 
-        # Main thread just waits
         while rclpy.ok():
             time.sleep(0.1)
 

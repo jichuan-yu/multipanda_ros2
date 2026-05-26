@@ -140,13 +140,13 @@ joint_impedance_controller:
     arm_id: panda
     pub_filt_state: false
     k_gains:
-      - 600.0
-      - 600.0
-      - 600.0
-      - 600.0
-      - 250.0
-      - 150.0
-      - 100.0
+      - 60.0
+      - 60.0
+      - 60.0
+      - 60.0
+      - 25.0
+      - 15.0
+      - 10.0
     d_gains:
       - 30.0
       - 30.0

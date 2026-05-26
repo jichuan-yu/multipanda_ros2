@@ -6,52 +6,58 @@ SpaceMouse Mapping:
   Translation: Direct mapping (scaled)
   Rotation: Direct mapping (scaled)
   Buttons:
-    Button 1: Select left arm
-    Button 2: Select right arm
+    Button 0: Select left arm
+    Button 1: Select right arm
+
+Publishes: Float64MultiArray to /dualarm_teleop_cmd (standard ROS2 message)
 
 Usage:
     source ~/myenv/bin/activate
-    source /path/to/dual_panda_ws/install/setup.bash
-    python src/multipanda_ros2/teleop/spacemouse_teleop_cartesian.py
+    python3 src/multipanda_ros2/teleop/spacemouse_teleop_cartesian.py
 """
 
 import rclpy
 from rclpy.node import Node
+from std_msgs.msg import Float64MultiArray
 from sensor_msgs.msg import JointState
 import threading
 import numpy as np
 import argparse
 import time
-
-from .base_teleop import BaseTeleopNode
-from .utils.transformations import small_angle_to_delta_rotation, pose_to_msg
+import os
 
 # Add tools directory to path for pyspacemouse import
-import sys
-import os
 _tools_path = os.path.join(os.path.dirname(__file__), '..', 'tools')
-if _tools_path not in sys.path:
+if _tools_path not in os.path.join(os.path.abspath(os.path.dirname(__file__)), '..', '..'):
+    import sys
     sys.path.insert(0, _tools_path)
 import pyspacemouse
+
+# Add parent directory to path for base_teleop import
+if __name__ == '__main__':
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
+# Import base teleop node
+try:
+    from teleop.base_teleop import BaseTeleopNode
+except ImportError:
+    # Fallback for direct execution
+    from base_teleop import BaseTeleopNode
 
 
 class SpaceMouseTeleop(BaseTeleopNode):
     """SpaceMouse teleoperation for Cartesian space control."""
 
+    # Command type constants
+    TASK_SPACE_INCREMENT = 2
+
     def __init__(
         self,
-        scale_translation: float = 0.0001,
-        scale_rotation: float = 0.0005,
+        scale_translation: float = 0.0000007,
+        scale_rotation: float = 0.0000035,
         deadzone: float = 0.05
     ):
-        """
-        Initialize SpaceMouse teleop node.
-
-        Args:
-            scale_translation: Translation scale factor (m per unit)
-            scale_rotation: Rotation scale factor (rad per unit)
-            deadzone: Deadzone for axis values (normalized 0-1)
-        """
+        """Initialize SpaceMouse teleop node."""
         super().__init__('spacemouse_teleop', publish_rate=100.0)
 
         self.scale_translation = scale_translation
@@ -61,26 +67,23 @@ class SpaceMouseTeleop(BaseTeleopNode):
 
         # Initialize SpaceMouse
         try:
-            self.spacemouse_device = pyspacemouse.open()
-            print(f"Connected to SpaceMouse", flush=True)
+            success = pyspacemouse.open()
+            if not success:
+                self.get_logger().error("Could not connect to SpaceMouse")
+                raise RuntimeError("SpaceMouse not found")
+            print("Connected to SpaceMouse", flush=True)
         except Exception as e:
             self.get_logger().error(f'Failed to open SpaceMouse: {e}')
-            self.spacemouse_device = None
+            raise
 
-        # Previous button state for edge detection
+        self.selected_arm = 'left'
         self.prev_buttons = [0, 0]
 
-        # Subscriber for current joint states
-        self.joint_state_sub = self.create_subscription(
-            JointState,
-            '/joint_states',
-            self.joint_state_callback,
-            10
-        )
-
-        # Status and control timers
+        # Status timer
         self.status_timer = self.create_timer(1.0, self.status_callback)
-        self.control_timer = self.create_timer(1.0 / 100.0, self.control_callback)
+
+        # Control timer (100Hz)
+        self.control_timer = self.create_timer(0.01, self.control_callback)
 
         self.get_logger().info('SpaceMouse Teleop initialized')
         self.print_usage()
@@ -99,49 +102,13 @@ Buttons:
 
 Ctrl-C to quit
 ========================================
-Waiting for joint states...
 """
         print(msg, flush=True)
 
     def status_callback(self):
         """Print status at 1Hz."""
-        if self.joint_states_received:
-            left_q = self.current_joint_states['left']
-            right_q = self.current_joint_states['right']
-            print(f"\r[{self.selected_arm.upper()}] | "
-                  f"L: [{left_q[0]:6.2f}, {left_q[1]:6.2f}, ...] | "
-                  f"R: [{right_q[0]:6.2f}, {right_q[1]:6.2f}, ...]   ",
-                  end='', flush=True)
-
-    def joint_state_callback(self, msg):
-        """Update current joint states from /joint_states."""
-        try:
-            # Extract left arm joints
-            left_indices = []
-            for i in range(1, 8):
-                joint_name = f'mj_left_joint{i}'
-                if joint_name in msg.name:
-                    left_indices.append(msg.name.index(joint_name))
-
-            # Extract right arm joints
-            right_indices = []
-            for i in range(1, 8):
-                joint_name = f'mj_right_joint{i}'
-                if joint_name in msg.name:
-                    right_indices.append(msg.name.index(joint_name))
-
-            if len(left_indices) == 7:
-                self.current_joint_states['left'] = np.array([msg.position[i] for i in left_indices])
-
-            if len(right_indices) == 7:
-                self.current_joint_states['right'] = np.array([msg.position[i] for i in right_indices])
-
-            if not self.joint_states_received and len(left_indices) == 7 and len(right_indices) == 7:
-                self.joint_states_received = True
-                print(f"\nJoint states received. Ready for control!", flush=True)
-
-        except Exception as e:
-            pass
+        print(f"\r[{self.selected_arm.upper()}] | Scale: T={self.scale_translation:.2e} R={self.scale_rotation:.2e}   ",
+              end='', flush=True)
 
     def apply_deadzone(self, value: float) -> float:
         """Apply deadzone to a value."""
@@ -152,84 +119,70 @@ Waiting for joint states...
 
     def control_callback(self):
         """Main control loop - reads SpaceMouse and publishes commands."""
-        if self.spacemouse_device is None:
-            return
-
         state = pyspacemouse.read()
         if state is None:
             return
 
-        # Check button presses for arm selection
-        self.handle_buttons(list(state.buttons))
+        # Handle buttons for arm selection
+        try:
+            curr_buttons = [bool(state.buttons[0]), bool(state.buttons[1])]
+        except (IndexError, TypeError):
+            curr_buttons = [False, False]
 
-        # Read translation and rotation (apply deadzone)
-        x = self.apply_deadzone(state.x) * self.scale_translation
-        y = self.apply_deadzone(state.y) * self.scale_translation
-        z = self.apply_deadzone(state.z) * self.scale_translation
-
-        roll = self.apply_deadzone(state.roll) * self.scale_rotation
-        pitch = self.apply_deadzone(state.pitch) * self.scale_rotation
-        yaw = self.apply_deadzone(state.yaw) * self.scale_rotation
-
-        # Check if there's any meaningful input
-        pos_delta = np.array([x, y, z])
-        rot_delta = np.array([roll, pitch, yaw])
-
-        if np.linalg.norm(pos_delta) > 1e-9 or np.linalg.norm(rot_delta) > 1e-9:
-            self.publish_command(pos_delta, rot_delta)
-
-    def handle_buttons(self, buttons: list):
-        """
-        Handle button presses for arm selection.
-
-        Args:
-            buttons: Current button state list
-        """
-        # Ensure we have at least 2 buttons
-        while len(buttons) < 2:
-            buttons.append(0)
-
-        # Check for button press edges
-        for i in range(min(2, len(self.prev_buttons))):
-            prev = self.prev_buttons[i]
-            curr = buttons[i] if i < len(buttons) else 0
-            if prev == 0 and curr == 1:  # Rising edge
+        # Button press detection
+        for i, (prev, curr) in enumerate(zip(self.prev_buttons, curr_buttons)):
+            if not prev and curr:  # Rising edge
                 if i == 0:
-                    self.selected_arm = 'left'
+                    self.set_selected_arm('left')
                     print(f"\n[Switched to LEFT arm]", flush=True)
                 elif i == 1:
-                    self.selected_arm = 'right'
+                    self.set_selected_arm('right')
                     print(f"\n[Switched to RIGHT arm]", flush=True)
 
-        self.prev_buttons = buttons.copy()
+        self.prev_buttons = curr_buttons
 
-    def publish_command(self, pos_delta: np.ndarray, rot_delta: np.ndarray):
-        """
-        Publish Cartesian increment command.
+        # Apply deadzone and scale
+        dx = self.apply_deadzone(state.x) * self.scale_translation
+        dy = self.apply_deadzone(state.y) * self.scale_translation
+        dz = self.apply_deadzone(state.z) * self.scale_translation
 
-        Args:
-            pos_delta: 3-element position increment [x, y, z]
-            rot_delta: 3-element rotation increment [roll, pitch, yaw]
-        """
+        droll = self.apply_deadzone(state.roll) * self.scale_rotation
+        dpitch = self.apply_deadzone(state.pitch) * self.scale_rotation
+        dyaw = self.apply_deadzone(state.yaw) * self.scale_rotation
+
+        # Update pose if there's meaningful input
+        if abs(dx) > 1e-12 or abs(dy) > 1e-12 or abs(dz) > 1e-12 or \
+           abs(droll) > 1e-12 or abs(dpitch) > 1e-12 or abs(dyaw) > 1e-12:
+            self.publish_teleop_command(np.array([dx, dy, dz]), np.array([droll, dpitch, dyaw]))
+
+    def publish_teleop_command(self, pos_delta: np.ndarray, rot_delta: np.ndarray):
+        """Publish Cartesian increment as teleop command."""
+        # Prepare end-effector deltas for both arms
+        # Format: [x, y, z, qx, qy, qz] (6 elements per arm)
+        left_ee_delta = np.zeros(6)
+        right_ee_delta = np.zeros(6)
+
+        if self.selected_arm in ['left', 'both']:
+            left_ee_delta[0:3] = pos_delta
+            left_ee_delta[3:6] = rot_delta  # Small angle approximation
+
+        if self.selected_arm in ['right', 'both']:
+            right_ee_delta[0:3] = pos_delta
+            right_ee_delta[3:6] = rot_delta
+
         # Clamp to safety limits
-        pos_delta = np.clip(pos_delta, -self.max_position_increment, self.max_position_increment)
-        rot_delta = np.clip(rot_delta, -self.max_rotation_increment, self.max_rotation_increment)
+        left_ee_delta[0:3] = np.clip(left_ee_delta[0:3], -self.max_position_increment, self.max_position_increment)
+        left_ee_delta[3:6] = np.clip(left_ee_delta[3:6], -self.max_rotation_increment, self.max_rotation_increment)
+        right_ee_delta[0:3] = np.clip(right_ee_delta[0:3], -self.max_position_increment, self.max_position_increment)
+        right_ee_delta[3:6] = np.clip(right_ee_delta[3:6], -self.max_rotation_increment, self.max_rotation_increment)
 
-        # Convert rotation to quaternion (small angle approximation)
-        rot_quat = small_angle_to_delta_rotation(rot_delta)
-
-        # Create Pose message
-        pose_msg = pose_to_msg(pos_delta, rot_quat)
-
-        # Create command message
-        left_pose = pose_msg if self.selected_arm in ['left', 'both'] else None
-        right_pose = pose_msg if self.selected_arm in ['right', 'both'] else None
-
+        # Create and publish command message
         msg = self.create_teleop_command(
             arm_selector=self.get_arm_selector(),
             command_type=self.TASK_SPACE_INCREMENT,
-            left_ee_delta=left_pose,
-            right_ee_delta=right_pose
+            left_ee_delta=left_ee_delta,
+            right_ee_delta=right_ee_delta,
+            allow_safety_violation=False
         )
 
         self.teleop_pub.publish(msg)
@@ -237,12 +190,12 @@ Waiting for joint states...
 
 def main(args=None):
     parser = argparse.ArgumentParser(description='SpaceMouse Cartesian teleop')
-    parser.add_argument('--scale-translation', type=float, default=0.0001,
-                        help='Translation scale factor (m per unit)')
-    parser.add_argument('--scale-rotation', type=float, default=0.0005,
-                        help='Rotation scale factor (rad per unit)')
+    parser.add_argument('--scale-translation', type=float, default=0.0000007,
+                        help='Translation scale factor')
+    parser.add_argument('--scale-rotation', type=float, default=0.0000035,
+                        help='Rotation scale factor')
     parser.add_argument('--deadzone', type=float, default=0.05,
-                        help='Deadzone for axis values (normalized 0-1)')
+                        help='Deadzone for axis values')
     parser.add_argument('--arm', type=str, choices=['left', 'right', 'both'],
                         default='left', help='Initial arm selection')
     parser_args = parser.parse_args(args)

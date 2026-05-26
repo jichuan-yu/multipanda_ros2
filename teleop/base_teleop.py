@@ -1,31 +1,43 @@
 """
 Base class for all teleoperation nodes.
 Provides common functionality for ROS2 initialization, command publishing, and safety features.
+
+Uses standard ROS2 Float64MultiArray message format for teleoperation commands.
+Message format: [data14, command_type, arm_selector, allow_safety_violation]
 """
 
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
-from std_msgs.msg import Header
-from geometry_msgs.msg import Pose
-from dualarm_reactive_control.msg import TeleopCommand
+from std_msgs.msg import Float64MultiArray
 import numpy as np
 from typing import Optional
+
+# Command type constants
+JOINT_POSITION_INCREMENT = 0
+JOINT_VELOCITY = 1
+TASK_SPACE_INCREMENT = 2
+TASK_SPACE_VELOCITY = 3
+
+# Arm selector constants
+LEFT_ARM = 1
+RIGHT_ARM = 2
+BOTH_ARMS = 3
 
 
 class BaseTeleopNode(Node):
     """Base class for all teleoperation nodes."""
 
-    # Arm selector constants (from TeleopCommand.msg)
-    LEFT_ARM = TeleopCommand.LEFT_ARM
-    RIGHT_ARM = TeleopCommand.RIGHT_ARM
-    BOTH_ARMS = TeleopCommand.BOTH_ARMS
+    # Arm selector constants
+    LEFT_ARM = LEFT_ARM
+    RIGHT_ARM = RIGHT_ARM
+    BOTH_ARMS = BOTH_ARMS
 
     # Command type constants
-    JOINT_POSITION_INCREMENT = TeleopCommand.JOINT_POSITION_INCREMENT
-    JOINT_VELOCITY = TeleopCommand.JOINT_VELOCITY
-    TASK_SPACE_INCREMENT = TeleopCommand.TASK_SPACE_INCREMENT
-    TASK_SPACE_VELOCITY = TeleopCommand.TASK_SPACE_VELOCITY
+    JOINT_POSITION_INCREMENT = JOINT_POSITION_INCREMENT
+    JOINT_VELOCITY = JOINT_VELOCITY
+    TASK_SPACE_INCREMENT = TASK_SPACE_INCREMENT
+    TASK_SPACE_VELOCITY = TASK_SPACE_VELOCITY
 
     # Panda joint limits
     JOINT_LIMITS_LOWER = np.array([-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973])
@@ -62,7 +74,7 @@ class BaseTeleopNode(Node):
             depth=10
         )
         self.teleop_pub = self.create_publisher(
-            TeleopCommand,
+            Float64MultiArray,
             '/dualarm_teleop_cmd',
             qos
         )
@@ -92,53 +104,75 @@ class BaseTeleopNode(Node):
         command_type: int,
         left_joint_delta: Optional[np.ndarray] = None,
         right_joint_delta: Optional[np.ndarray] = None,
-        left_ee_delta: Optional[Pose] = None,
-        right_ee_delta: Optional[Pose] = None,
+        left_ee_delta: Optional[np.ndarray] = None,
+        right_ee_delta: Optional[np.ndarray] = None,
         allow_safety_violation: bool = False
-    ) -> TeleopCommand:
+    ) -> Float64MultiArray:
         """
-        Create a TeleopCommand message.
+        Create a Float64MultiArray teleop command message.
+
+        Message format: [data14, command_type, arm_selector, allow_safety_violation]
+        - data14: 14 data elements (format depends on command_type)
+          * Joint space: [left_joint1-7, right_joint1-7]
+          * Task space: [left_x,y,z,qx,qy,qz, right_x,y,z,qx,qy,qz, 0, 0]
+        - command_type: 0=JOINT_POSITION_INCREMENT, 1=JOINT_VELOCITY,
+                       2=TASK_SPACE_INCREMENT, 3=TASK_SPACE_VELOCITY
+        - arm_selector: 1=LEFT_ARM, 2=RIGHT_ARM, 3=BOTH_ARMS
+        - allow_safety_violation: 0.0=false, 1.0=true
 
         Args:
             arm_selector: LEFT_ARM, RIGHT_ARM, or BOTH_ARMS
             command_type: JOINT_POSITION_INCREMENT, TASK_SPACE_INCREMENT, etc.
             left_joint_delta: 7-element array for left arm joint increments
             right_joint_delta: 7-element array for right arm joint increments
-            left_ee_delta: Pose message for left arm end-effector increment
-            right_ee_delta: Pose message for right arm end-effector increment
+            left_ee_delta: 6-element array [x,y,z,qx,qy,qz] for left arm EE increment
+            right_ee_delta: 6-element array [x,y,z,qx,qy,qz] for right arm EE increment
             allow_safety_violation: Whether to disable collision avoidance
 
         Returns:
-            TeleopCommand message
+            Float64MultiArray message with teleop command
         """
-        msg = TeleopCommand()
-        msg.header = Header()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.arm_selector = arm_selector
-        msg.command_type = command_type
-        msg.allow_safety_violation = allow_safety_violation
+        msg = Float64MultiArray()
 
-        # Set joint deltas
-        if left_joint_delta is not None:
-            msg.left_joint_delta = left_joint_delta.tolist()
-        else:
-            msg.left_joint_delta = [0.0] * 7
+        if command_type in [JOINT_POSITION_INCREMENT, JOINT_VELOCITY]:
+            # Joint space command: 14 joint values
+            data = np.zeros(14)
 
-        if right_joint_delta is not None:
-            msg.right_joint_delta = right_joint_delta.tolist()
-        else:
-            msg.right_joint_delta = [0.0] * 7
+            if left_joint_delta is not None:
+                data[0:7] = left_joint_delta
+            else:
+                data[0:7] = 0.0
 
-        # Set end-effector deltas
-        if left_ee_delta is not None:
-            msg.left_ee_delta = left_ee_delta
-        else:
-            msg.left_ee_delta = Pose()
+            if right_joint_delta is not None:
+                data[7:14] = right_joint_delta
+            else:
+                data[7:14] = 0.0
 
-        if right_ee_delta is not None:
-            msg.right_ee_delta = right_ee_delta
+        elif command_type in [TASK_SPACE_INCREMENT, TASK_SPACE_VELOCITY]:
+            # Task space command: 12 task space values + 2 padding
+            data = np.zeros(14)
+
+            if left_ee_delta is not None:
+                data[0:6] = left_ee_delta
+            # else: already zeros
+
+            if right_ee_delta is not None:
+                data[6:12] = right_ee_delta
+            # else: already zeros
+
+            # Indices 12-13 are padding (unused) for task space commands
+            data[12:14] = 0.0
         else:
-            msg.right_ee_delta = Pose()
+            self.get_logger().warn(f"Unknown command type: {command_type}")
+            data = np.zeros(14)
+
+        # Assemble full message: [data14, command_type, arm_selector, safety_flag]
+        msg.data = np.concatenate([
+            data,
+            [command_type],
+            [arm_selector],
+            [1.0 if allow_safety_violation else 0.0]
+        ]).tolist()
 
         return msg
 

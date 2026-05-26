@@ -8,14 +8,16 @@ Key Mapping:
   Arm Selection: Z (left), X (right), B (both)
   Step Size: [ = decrease, ] = increase
 
+Publishes: Float64MultiArray to /dualarm_teleop_cmd (standard ROS2 message)
+
 Usage:
     source ~/myenv/bin/activate
-    source /path/to/dual_panda_ws/install/setup.bash
-    python src/multipanda_ros2/teleop/key_teleop_joint.py
+    python3 src/multipanda_ros2/teleop/key_teleop_joint.py
 """
 
 import rclpy
 from rclpy.node import Node
+from std_msgs.msg import Float64MultiArray
 from sensor_msgs.msg import JointState
 import sys
 import select
@@ -25,20 +27,28 @@ import threading
 import numpy as np
 import argparse
 import time
+import os
 
-from .base_teleop import BaseTeleopNode
+# Add parent directory to path for imports (for direct execution)
+if __name__ == '__main__':
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
+# Import base teleop node
+try:
+    from teleop.base_teleop import BaseTeleopNode
+except ImportError:
+    # Fallback for direct execution
+    from base_teleop import BaseTeleopNode
 
 
 class KeyJointTeleop(BaseTeleopNode):
     """Keyboard teleoperation for joint space control."""
 
-    def __init__(self, step_size: float = 0.03):
-        """
-        Initialize key joint teleop node.
+    # Command type constants
+    JOINT_POSITION_INCREMENT = 0
 
-        Args:
-            step_size: Joint increment per keypress in radians
-        """
+    def __init__(self, step_size: float = 0.002):
+        """Initialize key joint teleop node."""
         super().__init__('key_joint_teleop', publish_rate=100.0)
 
         self.step_joint = step_size
@@ -51,9 +61,6 @@ class KeyJointTeleop(BaseTeleopNode):
             self.joint_state_callback,
             10
         )
-
-        # Status timer
-        self.status_timer = self.create_timer(1.0, self.status_callback)
 
         self.print_usage()
 
@@ -124,39 +131,31 @@ Waiting for joint states...
             pass
 
     def update_joint(self, key: str) -> bool:
-        """
-        Update joint angle based on key input.
-
-        Args:
-            key: Pressed key character
-
-        Returns:
-            True if command was published
-        """
+        """Update joint angle based on key input."""
         # Arm selection
         if key == 'z':
             if self.selected_arm != 'left':
-                self.selected_arm = 'left'
+                self.set_selected_arm('left')
                 print(f"\n[Switched to LEFT arm]", flush=True)
             return False
         elif key == 'x':
             if self.selected_arm != 'right':
-                self.selected_arm = 'right'
+                self.set_selected_arm('right')
                 print(f"\n[Switched to RIGHT arm]", flush=True)
             return False
         elif key == 'b':
             if self.selected_arm != 'both':
-                self.selected_arm = 'both'
+                self.set_selected_arm('both')
                 print(f"\n[Switched to BOTH arms]", flush=True)
             return False
 
         # Step size adjustment
         elif key == '[':
-            self.step_joint = max(0.001, self.step_joint * 0.8)
+            self.step_joint = max(0.0005, self.step_joint * 0.8)
             print(f"\n[Step size: {self.step_joint:.4f} rad]", flush=True)
             return False
         elif key == ']':
-            self.step_joint = min(0.1, self.step_joint * 1.25)
+            self.step_joint = min(0.05, self.step_joint * 1.25)
             print(f"\n[Step size: {self.step_joint:.4f} rad]", flush=True)
             return False
 
@@ -179,39 +178,34 @@ Waiting for joint states...
             updated = True
 
         if updated:
-            self.publish_command(delta)
+            self.publish_teleop_command(delta)
             return True
 
         return False
 
-    def publish_command(self, delta: np.ndarray):
-        """
-        Publish joint increment command.
+    def publish_teleop_command(self, delta: np.ndarray):
+        """Publish joint increment as teleop command."""
+        # Prepare joint deltas for both arms
+        left_delta = np.zeros(7)
+        right_delta = np.zeros(7)
 
-        Args:
-            delta: 7-element joint increment array
-        """
-        # Clamp to safety limits
-        delta = self.clamp_joint_delta(delta)
-
-        # Apply to current position and check limits
         if self.selected_arm in ['left', 'both']:
-            new_left = self.current_joint_states['left'] + delta
-            self.current_joint_states['left'] = self.clamp_joint_position(new_left)
+            left_delta = delta
 
         if self.selected_arm in ['right', 'both']:
-            new_right = self.current_joint_states['right'] + delta
-            self.current_joint_states['right'] = self.clamp_joint_position(new_right)
+            right_delta = delta
 
-        # Create command message
-        left_delta = delta if self.selected_arm in ['left', 'both'] else np.zeros(7)
-        right_delta = delta if self.selected_arm in ['right', 'both'] else np.zeros(7)
+        # Clamp to safety limits
+        left_delta = self.clamp_joint_delta(left_delta)
+        right_delta = self.clamp_joint_delta(right_delta)
 
+        # Create and publish command message
         msg = self.create_teleop_command(
             arm_selector=self.get_arm_selector(),
             command_type=self.JOINT_POSITION_INCREMENT,
             left_joint_delta=left_delta,
-            right_joint_delta=right_delta
+            right_joint_delta=right_delta,
+            allow_safety_violation=False
         )
 
         self.teleop_pub.publish(msg)
@@ -231,7 +225,7 @@ def get_key(settings):
 
 def main(args=None):
     parser = argparse.ArgumentParser(description='Joint space keyboard teleop')
-    parser.add_argument('--step-size', type=float, default=0.03,
+    parser.add_argument('--step-size', type=float, default=0.002,
                         help='Joint increment per keypress (rad)')
     parser.add_argument('--arm', type=str, choices=['left', 'right', 'both'],
                         default='left', help='Initial arm selection')
@@ -240,6 +234,9 @@ def main(args=None):
     rclpy.init(args=args)
     node = KeyJointTeleop(step_size=parser_args.step_size)
     node.set_selected_arm(parser_args.arm)
+
+    # Create status timer
+    status_timer = node.create_timer(1.0, node.status_callback)
 
     settings = termios.tcgetattr(sys.stdin)
 

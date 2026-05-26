@@ -153,3 +153,25 @@ Add the paths to the `DualArmTeleopConfig` in `spacemouse_pub_dualarm_joint.py`,
 ```bash
 python3 spacemouse_teleop/spacemouse_pub_dualarm_joint.py
 ```
+
+
+
+## Dual-Arm Joint Impedance Controller With RealSense Cameras
+
+Launch Controller
+```bash
+ros2 launch franka_bringup dual_franka_control_with_realsense.launch.py \
+  robot_ip_1:=172.16.0.3 \
+  robot_ip_2:=172.16.0.2 \
+  arm_id_1:=panda_left \
+  arm_id_2:=panda_right \
+  load_gripper_1:=true \
+  load_gripper_2:=true \
+  controller_name:=dual_joint_impedance_controller \
+  use_rviz:=false
+```
+
+Visualize camera topics:
+```bash
+ros2 run rqt_image_view rqt_image_view
+```

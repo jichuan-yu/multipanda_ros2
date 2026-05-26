@@ -89,11 +89,11 @@ $$
 The controller first filters the desired trajectory with a second-order state-space model:
 
 $$
-\ddot q_{filt} = \mathrm{clip}\!\left(k_{filt}(q_d - q_{filt}) + d_{filt}(\dot q_d - \dot q_{filt}),\; -\ddot q_{max},\; \ddot q_{max}\right)
+\ddot q_{filt} = \mathrm{clip}\left(k_{filt}(q_d - q_{filt}) + d_{filt}(\dot q_d - \dot q_{filt}), -\ddot q_{max}, \ddot q_{max}\right)
 $$
 
 $$
-\dot q_{filt} \leftarrow \mathrm{clip}(\dot q_{filt} + \ddot q_{filt}\,\Delta t,\; -\dot q_{max},\; \dot q_{max})
+\dot q_{filt} \leftarrow \mathrm{clip}(\dot q_{filt} + \ddot q_{filt}\,\Delta t, -\dot q_{max}, \dot q_{max})
 $$
 
 $$
@@ -109,11 +109,11 @@ $$
 For low-frequency references, the filter delay can be estimated empirically from `k_filt` and `d_filt`:
 
 $$
-t_{delay} \approx \frac{d_{filt}}{k_{filt}} \qquad (\text{without velocity feedforward})
+t_{delay} \approx \frac{d_{filt}}{k_{filt}} \quad (without velocity feedforward)
 $$
 
 $$
-t_{delay} \approx \frac{d_{filt}}{k_{filt}^2}\,\omega^2 \qquad (\text{with velocity feedforward, } \omega \ll \sqrt{k_{filt}})
+t_{delay} \approx \frac{d_{filt}}{k_{filt}^2}\,\omega^2 \quad (with velocity feedforward, $\omega \ll \sqrt{k_{filt}}$)
 $$
 
 

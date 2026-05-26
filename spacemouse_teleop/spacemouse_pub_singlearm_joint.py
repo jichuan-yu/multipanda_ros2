@@ -56,6 +56,8 @@ class SpacemouseConfig:
     arm_id: str = 'panda'
     joint_state_topic: str = '/panda/joint_states'
     target_joint_topic: str = '/joint_impedance/joints_desired'
+    gripper_width_topic: str = '/panda_gripper/width_desired'
+    gripper_grasp_topic: str = '/panda_gripper/grasp_desired'
     ee_frame: str = 'panda_hand_tcp'
     base_frame: str = 'panda_link0'
     xacro_path: str = 'src/multipanda_ros2/franka_description/robots/real/panda_arm.urdf.xacro'
@@ -94,6 +96,8 @@ class SpaceMouseJointTeleopNode(Node):
         self.arm_id = self.config.arm_id
         self.joint_state_topic = self.config.joint_state_topic
         self.target_joint_topic = self.config.target_joint_topic
+        self.gripper_width_topic = self.config.gripper_width_topic
+        self.gripper_grasp_topic = self.config.gripper_grasp_topic
         self.ee_frame = self.config.ee_frame
         self.frame_id = self.config.base_frame
         self.publish_hz = float(self.config.publish_hz)
@@ -108,12 +112,12 @@ class SpaceMouseJointTeleopNode(Node):
         self.publisher = self.create_publisher(JointState, self.target_joint_topic, 10)
         self.width_pub = self.create_publisher(
             Float64,
-            f'/{self.arm_id}_gripper/width_desired',
+            self.gripper_width_topic,
             10,
         )
         self.grasp_pub = self.create_publisher(
             Float64MultiArray,
-            f'/{self.arm_id}_gripper/grasp_desired',
+            self.gripper_grasp_topic,
             10,
         )
 

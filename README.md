@@ -23,7 +23,7 @@ For more examples, please refer to [gripper_control](./docs/gripper_control.md)
 
 ### Cartesian Impedance Controller (Single Arm)
 
-``` bash
+```bash
 ros2 launch franka_bringup franka_control.launch.py \
   robot_ip:=172.16.0.2 \
   load_gripper:=true \
@@ -66,10 +66,18 @@ $$
 
 ### Joint Impedance Controller (Single Arm)
 
+```bash
+ros2 launch franka_bringup franka_control.launch.py \
+  robot_ip:=172.16.0.3 \
+  load_gripper:=true \
+  controller_name:=joint_impedance_controller \
+  use_rviz:=false
+```
+
 **Controller Interfaces:**
 | Topic / Interface Name | Message Type / Interface Type | Direction | Freq. | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `/<arm_id>/joint_states` (from joint_state_broadcaster) | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states used by the controller. |
+| `/<arm_id>/joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states used by the controller. |
 | `/joint_impedance/joints_desired` | `sensor_msgs/msg/JointState` | Input (Sub) | 100Hz recommended | Desired joint positions and velocities. `position[0..6]` are the target joint positions, and `velocity[0..6]` are the target joint velocities. |
 | `/<arm_id>/filtered_joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Internal state-space filtered commands. Set `pub_filt_state=true` in the controller config to enable this topic. |
 | `/<arm_id>/external_wrench` | `geometry_msgs/msg/WrenchStamped` | Output (Pub) | 1000Hz | External wrench estimated from the Franka robot state. `wrench.force.xyz` is force and `wrench.torque.xyz` is torque. |
@@ -121,6 +129,30 @@ $$
 
 
 > The state-space filter allows the upper-level Policy Controller to send commands directly to the 1000 Hz controller at a low frequency (for example, 10 Hz).
+
+
+### Dual Arm Joint Impedance Controller
+```bash
+ros2 launch franka_bringup dual_franka_control.launch.py \
+  robot_ip_1:=172.16.0.3 \
+  robot_ip_2:=172.16.0.2 \
+  arm_id_1:=panda_left \
+  arm_id_2:=panda_right \
+  load_gripper_1:=true \
+  load_gripper_2:=true \
+  controller_name:=dual_joint_impedance_controller \
+  use_rviz:=false
+```
+
+**Controller Interfaces:**
+| Topic / Interface Name | Message Type / Interface Type | Direction | Freq. | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `/dual_arm/joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states for both arms. |
+| `/<arm_id>/joints_desired` | `sensor_msgs/msg/JointState` | Input (Sub) | Event-driven / 100Hz recommended | Desired joint positions and velocities per arm. Names must match `arm_id_joint1..7`. |
+| `/<arm_id>/filtered_joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Internal state-space filtered commands for each arm (enabled with `arm_i.pub_filt_state`). |
+| `/<arm_id>/external_wrench` | `geometry_msgs/msg/WrenchStamped` | Output (Pub) | 1000Hz | External wrench estimated from each arm's robot state. `wrench.force.xyz` is force and `wrench.torque.xyz` is torque. |
+
+
 
 
 

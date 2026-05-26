@@ -129,4 +129,27 @@ ros2 launch franka_bringup dual_franka_control.launch.py \
   use_rviz:=false
 ```
 
+2. SpaceMouse Teleop:
+First check connected spacemouse devices:
+```bash
+conda activate panda
+cd src/multipanda_ros2
+python3 spacemouse_teleop/list_spacemouse.py
+```
+It should output:
+```bash
+Found 2 SpaceMouse device(s) (16 HID interfaces total):
 
+  [0] path=/dev/hidraw6
+       vendor_id=0x256F  product_id=0xC635
+       manufacturer='3Dconnexion'  product='SpaceMouse Compact'
+
+  [1] path=/dev/hidraw5
+       vendor_id=0x256F  product_id=0xC635
+       manufacturer='3Dconnexion'  product='SpaceMouse Compact'
+```
+
+Add the paths to the `DualArmTeleopConfig` in `spacemouse_pub_dualarm_joint.py`, then run:
+```bash
+python3 spacemouse_teleop/spacemouse_pub_dualarm_joint.py
+```

@@ -153,6 +153,39 @@ dual_joint_impedance_controller:
         - 1.0
         - 1.0
         - 0.5
+      pub_filt_state: false
+      dq_max:
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+      ddq_max:
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+      k_filt:
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+      d_filt:
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
     arm_2:
       arm_id: mj_right
       k_gains:
@@ -171,6 +204,39 @@ dual_joint_impedance_controller:
         - 1.0
         - 1.0
         - 0.5
+      pub_filt_state: false
+      dq_max:
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+      ddq_max:
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+      k_filt:
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+      d_filt:
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
 
 multi_cartesian_impedance_controller:
   ros__parameters:

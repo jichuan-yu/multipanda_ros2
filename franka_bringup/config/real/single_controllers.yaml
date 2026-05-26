@@ -138,6 +138,7 @@ cartesian_impedance_controller:
 joint_impedance_controller:
   ros__parameters:
     arm_id: panda
+    pub_filt_state: false
     k_gains:
       - 600.0
       - 600.0
@@ -154,3 +155,35 @@ joint_impedance_controller:
       - 12.0
       - 12.0
       - 9.0
+    dq_max:
+      - 0.4
+      - 0.4
+      - 0.4
+      - 0.4
+      - 0.4
+      - 0.4
+      - 0.4
+    ddq_max:
+      - 4.0
+      - 4.0
+      - 4.0
+      - 4.0
+      - 4.0
+      - 4.0
+      - 4.0
+    k_filt:
+      - 400.0
+      - 400.0
+      - 400.0
+      - 400.0
+      - 400.0
+      - 400.0
+      - 400.0
+    d_filt:
+      - 28.0
+      - 28.0
+      - 28.0
+      - 28.0
+      - 28.0
+      - 28.0
+      - 28.0

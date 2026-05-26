@@ -31,18 +31,17 @@ class JointImpedanceController : public controller_interface::ControllerInterfac
   std::string arm_id_;
   const int num_joints = 7;
 
-  const double alpha_ = 0.24; // low-pass filter coefficient. alpha = (2 * M_PI * fc * T) / (1 + 2 * M_PI * fc * T)
-  // fc is the cutoff frequency (50 Hz) and T is the sampling time (1 ms). 
-  const double pos_saturation_ = 0.2; // position error saturation in radians
-  const double vel_saturation_ = 0.5; // velocity error saturation in radians/s
-  const double delta_tau_max_ = 1.0;  // max torque-rate step per control cycle
+  Vector7d dq_max_;
+  Vector7d ddq_max_;
+  Vector7d k_filt_;
+  Vector7d d_filt_; 
+  const double delta_tau_max_ = 1.0;  // max torque-rate step per control cycle (1000 Nm/s)
   std::unique_ptr<franka_semantic_components::FrankaRobotModel> franka_robot_model_;
   Vector7d q_;
   Vector7d dq_;
-  Vector7d dq_filtered_;
-  Vector7d q_d_;
+  Vector7d q_filt_;
+  Vector7d dq_filt_;
   Vector7d q_d_target_;
-  Vector7d dq_d_;
   Vector7d dq_d_target_;
   Vector7d k_gains_;
   Vector7d d_gains_;
@@ -54,6 +53,9 @@ class JointImpedanceController : public controller_interface::ControllerInterfac
 
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr sub_desired_joint_;
   void desiredJointCallback(const sensor_msgs::msg::JointState& msg);
+
+  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr pub_filt_state_;
+  bool publish_filt_state_ = true;
 };
 
 }  // namespace franka_example_controllers

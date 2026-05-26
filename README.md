@@ -71,6 +71,7 @@ $$
 | :--- | :--- | :--- | :--- | :--- |
 | `/<arm_id>/joint_states` (from joint_state_broadcaster) | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states used by the controller. |
 | `/joint_impedance/joints_desired` | `sensor_msgs/msg/JointState` | Input (Sub) | 100Hz recommended | Desired joint positions and velocities. `position[0..6]` are the target joint positions, and `velocity[0..6]` are the target joint velocities. |
+| `/<arm_id>/filtered_joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Internal state-space filtered commands. Set `pub_filt_state=true` in the controller config to enable this topic. |
 
 
 **Controller Parameters:**
@@ -79,16 +80,44 @@ $$
 | `arm_id` | `string` | `panda` | Arm namespace used to resolve interfaces and robot model state. |
 | `k_gains` | `vector<double>` | see config | Joint position stiffness gains. Must contain 7 values. |
 | `d_gains` | `vector<double>` | see config | Joint damping gains. Must contain 7 values. |
-| `alpha`  (internal constant)| `double` | `0.24` | Low-pass filter coefficient (~50 Hz) for measured joint velocity. |
-| `pos_saturation`  (internal constant)| `double` | `0.2 rad` | Saturation bound for position error `q_d - q`. |
-| `vel_saturation`  (internal constant)| `double` | `0.5 rad/s` | Saturation bound for velocity error `dq_d - dq`. |
+| `k_filt` | `vector<double>` | see config | State-space filter stiffness gains for the desired joint trajectory. Must contain 7 values. |
+| `d_filt` | `vector<double>` | see config | State-space filter damping gains for the desired joint trajectory. Must contain 7 values. |
+| `dq_max` | `vector<double>` | see config | Maximum absolute filtered joint velocity. Must contain 7 values. |
+| `ddq_max` | `vector<double>` | see config | Maximum absolute filtered joint acceleration. Must contain 7 values. |
+| `pub_filt_state` | `bool` | `false` | Publish `/<arm_id>/filtered_joint_states` when enabled. |
 
-The control law is implemented as:
+The controller first filters the desired trajectory with a second-order state-space model:
 
 $$
-τ = K_p\,\mathrm{sat}(q_d - q) + K_d\,\mathrm{sat}(\dot q_d - \dot q) + τ_{coriolis}
+\ddot q_{filt} = \mathrm{clip}\!\left(k_{filt}(q_d - q_{filt}) + d_{filt}(\dot q_d - \dot q_{filt}),\; -\ddot q_{max},\; \ddot q_{max}\right)
 $$
 
+$$
+\dot q_{filt} \leftarrow \mathrm{clip}(\dot q_{filt} + \ddot q_{filt}\,\Delta t,\; -\dot q_{max},\; \dot q_{max})
+$$
+
+$$
+q_{filt} \leftarrow q_{filt} + \dot q_{filt}\,\Delta t
+$$
+
+The torque command is then computed from the filtered states:
+
+$$
+τ = K_p(q_{filt} - q) + K_d(\dot q_{filt} - \dot q) + τ_{coriolis}
+$$
+
+For low-frequency references, the filter delay can be estimated empirically from `k_filt` and `d_filt`:
+
+$$
+t_{delay} \approx \frac{d_{filt}}{k_{filt}} \qquad (\text{without velocity feedforward})
+$$
+
+$$
+t_{delay} \approx \frac{d_{filt}}{k_{filt}^2}\,\omega^2 \qquad (\text{with velocity feedforward, } \omega \ll \sqrt{k_{filt}})
+$$
+
+
+> The state-space filter allows the upper-level Policy Controller to send commands directly to the 1000 Hz controller at a low frequency (for example, 10 Hz).
 
 
 

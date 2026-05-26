@@ -5,6 +5,7 @@
 #include <exception>
 #include <string>
 #include <algorithm>
+#include <vector>
 
 #include <Eigen/Eigen>
 #include "sensor_msgs/msg/joint_state.hpp"
@@ -39,30 +40,45 @@ JointImpedanceController::state_interface_configuration() const {
 controller_interface::return_type
 JointImpedanceController::update(
     const rclcpp::Time& /*time*/,
-    const rclcpp::Duration& /*period*/) {
+    const rclcpp::Duration& period) {
   updateJointStates();
   Eigen::Map<const Vector7d> coriolis(
     franka_robot_model_->getCoriolisForceVector().data());
   const auto& robot_state = *franka_robot_model_->getRobotState();
-  /*
-  The implementation uses a first-order low-pass filter.
-    y[n] = (1-alpha) * y[n-1] + alpha * x[n]
-  where
-    alpha = (2 * M_PI * fc * T) / (1 + 2 * M_PI * fc * T)
-  fc is the cutoff frequency and T is the sampling time. 
-  */ 
-  dq_filtered_ = (1.0 - alpha_) * dq_filtered_ + alpha_ * dq_;
-  
-  // Saturate the tracking errors, then reconstruct desired position/velocity.
-  Vector7d q_error = (q_d_target_ - q_)
-    .cwiseMin(Vector7d::Constant(pos_saturation_))
-    .cwiseMax(Vector7d::Constant(-pos_saturation_));
-  Vector7d dq_error = (dq_d_target_ - dq_filtered_)
-    .cwiseMin(Vector7d::Constant(vel_saturation_))
-    .cwiseMax(Vector7d::Constant(-vel_saturation_));
+  const double dt = period.seconds();
+
+  /* State-Space Kinematic Filtering
+     Estimated Delay:
+     t_daly ~ d_filt/k_filt^2 * omega^2 (with feedforward velocity)
+     t_delay ~ d_filt / k_filt (without feedforward velocity)
+  */
+  Vector7d ddq_filt = k_filt_.cwiseProduct(q_d_target_ - q_filt_) +
+                      d_filt_.cwiseProduct(dq_d_target_ - dq_filt_);
+  ddq_filt = ddq_filt.cwiseMin(ddq_max_).cwiseMax(-ddq_max_);
+
+  dq_filt_ = dq_filt_ + ddq_filt * dt;
+  dq_filt_ = dq_filt_.cwiseMin(dq_max_).cwiseMax(-dq_max_);
+
+  q_filt_ = q_filt_ + dq_filt_ * dt;
+
+  {
+    sensor_msgs::msg::JointState msg;
+    msg.header.stamp = get_node()->now();
+    msg.name.resize(num_joints);
+    msg.position.resize(num_joints);
+    msg.velocity.resize(num_joints);
+    msg.effort.resize(num_joints);
+    for (int i = 0; i < num_joints; ++i) {
+      msg.name[i] = arm_id_ + "_joint" + std::to_string(i + 1);
+      msg.position[i] = q_filt_(i);
+      msg.velocity[i] = dq_filt_(i);
+      msg.effort[i] = ddq_filt(i);
+    }
+    if (publish_filt_state_ && pub_filt_state_) pub_filt_state_->publish(msg);
+  }
 
   Vector7d tau_d_calculated =
-      k_gains_.cwiseProduct(q_error) + d_gains_.cwiseProduct(dq_error) + coriolis;
+      k_gains_.cwiseProduct(q_filt_ - q_) + d_gains_.cwiseProduct(dq_filt_ - dq_) + coriolis;
 
   std::array<double, 7> tau_d_calculated_array{};
   for (int i = 0; i < num_joints; ++i) {
@@ -83,6 +99,11 @@ JointImpedanceController::on_init() {
     auto_declare<std::string>("arm_id", "panda");
     auto_declare<std::vector<double>>("k_gains", {});
     auto_declare<std::vector<double>>("d_gains", {});
+    auto_declare<std::vector<double>>("dq_max", std::vector<double>(num_joints, 0.5));
+    auto_declare<std::vector<double>>("ddq_max", std::vector<double>(num_joints, 5.0));
+      auto_declare<std::vector<double>>("k_filt", std::vector<double>(num_joints, 400.0));
+      auto_declare<std::vector<double>>("d_filt", std::vector<double>(num_joints, 40.0));
+      auto_declare<bool>("pub_filt_state", false);
     sub_desired_joint_ = get_node()->create_subscription<sensor_msgs::msg::JointState>(
       "/joint_impedance/joints_desired", 1,
       std::bind(&JointImpedanceController::desiredJointCallback, this, std::placeholders::_1)
@@ -103,6 +124,10 @@ JointImpedanceController::on_configure(
                                                    arm_id_));
   auto k_gains = get_node()->get_parameter("k_gains").as_double_array();
   auto d_gains = get_node()->get_parameter("d_gains").as_double_array();
+  auto dq_max = get_node()->get_parameter("dq_max").as_double_array();
+  auto ddq_max = get_node()->get_parameter("ddq_max").as_double_array();
+    auto k_filt = get_node()->get_parameter("k_filt").as_double_array();
+    auto d_filt = get_node()->get_parameter("d_filt").as_double_array();
   if (k_gains.empty()) {
     RCLCPP_FATAL(get_node()->get_logger(), "k_gains parameter not set");
     return CallbackReturn::FAILURE;
@@ -121,15 +146,43 @@ JointImpedanceController::on_configure(
                  num_joints, d_gains.size());
     return CallbackReturn::FAILURE;
   }
+  if (dq_max.size() != static_cast<uint>(num_joints)) {
+    RCLCPP_FATAL(get_node()->get_logger(), "dq_max should be of size %d but is of size %ld",
+                 num_joints, dq_max.size());
+    return CallbackReturn::FAILURE;
+  }
+  if (ddq_max.size() != static_cast<uint>(num_joints)) {
+    RCLCPP_FATAL(get_node()->get_logger(), "ddq_max should be of size %d but is of size %ld",
+                 num_joints, ddq_max.size());
+    return CallbackReturn::FAILURE;
+  }
+  if (k_filt.size() != static_cast<uint>(num_joints)) {
+     RCLCPP_FATAL(get_node()->get_logger(), "k_filt should be of size %d but is of size %ld",
+                 num_joints, k_filt.size());
+    return CallbackReturn::FAILURE;
+  }
+  if (d_filt.size() != static_cast<uint>(num_joints)) {
+     RCLCPP_FATAL(get_node()->get_logger(), "d_filt should be of size %d but is of size %ld",
+                 num_joints, d_filt.size());
+    return CallbackReturn::FAILURE;
+  }
   for (int i = 0; i < num_joints; ++i) {
     d_gains_(i) = d_gains.at(i);
     k_gains_(i) = k_gains.at(i);
+    dq_max_(i) = dq_max.at(i);
+    ddq_max_(i) = ddq_max.at(i);
+    k_filt_(i) = k_filt.at(i);
+    d_filt_(i) = d_filt.at(i);
   }
   q_d_target_.setZero();
-  q_d_.setZero();
   dq_d_target_.setZero();
-  dq_d_.setZero();
-  dq_filtered_.setZero();
+  q_filt_.setZero();
+  dq_filt_.setZero();
+  publish_filt_state_ = get_node()->get_parameter("pub_filt_state").as_bool();
+  if (publish_filt_state_) {
+    std::string topic = "/" + arm_id_ + "/filtered_joint_states";
+    pub_filt_state_ = get_node()->create_publisher<sensor_msgs::msg::JointState>(topic, 1);
+  }
   return CallbackReturn::SUCCESS;
 }
 
@@ -138,15 +191,21 @@ JointImpedanceController::on_activate(
     const rclcpp_lifecycle::State& /*previous_state*/) {
   updateJointStates();
   franka_robot_model_->assign_loaned_state_interfaces(state_interfaces_);
-  q_d_ = q_;
+  q_filt_ = q_;
   q_d_target_ = q_;
-  dq_d_.setZero();
+  dq_filt_ = dq_;
   dq_d_target_.setZero();
 
   RCLCPP_INFO(get_node()->get_logger(), "JointImpedanceController on_activate:");
-  RCLCPP_INFO_STREAM(get_node()->get_logger(), "  q_      = " << q_.transpose());
+
   RCLCPP_INFO_STREAM(get_node()->get_logger(), "  k_gains = " << k_gains_.transpose());
   RCLCPP_INFO_STREAM(get_node()->get_logger(), "  d_gains = " << d_gains_.transpose());
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "  k_filt  = " << k_filt_.transpose());
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "  d_filt  = " << d_filt_.transpose());
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "  dq_max  = " << dq_max_.transpose());
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "  ddq_max = " << ddq_max_.transpose());
+
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "  Current Joint Positions: " << q_.transpose());
 
   return CallbackReturn::SUCCESS;
 }

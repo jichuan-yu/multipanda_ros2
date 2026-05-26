@@ -7,6 +7,7 @@
 #include <controller_interface/controller_interface.hpp>
 #include "franka_semantic_components/franka_robot_model.hpp"
 #include <rclcpp/rclcpp.hpp>
+#include "geometry_msgs/msg/wrench_stamped.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 
 using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
@@ -56,6 +57,7 @@ class JointImpedanceController : public controller_interface::ControllerInterfac
 
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr pub_filt_state_;
   bool publish_filt_state_ = true;
+  rclcpp::Publisher<geometry_msgs::msg::WrenchStamped>::SharedPtr external_wrench_publisher_;
 };
 
 }  // namespace franka_example_controllers

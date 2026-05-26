@@ -36,8 +36,8 @@ ros2 launch franka_bringup franka_control.launch.py \
 | :--- | :--- | :--- | :--- | :--- |
 | `/<arm_id>/joint_states` (from joint_state_broadcaster) | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states. |
 | `/cartesian_impedance/pose_desired` | `geometry_msgs/msg/PoseStamped` | Input (Sub) | 100Hz recommended | Desired pose for the end-effector (in robot base frame) |
-| `/cartesian_impedance/ee_pose` | `geometry_msgs/msg/PoseStamped` | Output (Pub) | 1000Hz | Current  pose for the end-effector (in robot base frame) |
-| `/cartesian_impedance/external_wrench` | `geometry_msgs/msg/WrenchStamped` | Output (Pub) | 1000Hz | Current external wrench of the robot in the base frame. `wrench.force.xyz` is external force and `wrench.torque.xyz` is external torque. |
+| `/<arm_id>/ee_pose` | `geometry_msgs/msg/PoseStamped` | Output (Pub) | 1000Hz | Current pose for the end-effector (in robot base frame). |
+| `/<arm_id>/external_wrench` | `geometry_msgs/msg/WrenchStamped` | Output (Pub) | 1000Hz | Current external wrench of the robot in the base frame. `wrench.force.xyz` is external force and `wrench.torque.xyz` is external torque. |
 
 **Controller Parameters:**
 | Parameter Name | Type | Default | Description |
@@ -72,6 +72,7 @@ $$
 | `/<arm_id>/joint_states` (from joint_state_broadcaster) | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states used by the controller. |
 | `/joint_impedance/joints_desired` | `sensor_msgs/msg/JointState` | Input (Sub) | 100Hz recommended | Desired joint positions and velocities. `position[0..6]` are the target joint positions, and `velocity[0..6]` are the target joint velocities. |
 | `/<arm_id>/filtered_joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Internal state-space filtered commands. Set `pub_filt_state=true` in the controller config to enable this topic. |
+| `/<arm_id>/external_wrench` | `geometry_msgs/msg/WrenchStamped` | Output (Pub) | 1000Hz | External wrench estimated from the Franka robot state. `wrench.force.xyz` is force and `wrench.torque.xyz` is torque. |
 
 
 **Controller Parameters:**
@@ -86,7 +87,7 @@ $$
 | `ddq_max` | `vector<double>` | see config | Maximum absolute filtered joint acceleration. Must contain 7 values. |
 | `pub_filt_state` | `bool` | `false` | Publish `/<arm_id>/filtered_joint_states` when enabled. |
 
-The controller first filters the desired trajectory with a second-order state-space model:
+The controller first filters the desired joint commands with a second-order state-space model:
 
 $$
 \ddot q_{filt} = \mathrm{clip}\left(k_{filt}(q_d - q_{filt}) + d_{filt}(\dot q_d - \dot q_{filt}), -\ddot q_{max}, \ddot q_{max}\right)

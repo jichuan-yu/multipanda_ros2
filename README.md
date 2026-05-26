@@ -132,6 +132,17 @@ $$
 
 
 ### Dual Arm Joint Impedance Controller
+Run in MuJoCo Simulation:
+```bash
+ros2 launch franka_bringup dual_franka_sim_control.launch.py \
+  arm_id_1:=mj_left \
+  arm_id_2:=mj_right \
+  controller_name:=dual_joint_impedance_controller \
+  use_rviz:=false
+```
+
+
+Run on real robot:
 ```bash
 ros2 launch franka_bringup dual_franka_control.launch.py \
   robot_ip_1:=172.16.0.3 \
@@ -153,6 +164,7 @@ ros2 launch franka_bringup dual_franka_control.launch.py \
 | `/<arm_id>/external_wrench` | `geometry_msgs/msg/WrenchStamped` | Output (Pub) | 1000Hz | External wrench estimated from each arm's robot state. `wrench.force.xyz` is force and `wrench.torque.xyz` is torque. |
 
 
+> Potential Bug: In `dual_franka_sim.launch.py`, the controller's output `/joint_states` cannot be remapped to `/dual_arm/joint_states`, causing both `/joint_state_publisher` and `/joint_state_broadcaster` to publish to `/joint_states` simultaneously, leading to confused messages.
 
 
 

@@ -93,11 +93,11 @@ $$
 $$
 
 $$
-\dot q_{filt} \leftarrow \mathrm{clip}(\dot q_{filt} + \ddot q_{filt}\,\Delta t, -\dot q_{max}, \dot q_{max})
+\dot q_{filt} \leftarrow \mathrm{clip}(\dot q_{filt} + \ddot q_{filt} \Delta t, -\dot q_{max}, \dot q_{max})
 $$
 
 $$
-q_{filt} \leftarrow q_{filt} + \dot q_{filt}\,\Delta t
+q_{filt} \leftarrow q_{filt} + \dot q_{filt} \Delta t
 $$
 
 The torque command is then computed from the filtered states:
@@ -108,12 +108,14 @@ $$
 
 For low-frequency references, the filter delay can be estimated empirically from `k_filt` and `d_filt`:
 
+Without velocity feedforward:
 $$
-t_{delay} \approx \frac{d_{filt}}{k_{filt}} \quad (without velocity feedforward)
+t_{delay} \approx \frac{d_{filt}}{k_{filt}}
 $$
 
+With velocity feedforward, $\omega \ll \sqrt{k_{filt}}$
 $$
-t_{delay} \approx \frac{d_{filt}}{k_{filt}^2}\,\omega^2 \quad (with velocity feedforward, $\omega \ll \sqrt{k_{filt}}$)
+t_{delay} \approx \frac{d_{filt}}{k_{filt}^2} \omega^2 \quad 
 $$
 
 

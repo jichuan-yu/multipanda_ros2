@@ -120,14 +120,16 @@ def generate_launch_description():
             executable='joint_state_publisher',
             name='joint_state_publisher',
             parameters=[
-                {'source_list': ['franka/joint_states', 'panda_gripper/joint_states'],
+                {'source_list': ['dual_arm/joint_states',
+                                 [arm_id_1, '_gripper/joint_states'],
+                                 [arm_id_2, '_gripper/joint_states']],
                  'rate': 30}],
         ),
         Node(
             package='controller_manager',
             executable='ros2_control_node',
             parameters=[{'robot_description': robot_description}, franka_controllers],
-            remappings=[('joint_states', 'franka/joint_states')],
+            remappings=[('joint_states', 'dual_arm/joint_states')],
             output={
                 'stdout': 'screen',
                 'stderr': 'screen',
@@ -154,38 +156,22 @@ def generate_launch_description():
             output='screen',
             condition=UnlessCondition(use_fake_hardware),
         ),
-        Node(
-            package='controller_manager',
-            executable='spawner',
-            arguments=['left_robot_state_broadcaster'],
-            output='screen',
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource([PathJoinSubstitution(
+                [FindPackageShare('franka_gripper'), 'launch', 'gripper.launch.py'])]),
+            launch_arguments={'robot_ip': robot_ip_1,
+                              'arm_id': arm_id_1,
+                              use_fake_hardware_parameter_name: use_fake_hardware}.items(),
+            condition=IfCondition(load_gripper_1)
         ),
-        Node(
-            package='controller_manager',
-            executable='spawner',
-            arguments=['right_robot_state_broadcaster'],
-            output='screen',
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource([PathJoinSubstitution(
+                [FindPackageShare('franka_gripper'), 'launch', 'gripper.launch.py'])]),
+            launch_arguments={'robot_ip': robot_ip_2,
+                              'arm_id': arm_id_2,
+                              use_fake_hardware_parameter_name: use_fake_hardware}.items(),
+            condition=IfCondition(load_gripper_2)
         ),
-        Node(
-            package='controller_manager',
-            executable='spawner',
-            arguments=['left_robot_model_broadcaster'],
-            output='screen',
-        ),
-        Node(
-            package='controller_manager',
-            executable='spawner',
-            arguments=['right_robot_model_broadcaster'],
-            output='screen',
-        ),
-        # IncludeLaunchDescription(
-        #     PythonLaunchDescriptionSource([PathJoinSubstitution(
-        #         [FindPackageShare('franka_gripper'), 'launch', 'gripper.launch.py'])]),
-        #     launch_arguments={robot_ip_1_parameter_name: robot_ip_1,
-        #                       use_fake_hardware_parameter_name: use_fake_hardware}.items(),
-        #     condition=IfCondition(load_gripper_1)
-
-        # ),
 
         Node(package='rviz2',
              executable='rviz2',

@@ -16,28 +16,30 @@ controller_manager:
       type: franka_example_controllers/MultiJointImpedanceExampleController
     dual_joint_velocity_example_controller:
       type: franka_example_controllers/DualJointVelocityExampleController
+    dual_joint_impedance_controller:
+      type: franka_example_controllers/MultiJointImpedanceController
     
 franka_left_robot_state_broadcaster:
   ros__parameters:
-    arm_id: left
+    arm_id: panda_left
     frequency: 30
 
 franka_right_robot_state_broadcaster:
   ros__parameters:
-    arm_id: right
+    arm_id: panda_right
     frequency: 30
 
 franka_left_robot_model_broadcaster:
   ros__parameters:
-    arm_id: left
+    arm_id: panda_left
     frequency: 30
 
 franka_right_robot_model_broadcaster:
   ros__parameters:
-    arm_id: right
+    arm_id: panda_right
     frequency: 30
     
-dual_joint_impedance_example_controller:
+multi_joint_impedance_example_controller:
   ros__parameters:
     arm_count: 2
     arm_1:
@@ -83,3 +85,109 @@ dual_joint_velocity_example_controller:
       arm_id: left
     arm_2:
       arm_id: right
+
+dual_joint_impedance_controller:
+  ros__parameters:
+    arm_count: 2
+    arm_1:
+      arm_id: panda_left
+      k_gains:
+        - 600.0
+        - 600.0
+        - 600.0
+        - 600.0
+        - 250.0
+        - 150.0
+        - 100.0
+      d_gains:
+        - 30.0
+        - 30.0
+        - 30.0
+        - 12.0
+        - 12.0
+        - 12.0
+        - 9.0
+      pub_filt_state: false
+      dq_max:
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+      ddq_max:
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+      k_filt:
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+      d_filt:
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
+    arm_2:
+      arm_id: panda_right
+      k_gains:
+        - 600.0
+        - 600.0
+        - 600.0
+        - 600.0
+        - 250.0
+        - 150.0
+        - 100.0
+      d_gains:
+        - 30.0
+        - 30.0
+        - 30.0
+        - 12.0
+        - 12.0
+        - 12.0
+        - 9.0
+      pub_filt_state: false
+      dq_max:
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+      ddq_max:
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+      k_filt:
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+      d_filt:
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0

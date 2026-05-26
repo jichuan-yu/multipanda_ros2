@@ -73,7 +73,6 @@ def generate_launch_description():
                                      'dual_sim_controllers.yaml')
     franka_bringup_path = get_package_share_directory('franka_bringup')
     ns=""
-
     # Robot state publisher setup
     robot_description = Command(
         [FindExecutable(name='xacro'), ' ', franka_xacro_file, 
@@ -89,21 +88,21 @@ def generate_launch_description():
         package='robot_state_publisher',
         executable='robot_state_publisher',
         output='screen',
-        namespace= ns,
+        namespace=ns,
         parameters=[params]
     )
 
     # Joint state publisher setup
     jsp_source_list = [concatenate_ns(ns, 'joint_states', True)]
     if(load_gripper):
-        jsp_source_list.append(concatenate_ns(ns, 'mj_left_gripper_sim_node/joint_states/joint_states', True))
-        jsp_source_list.append(concatenate_ns(ns, 'mj_right_gripper_sim_node/joint_states/joint_states', True))
+        jsp_source_list.append(concatenate_ns(ns, 'mj_left_gripper_sim_node/joint_states', True))
+        jsp_source_list.append(concatenate_ns(ns, 'mj_right_gripper_sim_node/joint_states', True))
 
     node_joint_state_publisher = Node( # RVIZ dependency
             package='joint_state_publisher',
             executable='joint_state_publisher',
             name='joint_state_publisher',
-            namespace= ns,
+            namespace=ns,
             parameters=[
                 {'source_list': jsp_source_list,
                  'rate': 30}],
@@ -113,7 +112,6 @@ def generate_launch_description():
     rviz_file = os.path.join(get_package_share_directory('franka_description'), 'rviz',
                              'visualize_dual_franka.rviz')
     
-
     return LaunchDescription([
         # Launch args
         DeclareLaunchArgument(

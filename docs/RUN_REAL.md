@@ -39,8 +39,9 @@ ros2 bag record -o ./data/$(date +%Y%m%d_%H%M%S) \
   /panda_gripper/joint_states \
   /panda_gripper/width_desired \
   /panda_gripper/grasp_desired \
-  /cartesian_impedance/ee_pose \
-  /cartesian_impedance/pose_desired 
+  /panda/ee_pose \
+  /cartesian_impedance/pose_desired \
+  /panda/external_wrench
 ```
 
 Press `Ctrl+C` to stop recording when done.
@@ -86,6 +87,7 @@ ros2 bag record -o ./data/$(date +%Y%m%d_%H%M%S) --all
 ros2 bag record -o ./data/$(date +%Y%m%d_%H%M%S) \
   /panda/joint_states \
   /panda/filtered_joint_states \
+  /panda/external_wrench \
   /panda_gripper/joint_states \
   /panda_gripper/width_desired \
   /panda_gripper/grasp_desired \
@@ -98,4 +100,56 @@ Press `Ctrl+C` to stop recording when done.
 conda activate panda
 cd src/multipanda_ros2
 python3 spacemouse_teleop/spacemouse_pub_singlearm_joint.py
+```
+
+
+
+## Dual-Arm Joint Impedance Controller
+0. Ruturn to home position (0, -PI/4, 0, -3PI/4, 0, PI/2, PI/4):
+```bash
+ros2 launch franka_bringup move_to_start.launch.py \
+  robot_ip:=172.16.0.2 \
+  load_gripper:=true
+```
+```bash
+ros2 launch franka_bringup move_to_start.launch.py \
+  robot_ip:=172.16.0.3 \
+  load_gripper:=true
+```
+1. Launch joint controller:
+```bash
+ros2 launch franka_bringup dual_franka_control.launch.py \
+  robot_ip_1:=172.16.0.3 \
+  robot_ip_2:=172.16.0.2 \
+  arm_id_1:=panda_left \
+  arm_id_2:=panda_right \
+  load_gripper_1:=true \
+  load_gripper_2:=true \
+  controller_name:=dual_joint_impedance_controller \
+  use_rviz:=false
+```
+
+2. SpaceMouse Teleop:
+First check connected spacemouse devices:
+```bash
+conda activate panda
+cd src/multipanda_ros2
+python3 spacemouse_teleop/list_spacemouse.py
+```
+It should output:
+```bash
+Found 2 SpaceMouse device(s) (16 HID interfaces total):
+
+  [0] path=/dev/hidraw6
+       vendor_id=0x256F  product_id=0xC635
+       manufacturer='3Dconnexion'  product='SpaceMouse Compact'
+
+  [1] path=/dev/hidraw5
+       vendor_id=0x256F  product_id=0xC635
+       manufacturer='3Dconnexion'  product='SpaceMouse Compact'
+```
+
+Add the paths to the `DualArmTeleopConfig` in `spacemouse_pub_dualarm_joint.py`, then run:
+```bash
+python3 spacemouse_teleop/spacemouse_pub_dualarm_joint.py
 ```

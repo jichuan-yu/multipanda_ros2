@@ -23,7 +23,7 @@ For more examples, please refer to [gripper_control](./docs/gripper_control.md)
 
 ### Cartesian Impedance Controller (Single Arm)
 
-``` bash
+```bash
 ros2 launch franka_bringup franka_control.launch.py \
   robot_ip:=172.16.0.2 \
   load_gripper:=true \
@@ -36,8 +36,8 @@ ros2 launch franka_bringup franka_control.launch.py \
 | :--- | :--- | :--- | :--- | :--- |
 | `/<arm_id>/joint_states` (from joint_state_broadcaster) | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states. |
 | `/cartesian_impedance/pose_desired` | `geometry_msgs/msg/PoseStamped` | Input (Sub) | 100Hz recommended | Desired pose for the end-effector (in robot base frame) |
-| `/cartesian_impedance/ee_pose` | `geometry_msgs/msg/PoseStamped` | Output (Pub) | 1000Hz | Current  pose for the end-effector (in robot base frame) |
-| `/cartesian_impedance/external_wrench` | `geometry_msgs/msg/WrenchStamped` | Output (Pub) | 1000Hz | Current external wrench of the robot in the base frame. `wrench.force.xyz` is external force and `wrench.torque.xyz` is external torque. |
+| `/<arm_id>/ee_pose` | `geometry_msgs/msg/PoseStamped` | Output (Pub) | 1000Hz | Current pose for the end-effector (in robot base frame). |
+| `/<arm_id>/external_wrench` | `geometry_msgs/msg/WrenchStamped` | Output (Pub) | 1000Hz | Current external wrench of the robot in the base frame. `wrench.force.xyz` is external force and `wrench.torque.xyz` is external torque. |
 
 **Controller Parameters:**
 | Parameter Name | Type | Default | Description |
@@ -66,12 +66,21 @@ $$
 
 ### Joint Impedance Controller (Single Arm)
 
+```bash
+ros2 launch franka_bringup franka_control.launch.py \
+  robot_ip:=172.16.0.3 \
+  load_gripper:=true \
+  controller_name:=joint_impedance_controller \
+  use_rviz:=false
+```
+
 **Controller Interfaces:**
 | Topic / Interface Name | Message Type / Interface Type | Direction | Freq. | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `/<arm_id>/joint_states` (from joint_state_broadcaster) | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states used by the controller. |
+| `/<arm_id>/joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states used by the controller. |
 | `/joint_impedance/joints_desired` | `sensor_msgs/msg/JointState` | Input (Sub) | 100Hz recommended | Desired joint positions and velocities. `position[0..6]` are the target joint positions, and `velocity[0..6]` are the target joint velocities. |
 | `/<arm_id>/filtered_joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Internal state-space filtered commands. Set `pub_filt_state=true` in the controller config to enable this topic. |
+| `/<arm_id>/external_wrench` | `geometry_msgs/msg/WrenchStamped` | Output (Pub) | 1000Hz | External wrench estimated from the Franka robot state. `wrench.force.xyz` is force and `wrench.torque.xyz` is torque. |
 
 
 **Controller Parameters:**
@@ -86,18 +95,18 @@ $$
 | `ddq_max` | `vector<double>` | see config | Maximum absolute filtered joint acceleration. Must contain 7 values. |
 | `pub_filt_state` | `bool` | `false` | Publish `/<arm_id>/filtered_joint_states` when enabled. |
 
-The controller first filters the desired trajectory with a second-order state-space model:
+The controller first filters the desired joint commands with a second-order state-space model:
 
 $$
-\ddot q_{filt} = \mathrm{clip}\!\left(k_{filt}(q_d - q_{filt}) + d_{filt}(\dot q_d - \dot q_{filt}),\; -\ddot q_{max},\; \ddot q_{max}\right)
-$$
-
-$$
-\dot q_{filt} \leftarrow \mathrm{clip}(\dot q_{filt} + \ddot q_{filt}\,\Delta t,\; -\dot q_{max},\; \dot q_{max})
+\ddot q_{filt} = \mathrm{clip}\left(k_{filt}(q_d - q_{filt}) + d_{filt}(\dot q_d - \dot q_{filt}), -\ddot q_{max}, \ddot q_{max}\right)
 $$
 
 $$
-q_{filt} \leftarrow q_{filt} + \dot q_{filt}\,\Delta t
+\dot q_{filt} \leftarrow \mathrm{clip}(\dot q_{filt} + \ddot q_{filt} \Delta t, -\dot q_{max}, \dot q_{max})
+$$
+
+$$
+q_{filt} \leftarrow q_{filt} + \dot q_{filt} \Delta t
 $$
 
 The torque command is then computed from the filtered states:
@@ -108,16 +117,54 @@ $$
 
 For low-frequency references, the filter delay can be estimated empirically from `k_filt` and `d_filt`:
 
+Without velocity feedforward:
 $$
-t_{delay} \approx \frac{d_{filt}}{k_{filt}} \qquad (\text{without velocity feedforward})
+t_{delay} \approx \frac{d_{filt}}{k_{filt}}
 $$
 
+With velocity feedforward, $\omega \ll \sqrt{k_{filt}}$
 $$
-t_{delay} \approx \frac{d_{filt}}{k_{filt}^2}\,\omega^2 \qquad (\text{with velocity feedforward, } \omega \ll \sqrt{k_{filt}})
+t_{delay} \approx \frac{d_{filt}}{k_{filt}^2} \omega^2 \quad 
 $$
 
 
 > The state-space filter allows the upper-level Policy Controller to send commands directly to the 1000 Hz controller at a low frequency (for example, 10 Hz).
+
+
+### Dual Arm Joint Impedance Controller
+Run in MuJoCo Simulation:
+```bash
+ros2 launch franka_bringup dual_franka_sim_control.launch.py \
+  arm_id_1:=mj_left \
+  arm_id_2:=mj_right \
+  controller_name:=dual_joint_impedance_controller \
+  use_rviz:=false
+```
+
+
+Run on real robot:
+```bash
+ros2 launch franka_bringup dual_franka_control.launch.py \
+  robot_ip_1:=172.16.0.3 \
+  robot_ip_2:=172.16.0.2 \
+  arm_id_1:=panda_left \
+  arm_id_2:=panda_right \
+  load_gripper_1:=true \
+  load_gripper_2:=true \
+  controller_name:=dual_joint_impedance_controller \
+  use_rviz:=false
+```
+
+**Controller Interfaces:**
+| Topic / Interface Name | Message Type / Interface Type | Direction | Freq. | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `/dual_arm/joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states for both arms. |
+| `/<arm_id>/joints_desired` | `sensor_msgs/msg/JointState` | Input (Sub) | Event-driven / 100Hz recommended | Desired joint positions and velocities per arm. Names must match `arm_id_joint1..7`. |
+| `/<arm_id>/filtered_joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Internal state-space filtered commands for each arm (enabled with `arm_i.pub_filt_state`). |
+| `/<arm_id>/external_wrench` | `geometry_msgs/msg/WrenchStamped` | Output (Pub) | 1000Hz | External wrench estimated from each arm's robot state. `wrench.force.xyz` is force and `wrench.torque.xyz` is torque. |
+
+
+> Potential Bug: In `dual_franka_sim.launch.py`, the controller's output `/joint_states` cannot be remapped to `/dual_arm/joint_states`, causing both `/joint_state_publisher` and `/joint_state_broadcaster` to publish to `/joint_states` simultaneously, leading to confused messages.
 
 
 

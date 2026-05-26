@@ -9,6 +9,7 @@
 
 #include <Eigen/Eigen>
 #include "sensor_msgs/msg/joint_state.hpp"
+#include "geometry_msgs/msg/wrench_stamped.hpp"
 
 namespace franka_example_controllers {
 
@@ -75,6 +76,19 @@ JointImpedanceController::update(
       msg.effort[i] = ddq_filt(i);
     }
     if (publish_filt_state_ && pub_filt_state_) pub_filt_state_->publish(msg);
+  }
+
+  if (external_wrench_publisher_) {
+    geometry_msgs::msg::WrenchStamped external_wrench_msg;
+    external_wrench_msg.header.stamp = get_node()->now();
+    external_wrench_msg.header.frame_id = arm_id_ + "_link0";
+    external_wrench_msg.wrench.force.x = robot_state.O_F_ext_hat_K[0];
+    external_wrench_msg.wrench.force.y = robot_state.O_F_ext_hat_K[1];
+    external_wrench_msg.wrench.force.z = robot_state.O_F_ext_hat_K[2];
+    external_wrench_msg.wrench.torque.x = robot_state.O_F_ext_hat_K[3];
+    external_wrench_msg.wrench.torque.y = robot_state.O_F_ext_hat_K[4];
+    external_wrench_msg.wrench.torque.z = robot_state.O_F_ext_hat_K[5];
+    external_wrench_publisher_->publish(external_wrench_msg);
   }
 
   Vector7d tau_d_calculated =
@@ -183,6 +197,8 @@ JointImpedanceController::on_configure(
     std::string topic = "/" + arm_id_ + "/filtered_joint_states";
     pub_filt_state_ = get_node()->create_publisher<sensor_msgs::msg::JointState>(topic, 1);
   }
+  external_wrench_publisher_ = get_node()->create_publisher<geometry_msgs::msg::WrenchStamped>(
+      "/" + arm_id_ + "/external_wrench", 1);
   return CallbackReturn::SUCCESS;
 }
 

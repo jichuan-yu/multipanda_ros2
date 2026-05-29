@@ -8,7 +8,8 @@
 #include <controller_interface/controller_interface.hpp>
 #include "franka_semantic_components/franka_robot_model.hpp"
 #include <rclcpp/rclcpp.hpp>
-#include "std_msgs/msg/float64_multi_array.hpp"
+#include "geometry_msgs/msg/wrench_stamped.hpp"
+#include "sensor_msgs/msg/joint_state.hpp"
 
 using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 namespace franka_example_controllers {
@@ -21,11 +22,20 @@ class MultiJointImpedanceController : public controller_interface::ControllerInt
     Vector7d q_;
     Vector7d initial_q_;
     Vector7d dq_;
-    Vector7d dq_filtered_;
+    Vector7d q_filt_;
+    Vector7d dq_filt_;
+    Vector7d q_d_target_;
+    Vector7d dq_d_target_;
+    Vector7d dq_max_;
+    Vector7d ddq_max_;
+    Vector7d k_filt_;
+    Vector7d d_filt_;
     Vector7d k_gains_;
     Vector7d d_gains_;
-    Vector7d q_des_;
     std::unique_ptr<franka_semantic_components::FrankaRobotModel> franka_robot_model_;
+    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr pub_filt_state_;
+    rclcpp::Publisher<geometry_msgs::msg::WrenchStamped>::SharedPtr external_wrench_publisher_;
+    bool publish_filt_state_ = false;
   };
 
   controller_interface::InterfaceConfiguration command_interface_configuration() const override;
@@ -43,8 +53,10 @@ class MultiJointImpedanceController : public controller_interface::ControllerInt
   rclcpp::Time start_time_;
   void updateJointStates();
 
-  rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr sub_desired_joint_;
-  void desiredJointCallback(const std_msgs::msg::Float64MultiArray& msg);
+  std::map<std::string, rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr>
+      sub_desired_joint_;
+  void desiredJointCallback(const sensor_msgs::msg::JointState& msg, ArmContainer& arm);
 };
 
 }  // namespace franka_example_controllers
+

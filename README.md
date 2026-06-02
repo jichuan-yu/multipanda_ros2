@@ -21,6 +21,8 @@ We developed a [gripper action bridge](src/multipanda_ros2/franka_example_contro
 
 For more examples, please refer to [gripper_control](./docs/gripper_control.md)
 
+
+
 ### Cartesian Impedance Controller (Single Arm)
 
 ```bash
@@ -166,6 +168,40 @@ ros2 launch franka_bringup dual_franka_control.launch.py \
 
 > Potential Bug: In `dual_franka_sim.launch.py`, the controller's output `/joint_states` cannot be remapped to `/dual_arm/joint_states`, causing both `/joint_state_publisher` and `/joint_state_broadcaster` to publish to `/joint_states` simultaneously, leading to confused messages.
 
+#### Dual Arm Joint Impedance Controller With 3 RealSense Cameras
+
+```bash
+ros2 launch franka_bringup dual_franka_control_with_realsense.launch.py \
+  robot_ip_1:=172.16.0.3 \
+  robot_ip_2:=172.16.0.2 \
+  arm_id_1:=panda_left \
+  arm_id_2:=panda_right \
+  load_gripper_1:=true \
+  load_gripper_2:=true \
+  controller_name:=dual_joint_impedance_controller \
+  use_rviz:=false
+```
+
+**Camera Topics:**
+
+| Camera | Compressed topic | Message Type |
+| :--- | :--- | :--- |
+| `d405_left` | `/cameras/d405_left/color/image_raw/compressed` | `sensor_msgs/msg/CompressedImage` |
+| `d405_right` | `/cameras/d405_right/color/image_raw/compressed` | `sensor_msgs/msg/CompressedImage` |
+| `d435f` | `/cameras/d435f/color/image_raw/compressed` | `sensor_msgs/msg/CompressedImage` |
+
+- **Default launch resolution**: color and depth are configured to `640x480 @ 30Hz` by default (see launch profiles in [franka_bringup/launch/real/dual_franka_control_with_realsense.launch.py](franka_bringup/launch/real/dual_franka_control_with_realsense.launch.py#L81-L86)).
+
+**Gripper Topics:**
+
+| Topic | Message Type | Description |
+| :--- | :--- | :--- |
+| `/panda_left_gripper/grasp_desired` | `std_msgs/msg/Float64MultiArray` | Grasp command (width, speed, force, epsilon) |
+| `/panda_left_gripper/joint_states` | `sensor_msgs/msg/JointState` | Left gripper joint states |
+| `/panda_left_gripper/width_desired` | `std_msgs/msg/Float64` | Left gripper width command |
+| `/panda_right_gripper/grasp_desired` | `std_msgs/msg/Float64MultiArray` | Grasp command for right gripper |
+| `/panda_right_gripper/joint_states` | `sensor_msgs/msg/JointState` | Right gripper joint states |
+| `/panda_right_gripper/width_desired` | `std_msgs/msg/Float64` | Right gripper width command |
 
 
 ## Spacemouse Teleoperation

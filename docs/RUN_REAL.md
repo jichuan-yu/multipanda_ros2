@@ -91,7 +91,7 @@ ros2 bag record -o ./data/$(date +%Y%m%d_%H%M%S) \
   /panda_gripper/joint_states \
   /panda_gripper/width_desired \
   /panda_gripper/grasp_desired \
-  /joint_impedance/joints_desired 
+  /panda/joints_desired 
 ```
 Press `Ctrl+C` to stop recording when done.
 

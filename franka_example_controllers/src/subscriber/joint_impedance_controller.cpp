@@ -119,10 +119,7 @@ JointImpedanceController::on_init() {
       auto_declare<std::vector<double>>("k_filt", std::vector<double>(num_joints, 400.0));
       auto_declare<std::vector<double>>("d_filt", std::vector<double>(num_joints, 40.0));
       auto_declare<bool>("pub_filt_state", false);
-    sub_desired_joint_ = get_node()->create_subscription<sensor_msgs::msg::JointState>(
-      "/joint_impedance/joints_desired", 1,
-      std::bind(&JointImpedanceController::desiredJointCallback, this, std::placeholders::_1)
-    );
+    // subscription to desired joints will be created in on_configure()
   } catch (const std::exception& e) {
     fprintf(stderr, "Exception thrown during init stage with message: %s \n", e.what());
     return CallbackReturn::ERROR;
@@ -137,6 +134,12 @@ JointImpedanceController::on_configure(
   franka_robot_model_ = std::make_unique<franka_semantic_components::FrankaRobotModel>(
       franka_semantic_components::FrankaRobotModel(arm_id_ + "/robot_model",
                                                    arm_id_));
+    // create subscription to desired joints under the arm namespace
+    std::string desired_topic = "/" + arm_id_ + "/joints_desired";
+    sub_desired_joint_ = get_node()->create_subscription<sensor_msgs::msg::JointState>(
+      desired_topic, 1,
+      std::bind(&JointImpedanceController::desiredJointCallback, this, std::placeholders::_1)
+    );
   auto k_gains = get_node()->get_parameter("k_gains").as_double_array();
   auto d_gains = get_node()->get_parameter("d_gains").as_double_array();
   auto dq_max = get_node()->get_parameter("dq_max").as_double_array();

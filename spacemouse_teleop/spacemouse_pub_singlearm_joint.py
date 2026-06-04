@@ -55,7 +55,7 @@ def _get_urdf_from_xacro(xacro_path: str, arm_id: str, hand: bool = True) -> str
 class SpacemouseConfig:
     arm_id: str = 'panda'
     joint_state_topic: str = '/panda/joint_states'
-    target_joint_topic: str = '/joint_impedance/joints_desired'
+    target_joint_topic: str = '/panda/joints_desired'
     gripper_width_topic: str = '/panda_gripper/width_desired'
     gripper_grasp_topic: str = '/panda_gripper/grasp_desired'
     ee_frame: str = 'panda_hand_tcp'

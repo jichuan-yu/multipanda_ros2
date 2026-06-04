@@ -3,6 +3,44 @@
 This repository is a fork of [multipanda_ros2](https://github.com/tenfoldpaper/multipanda_ros2.git). For the original documentation and installation guide, see [README_ORIGIN.md](./README_ORIGIN.md).
 
 
+## Installation
+
+Follow the guidance in [README_ORIGIN.md](./README_ORIGIN.md).
+
+Note:
+
+libfranka may crash when used with Eigen >= 3.4.0. To avoid this, install Eigen 3.3.9 as follows:
+
+```bash
+cd ~/libraries
+wget https://gitlab.com/libeigen/eigen/-/archive/3.3.9/eigen-3.3.9.tar.gz
+tar -xzf eigen-3.3.9.tar.gz
+cd eigen-3.3.9
+
+mkdir build && cd build
+cmake ..
+sudo make install
+```
+
+The Eigen headers will be installed to /usr/local/include/eigen3/Eigen
+
+When building libfranka, use the following commands:
+
+```bash
+cd ~/libraries/libfranka
+mkdir build && cd build
+
+cmake .. \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_TESTS=OFF \
+  -DEigen3_DIR=/usr/local/share/eigen3/cmake \
+  -DCMAKE_INSTALL_PREFIX=$HOME/libraries/libfranka
+
+cmake --build . -j"$(nproc)"
+
+cmake --install .
+```
+
 
 
 ## Controllers and Communication Interfaces

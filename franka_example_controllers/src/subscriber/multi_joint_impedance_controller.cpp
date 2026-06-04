@@ -50,8 +50,9 @@ controller_interface::return_type MultiJointImpedanceController::update(
   size_t k = 0;
   for(auto& arm_container_pair : arms_){
     auto &arm = arm_container_pair.second;
-    Eigen::Map<const Vector7d> coriolis(
-      arm.franka_robot_model_->getCoriolisForceVector().data());
+    const auto coriolis_array = arm.franka_robot_model_->getCoriolisForceVector();
+    Eigen::Map<const Vector7d> coriolis_map(coriolis_array.data());
+    Vector7d coriolis = coriolis_map;
 
     Vector7d ddq_filt = arm.k_filt_.cwiseProduct(arm.q_d_target_ - arm.q_filt_) +
                         arm.d_filt_.cwiseProduct(arm.dq_d_target_ - arm.dq_filt_);

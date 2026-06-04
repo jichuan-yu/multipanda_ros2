@@ -15,7 +15,7 @@ For real robot experiments, a real-time kernal is required. Please refer to [Fra
 0. Ruturn to home position (0, -PI/4, 0, -3PI/4, 0, PI/2, PI/4):
 ```bash
 ros2 launch franka_bringup move_to_start.launch.py \
-  robot_ip:=172.16.0.3 \
+  robot_ip:=172.16.0.2 \
   load_gripper:=true
 ```
 
@@ -60,14 +60,14 @@ python3 spacemouse_teleop/spacemouse_pub_singlearm_real.py
 0. Ruturn to home position (0, -PI/4, 0, -3PI/4, 0, PI/2, PI/4):
 ```bash
 ros2 launch franka_bringup move_to_start.launch.py \
-  robot_ip:=172.16.0.3 \
+  robot_ip:=172.16.0.2 \
   load_gripper:=true
 ```
 
 1. Launch joint controller:
 ``` bash
 ros2 launch franka_bringup franka_control.launch.py \
-  robot_ip:=172.16.0.3 \
+  robot_ip:=172.16.0.2 \
   load_gripper:=true \
   controller_name:=joint_impedance_controller \
   use_rviz:=false

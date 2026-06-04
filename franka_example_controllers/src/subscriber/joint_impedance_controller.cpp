@@ -43,8 +43,9 @@ JointImpedanceController::update(
     const rclcpp::Time& /*time*/,
     const rclcpp::Duration& period) {
   updateJointStates();
-  Eigen::Map<const Vector7d> coriolis(
-    franka_robot_model_->getCoriolisForceVector().data());
+  const auto coriolis_array = franka_robot_model_->getCoriolisForceVector();
+  Eigen::Map<const Vector7d> coriolis_map(coriolis_array.data());
+  Vector7d coriolis = coriolis_map;
   const auto& robot_state = *franka_robot_model_->getRobotState();
   const double dt = period.seconds();
 

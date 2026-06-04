@@ -46,6 +46,7 @@ controller_interface::return_type MultiJointImpedanceController::update(
     const rclcpp::Duration& period) {
   updateJointStates();
   const double dt = period.seconds();
+  const rclcpp::Time stamp = get_node()->now();
   
   size_t k = 0;
   for(auto& arm_container_pair : arms_){
@@ -66,35 +67,9 @@ controller_interface::return_type MultiJointImpedanceController::update(
         arm.k_gains_.cwiseProduct(arm.q_filt_ - arm.q_) +
         arm.d_gains_.cwiseProduct(arm.dq_filt_ - arm.dq_) + coriolis;
 
-    if (arm.publish_filt_state_ && arm.pub_filt_state_) {
-      sensor_msgs::msg::JointState msg;
-      msg.header.stamp = get_node()->now();
-      msg.name.resize(num_joints);
-      msg.position.resize(num_joints);
-      msg.velocity.resize(num_joints);
-      msg.effort.resize(num_joints);
-      for (int i = 0; i < num_joints; ++i) {
-        msg.name[i] = arm.arm_id_ + "_joint" + std::to_string(i + 1);
-        msg.position[i] = arm.q_filt_(i);
-        msg.velocity[i] = arm.dq_filt_(i);
-        msg.effort[i] = ddq_filt(i);
-      }
-      arm.pub_filt_state_->publish(msg);
-    }
-
-    if (arm.external_wrench_publisher_) {
-      const auto& robot_state = *arm.franka_robot_model_->getRobotState();
-      geometry_msgs::msg::WrenchStamped external_wrench_msg;
-      external_wrench_msg.header.stamp = get_node()->now();
-      external_wrench_msg.header.frame_id = arm.arm_id_ + "_link0";
-      external_wrench_msg.wrench.force.x = robot_state.O_F_ext_hat_K[0];
-      external_wrench_msg.wrench.force.y = robot_state.O_F_ext_hat_K[1];
-      external_wrench_msg.wrench.force.z = robot_state.O_F_ext_hat_K[2];
-      external_wrench_msg.wrench.torque.x = robot_state.O_F_ext_hat_K[3];
-      external_wrench_msg.wrench.torque.y = robot_state.O_F_ext_hat_K[4];
-      external_wrench_msg.wrench.torque.z = robot_state.O_F_ext_hat_K[5];
-      arm.external_wrench_publisher_->publish(external_wrench_msg);
-    }
+    publishFilteredState(arm, ddq_filt, stamp);
+    publishExternalWrench(arm, stamp);
+    publishJointState(arm, stamp);
     
     for (int i = 0; i < num_joints; i++) {
       command_interfaces_[k].set_value(tau_d_calculated(i));
@@ -224,10 +199,15 @@ CallbackReturn MultiJointImpedanceController::on_configure(
     arm.publish_filt_state_ = get_node()->get_parameter(prefix + "pub_filt_state").as_bool();
     if (arm.publish_filt_state_) {
       std::string topic = "/" + arm.arm_id_ + "/filtered_joint_states";
-      arm.pub_filt_state_ = get_node()->create_publisher<sensor_msgs::msg::JointState>(topic, 1);
+      auto filtered_pub = get_node()->create_publisher<sensor_msgs::msg::JointState>(topic, rclcpp::SystemDefaultsQoS());
+      arm.realtime_filt_state_publisher_ =
+          std::make_shared<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>>(filtered_pub);
     }
     std::string wrench_topic = "/" + arm.arm_id_ + "/external_wrench";
-    arm.external_wrench_publisher_ = get_node()->create_publisher<geometry_msgs::msg::WrenchStamped>(wrench_topic, 1);
+    auto wrench_pub = get_node()->create_publisher<geometry_msgs::msg::WrenchStamped>(wrench_topic, rclcpp::SystemDefaultsQoS());
+    arm.realtime_external_wrench_publisher_ =
+        std::make_shared<realtime_tools::RealtimePublisher<geometry_msgs::msg::WrenchStamped>>(wrench_pub);
+    initializeJointStatePublisher(arm);
     std::string desired_topic = "/" + arm.arm_id_ + "/joints_desired";
     auto* arm_ptr = &arm;
     sub_desired_joint_[arm.arm_id_] = get_node()->create_subscription<sensor_msgs::msg::JointState>(
@@ -251,9 +231,95 @@ CallbackReturn MultiJointImpedanceController::on_activate(
     arm.dq_filt_ = arm.dq_;
     arm.dq_d_target_.setZero();
     arm.franka_robot_model_->assign_loaned_state_interfaces(state_interfaces_);
+    if (arm.realtime_joint_state_publisher_) {
+      auto &msg = arm.realtime_joint_state_publisher_->msg_;
+      msg.header.frame_id = arm.arm_id_ + "_link0";
+      msg.name = arm.joint_names_;
+      msg.position.resize(num_joints);
+      msg.velocity.resize(num_joints);
+      msg.effort.resize(num_joints);
+    }
+    if (arm.realtime_filt_state_publisher_) {
+      auto &msg = arm.realtime_filt_state_publisher_->msg_;
+      msg.header.frame_id = arm.arm_id_ + "_link0";
+      msg.name = arm.joint_names_;
+      msg.position.resize(num_joints);
+      msg.velocity.resize(num_joints);
+      msg.effort.resize(num_joints);
+    }
+    if (arm.realtime_external_wrench_publisher_) {
+      arm.realtime_external_wrench_publisher_->msg_.header.frame_id = arm.arm_id_ + "_link0";
+    }
   }
   start_time_ = this->get_node()->now();
   return CallbackReturn::SUCCESS;
+}
+
+void MultiJointImpedanceController::initializeJointStatePublisher(ArmContainer& arm) {
+  std::string joint_topic = "/" + arm.arm_id_ + "/joint_states";
+  arm.joint_state_publisher_ = get_node()->create_publisher<sensor_msgs::msg::JointState>(
+      joint_topic, rclcpp::SystemDefaultsQoS());
+  arm.realtime_joint_state_publisher_ =
+      std::make_shared<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>>(
+          arm.joint_state_publisher_);
+  arm.joint_names_.resize(num_joints);
+  for (int i = 0; i < num_joints; ++i) {
+    arm.joint_names_[i] = arm.arm_id_ + "_joint" + std::to_string(i + 1);
+  }
+
+  auto& msg = arm.realtime_joint_state_publisher_->msg_;
+  msg.header.frame_id = arm.arm_id_ + "_link0";
+  msg.name = arm.joint_names_;
+  msg.position.resize(num_joints);
+  msg.velocity.resize(num_joints);
+  msg.effort.resize(num_joints);
+}
+
+void MultiJointImpedanceController::publishJointState(ArmContainer& arm, const rclcpp::Time& stamp) {
+  if (!arm.realtime_joint_state_publisher_ || !arm.realtime_joint_state_publisher_->trylock()) {
+    return;
+  }
+
+  auto& msg = arm.realtime_joint_state_publisher_->msg_;
+  msg.header.stamp = stamp;
+  for (int i = 0; i < num_joints; ++i) {
+    msg.position[i] = arm.q_(i);
+    msg.velocity[i] = arm.dq_(i);
+    msg.effort[i] = 0.0;
+  }
+  arm.realtime_joint_state_publisher_->unlockAndPublish();
+}
+
+void MultiJointImpedanceController::publishFilteredState(ArmContainer& arm, const Vector7d& ddq_filt, const rclcpp::Time& stamp) {
+  if (!arm.publish_filt_state_ || !arm.realtime_filt_state_publisher_ || !arm.realtime_filt_state_publisher_->trylock()) {
+    return;
+  }
+
+  auto& msg = arm.realtime_filt_state_publisher_->msg_;
+  msg.header.stamp = stamp;
+  for (int i = 0; i < num_joints; ++i) {
+    msg.position[i] = arm.q_filt_(i);
+    msg.velocity[i] = arm.dq_filt_(i);
+    msg.effort[i] = ddq_filt(i);
+  }
+  arm.realtime_filt_state_publisher_->unlockAndPublish();
+}
+
+void MultiJointImpedanceController::publishExternalWrench(ArmContainer& arm, const rclcpp::Time& stamp) {
+  if (!arm.realtime_external_wrench_publisher_ || !arm.realtime_external_wrench_publisher_->trylock()) {
+    return;
+  }
+
+  const auto& robot_state = *arm.franka_robot_model_->getRobotState();
+  auto& msg = arm.realtime_external_wrench_publisher_->msg_;
+  msg.header.stamp = stamp;
+  msg.wrench.force.x = robot_state.O_F_ext_hat_K[0];
+  msg.wrench.force.y = robot_state.O_F_ext_hat_K[1];
+  msg.wrench.force.z = robot_state.O_F_ext_hat_K[2];
+  msg.wrench.torque.x = robot_state.O_F_ext_hat_K[3];
+  msg.wrench.torque.y = robot_state.O_F_ext_hat_K[4];
+  msg.wrench.torque.z = robot_state.O_F_ext_hat_K[5];
+  arm.realtime_external_wrench_publisher_->unlockAndPublish();
 }
 
 void MultiJointImpedanceController::updateJointStates() {

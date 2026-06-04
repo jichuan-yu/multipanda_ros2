@@ -129,6 +129,12 @@ ros2 launch franka_bringup dual_franka_control.launch.py \
   use_rviz:=false
 ```
 
+```bash
+ros2 launch franka_bringup dual_franka_sim_control.launch.py \
+  controller_name:=dual_joint_impedance_controller \
+  use_rviz:=false
+```
+
 2. SpaceMouse Teleop:
 First check connected spacemouse devices:
 ```bash

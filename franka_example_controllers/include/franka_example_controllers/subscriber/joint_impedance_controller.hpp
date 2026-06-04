@@ -9,6 +9,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include "geometry_msgs/msg/wrench_stamped.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
+#include <realtime_tools/realtime_publisher.h>
 
 using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
@@ -55,9 +56,13 @@ class JointImpedanceController : public controller_interface::ControllerInterfac
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr sub_desired_joint_;
   void desiredJointCallback(const sensor_msgs::msg::JointState& msg);
 
-  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr pub_filt_state_;
+  std::shared_ptr<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>> realtime_pub_filt_state_;
   bool publish_filt_state_ = true;
-  rclcpp::Publisher<geometry_msgs::msg::WrenchStamped>::SharedPtr external_wrench_publisher_;
+  std::shared_ptr<realtime_tools::RealtimePublisher<geometry_msgs::msg::WrenchStamped>> realtime_external_wrench_publisher_;
+  std::vector<std::string> joint_names_;
+
+  void publishFilteredState(const Vector7d& ddq_filt, const rclcpp::Time& stamp);
+  void publishExternalWrench(const franka::RobotState& robot_state, const rclcpp::Time& stamp);
 };
 
 }  // namespace franka_example_controllers

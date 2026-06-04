@@ -3,6 +3,7 @@
 #include <string>
 #include <map>
 #include <memory>
+#include <vector>
 
 #include <Eigen/Eigen>
 #include <controller_interface/controller_interface.hpp>
@@ -10,6 +11,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include "geometry_msgs/msg/wrench_stamped.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
+#include <realtime_tools/realtime_publisher.h>
 
 using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 namespace franka_example_controllers {
@@ -33,8 +35,11 @@ class MultiJointImpedanceController : public controller_interface::ControllerInt
     Vector7d k_gains_;
     Vector7d d_gains_;
     std::unique_ptr<franka_semantic_components::FrankaRobotModel> franka_robot_model_;
-    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr pub_filt_state_;
-    rclcpp::Publisher<geometry_msgs::msg::WrenchStamped>::SharedPtr external_wrench_publisher_;
+    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_state_publisher_;
+    std::shared_ptr<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>> realtime_filt_state_publisher_;
+    std::shared_ptr<realtime_tools::RealtimePublisher<geometry_msgs::msg::WrenchStamped>> realtime_external_wrench_publisher_;
+    std::shared_ptr<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>> realtime_joint_state_publisher_;
+    std::vector<std::string> joint_names_;
     bool publish_filt_state_ = false;
   };
 
@@ -52,6 +57,10 @@ class MultiJointImpedanceController : public controller_interface::ControllerInt
   std::map<std::string, ArmContainer> arms_;
   rclcpp::Time start_time_;
   void updateJointStates();
+  void initializeJointStatePublisher(ArmContainer& arm);
+  void publishJointState(ArmContainer& arm, const rclcpp::Time& stamp);
+  void publishFilteredState(ArmContainer& arm, const Vector7d& ddq_filt, const rclcpp::Time& stamp);
+  void publishExternalWrench(ArmContainer& arm, const rclcpp::Time& stamp);
 
   std::map<std::string, rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr>
       sub_desired_joint_;

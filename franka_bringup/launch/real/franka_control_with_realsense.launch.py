@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, OpaqueFunction, TimerAction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
@@ -69,8 +69,6 @@ def generate_launch_description():
     wrist_camera_parameter_name = 'wrist_camera'
 
     # Fixed RealSense identities for this setup.
-    d405_left_physical_name = 'd405_left'
-    d405_right_physical_name = 'd405_right'
     d405_wrist_topic_name = 'panda_wrist'
     d435f_fixed_topic_name = 'fixed'
 
@@ -92,8 +90,23 @@ def generate_launch_description():
 
     launch_realsense = LaunchConfiguration(launch_realsense_parameter_name)
     launch_rqt_image_view = LaunchConfiguration(launch_rqt_image_view_parameter_name)
+    apply_collision_params = LaunchConfiguration('apply_collision_params')
 
     wrist_camera = LaunchConfiguration(wrist_camera_parameter_name)
+
+    # Collision behavior payload (for cartesian assembly tasks)
+    collision_payload = (
+        '{ '
+        'lower_torque_thresholds_acceleration: [20.0,20.0,18.0,18.0,16.0,14.0,12.0], '
+        'upper_torque_thresholds_acceleration: [20.0,20.0,18.0,18.0,16.0,14.0,12.0], '
+        'lower_torque_thresholds_nominal: [20.0,20.0,18.0,18.0,16.0,14.0,12.0], '
+        'upper_torque_thresholds_nominal: [20.0,20.0,18.0,18.0,16.0,14.0,12.0], '
+        'lower_force_thresholds_acceleration: [20.0,20.0,20.0,25.0,25.0,25.0], '
+        'upper_force_thresholds_acceleration: [20.0,20.0,20.0,25.0,25.0,25.0], '
+        'lower_force_thresholds_nominal: [50.0,50.0,60.0,50.0,50.0,50.0], '
+        'upper_force_thresholds_nominal: [50.0,50.0,60.0,50.0,50.0,50.0] '
+        '}'
+    )
 
     base_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -122,6 +135,22 @@ def generate_launch_description():
         output='screen',
         parameters=[{'arm_id': 'panda'}],
         condition=IfCondition(load_gripper),
+    )
+
+    # TimerAction to call set_full_collision_behavior on common service prefixes
+    collision_timer = TimerAction(
+        period=3.0,
+        actions=[
+            ExecuteProcess(
+                cmd=[
+                    'bash', '-lc',
+                    f"ros2 service call /panda_param_service_server/set_full_collision_behavior "
+                    f"franka_msgs/srv/SetFullCollisionBehavior '{collision_payload}' || true"
+                ],
+                output='screen',
+            ),
+        ],
+        condition=IfCondition(apply_collision_params),
     )
 
     def _launch_cameras(context):
@@ -225,8 +254,14 @@ def generate_launch_description():
             default_value='left',
             description="Wrist camera selector. Supported: 'left' or 'right'."
         ),
+        DeclareLaunchArgument(
+            'apply_collision_params',
+            default_value='true',
+            description='Call param service to set collision thresholds at startup.'
+        ),
         base_launch,
         controller_spawner,
         gripper_bridge,
+        collision_timer,
         OpaqueFunction(function=_launch_cameras),
     ])

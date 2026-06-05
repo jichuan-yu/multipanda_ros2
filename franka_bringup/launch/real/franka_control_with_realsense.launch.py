@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
@@ -56,61 +56,52 @@ def _realsense_launch(
 
 
 def generate_launch_description():
-    robot_ip_1_parameter_name = 'robot_ip_1'
-    robot_ip_2_parameter_name = 'robot_ip_2'
-    load_gripper_1_parameter_name = 'load_gripper_1'
-    load_gripper_2_parameter_name = 'load_gripper_2'
-    arm_id_1_parameter_name = 'arm_id_1'
-    arm_id_2_parameter_name = 'arm_id_2'
+    robot_ip_parameter_name = 'robot_ip'
+    load_gripper_parameter_name = 'load_gripper'
     use_fake_hardware_parameter_name = 'use_fake_hardware'
     fake_sensor_commands_parameter_name = 'fake_sensor_commands'
     use_rviz_parameter_name = 'use_rviz'
     controller_name_parameter_name = 'controller_name'
 
     launch_realsense_parameter_name = 'launch_realsense'
+    launch_rqt_image_view_parameter_name = 'launch_rqt_image_view'
 
-    # Camera topic names.
-    d435f_camera_name = 'fixed'
+    wrist_camera_parameter_name = 'wrist_camera'
+
+    # Fixed RealSense identities for this setup.
+    d405_left_physical_name = 'd405_left'
+    d405_right_physical_name = 'd405_right'
+    d405_wrist_topic_name = 'panda_wrist'
+    d435f_fixed_topic_name = 'fixed'
 
     d405_left_serial = "'409122274276'"
     d405_right_serial = "'352122272335'"
     d435f_serial = "'244222074410'"
 
-    d405_left_depth_profile = '640,480,30'
-    d405_left_color_profile = '640,480,30'
-    d405_right_depth_profile = '640,480,30'
-    d405_right_color_profile = '640,480,30'
+    d405_depth_profile = '640,480,30'
+    d405_color_profile = '640,480,30'
     d435f_depth_profile = '640,480,30'
     d435f_color_profile = '640,480,30'
 
-    robot_ip_1 = LaunchConfiguration(robot_ip_1_parameter_name)
-    robot_ip_2 = LaunchConfiguration(robot_ip_2_parameter_name)
-    load_gripper_1 = LaunchConfiguration(load_gripper_1_parameter_name)
-    load_gripper_2 = LaunchConfiguration(load_gripper_2_parameter_name)
-    arm_id_1 = LaunchConfiguration(arm_id_1_parameter_name)
-    arm_id_2 = LaunchConfiguration(arm_id_2_parameter_name)
+    robot_ip = LaunchConfiguration(robot_ip_parameter_name)
+    load_gripper = LaunchConfiguration(load_gripper_parameter_name)
     use_fake_hardware = LaunchConfiguration(use_fake_hardware_parameter_name)
     fake_sensor_commands = LaunchConfiguration(fake_sensor_commands_parameter_name)
     use_rviz = LaunchConfiguration(use_rviz_parameter_name)
     controller_name = LaunchConfiguration(controller_name_parameter_name)
 
     launch_realsense = LaunchConfiguration(launch_realsense_parameter_name)
+    launch_rqt_image_view = LaunchConfiguration(launch_rqt_image_view_parameter_name)
+
+    wrist_camera = LaunchConfiguration(wrist_camera_parameter_name)
 
     base_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            [
-                PathJoinSubstitution(
-                    [FindPackageShare('franka_bringup'), 'launch', 'real', 'dual_franka.launch.py']
-                )
-            ]
+            [PathJoinSubstitution([FindPackageShare('franka_bringup'), 'launch', 'real', 'franka.launch.py'])]
         ),
         launch_arguments={
-            robot_ip_1_parameter_name: robot_ip_1,
-            robot_ip_2_parameter_name: robot_ip_2,
-            load_gripper_1_parameter_name: load_gripper_1,
-            load_gripper_2_parameter_name: load_gripper_2,
-            arm_id_1_parameter_name: arm_id_1,
-            arm_id_2_parameter_name: arm_id_2,
+            robot_ip_parameter_name: robot_ip,
+            load_gripper_parameter_name: load_gripper,
             use_fake_hardware_parameter_name: use_fake_hardware,
             fake_sensor_commands_parameter_name: fake_sensor_commands,
             use_rviz_parameter_name: use_rviz,
@@ -124,64 +115,73 @@ def generate_launch_description():
         output='screen',
     )
 
-    gripper_bridge_1 = Node(
+    gripper_bridge = Node(
         package='franka_example_controllers',
         executable='gripper_action_bridge',
-        name=[arm_id_1, '_gripper_action_bridge'],
+        name=['', '_gripper_action_bridge'],
         output='screen',
-        parameters=[{'arm_id': arm_id_1}],
-        condition=IfCondition(load_gripper_1),
+        parameters=[{'arm_id': 'panda'}],
+        condition=IfCondition(load_gripper),
     )
 
-    gripper_bridge_2 = Node(
-        package='franka_example_controllers',
-        executable='gripper_action_bridge',
-        name=[arm_id_2, '_gripper_action_bridge'],
-        output='screen',
-        parameters=[{'arm_id': arm_id_2}],
-        condition=IfCondition(load_gripper_2),
-    )
+    def _launch_cameras(context):
+        wrist_camera_value = wrist_camera.perform(context)
+        launch_rqt_image_view_value = launch_rqt_image_view.perform(context).lower() == 'true'
+        wrist_camera_map = {
+            'left': d405_left_serial,
+            'right': d405_right_serial,
+        }
 
-    d405_left_launch = _realsense_launch(
-        [arm_id_1, '_wrist'],
-        d405_left_serial,
-        d405_left_depth_profile,
-        depth_color_profile=d405_left_color_profile,
-        condition=IfCondition(launch_realsense),
-    )
-    d405_right_launch = _realsense_launch(
-        [arm_id_2, '_wrist'],
-        d405_right_serial,
-        d405_right_depth_profile,
-        depth_color_profile=d405_right_color_profile,
-        condition=IfCondition(launch_realsense),
-    )
-    d435f_launch = _realsense_launch(
-        d435f_camera_name,
-        d435f_serial,
-        d435f_depth_profile,
-        rgb_color_profile=d435f_color_profile,
-        condition=IfCondition(launch_realsense),
-    )
+        if wrist_camera_value not in wrist_camera_map:
+            raise RuntimeError(
+                "Invalid wrist_camera='{}'. Supported values are 'left' or 'right'.".format(
+                    wrist_camera_value,
+                )
+            )
+
+        wrist_launch = _realsense_launch(
+            d405_wrist_topic_name,
+            wrist_camera_map[wrist_camera_value],
+            d405_depth_profile,
+            depth_color_profile=d405_color_profile,
+            condition=IfCondition(launch_realsense),
+        )
+
+        fixed_launch = _realsense_launch(
+            d435f_fixed_topic_name,
+            d435f_serial,
+            d435f_depth_profile,
+            rgb_color_profile=d435f_color_profile,
+            condition=IfCondition(launch_realsense),
+        )
+
+        image_view_launches = []
+        if launch_rqt_image_view_value:
+            image_view_launches = [
+                ExecuteProcess(
+                    cmd=[
+                        'ros2', 'run', 'rqt_image_view', 'rqt_image_view',
+                        '/cameras/panda_wrist/color/image_raw',
+                        '--ros-args', '-p', 'image_transport:=compressed',
+                    ],
+                    output='screen',
+                ),
+                ExecuteProcess(
+                    cmd=[
+                        'ros2', 'run', 'rqt_image_view', 'rqt_image_view',
+                        '/cameras/fixed/color/image_raw',
+                        '--ros-args', '-p', 'image_transport:=compressed',
+                    ],
+                    output='screen',
+                ),
+            ]
+
+        return [wrist_launch, fixed_launch, *image_view_launches]
 
     return LaunchDescription([
         DeclareLaunchArgument(
-            robot_ip_1_parameter_name,
-            description='Hostname or IP address of robot 1.'
-        ),
-        DeclareLaunchArgument(
-            robot_ip_2_parameter_name,
-            description='Hostname or IP address of robot 2.'
-        ),
-        DeclareLaunchArgument(
-            arm_id_1_parameter_name,
-            default_value='panda_left',
-            description='Unique arm ID of robot 1.'
-        ),
-        DeclareLaunchArgument(
-            arm_id_2_parameter_name,
-            default_value='panda_right',
-            description='Unique arm ID of robot 2.'
+            robot_ip_parameter_name,
+            description='Hostname or IP address of the robot.'
         ),
         DeclareLaunchArgument(
             use_rviz_parameter_name,
@@ -201,30 +201,32 @@ def generate_launch_description():
             )
         ),
         DeclareLaunchArgument(
-            load_gripper_1_parameter_name,
-            default_value='true',
-            description='Use Franka Gripper as an end-effector for robot 1.'
-        ),
-        DeclareLaunchArgument(
-            load_gripper_2_parameter_name,
-            default_value='true',
-            description='Use Franka Gripper as an end-effector for robot 2.'
+            load_gripper_parameter_name,
+            default_value='false',
+            description='Use Franka Gripper as an end-effector.'
         ),
         DeclareLaunchArgument(
             controller_name_parameter_name,
-            default_value='dual_joint_impedance_controller',
+            default_value='joint_impedance_controller',
             description='Controller name to spawn after base bringup.'
         ),
         DeclareLaunchArgument(
             launch_realsense_parameter_name,
             default_value='true',
-            description='Launch RealSense cameras together with dual-arm bringup.'
+            description='Launch RealSense cameras together with bringup.'
+        ),
+        DeclareLaunchArgument(
+            launch_rqt_image_view_parameter_name,
+            default_value='true',
+            description='Launch two rqt_image_view windows for panda_wrist and fixed.'
+        ),
+        DeclareLaunchArgument(
+            wrist_camera_parameter_name,
+            default_value='left',
+            description="Wrist camera selector. Supported: 'left' or 'right'."
         ),
         base_launch,
         controller_spawner,
-        gripper_bridge_1,
-        gripper_bridge_2,
-        d405_left_launch,
-        d405_right_launch,
-        d435f_launch,
+        gripper_bridge,
+        OpaqueFunction(function=_launch_cameras),
     ])

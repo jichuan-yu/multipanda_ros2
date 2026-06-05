@@ -198,7 +198,7 @@ ros2 launch franka_bringup dual_franka_control.launch.py \
 **Controller Interfaces:**
 | Topic / Interface Name | Message Type / Interface Type | Direction | Freq. | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `/dual_arm/joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states for both arms|
+| `/dual_arm/joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states for both arms.|
 | `/<arm_id>/joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states for each arm, published separately per namespace. |
 | `/<arm_id>/joints_desired` | `sensor_msgs/msg/JointState` | Input (Sub) | Event-driven / 100Hz recommended | Desired joint positions and velocities per arm. Names must match `arm_id_joint1..7`. |
 | `/<arm_id>/filtered_joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Internal state-space filtered commands for each arm (enabled with `arm_i.pub_filt_state`). |
@@ -225,9 +225,9 @@ ros2 launch franka_bringup dual_franka_control_with_realsense.launch.py \
 
 | Camera | Compressed topic | Message Type |
 | :--- | :--- | :--- |
-| `d405_left` | `/cameras/d405_left/color/image_raw/compressed` | `sensor_msgs/msg/CompressedImage` |
-| `d405_right` | `/cameras/d405_right/color/image_raw/compressed` | `sensor_msgs/msg/CompressedImage` |
-| `d435f` | `/cameras/d435f/color/image_raw/compressed` | `sensor_msgs/msg/CompressedImage` |
+| `<arm_id_1>_wrist` | `/cameras/<arm_id_1>_wrist/color/image_raw` with `image_transport:=compressed` | `sensor_msgs/msg/CompressedImage` |
+| `<arm_id_2>_wrist` | `/cameras/<arm_id_2>_wrist/color/image_raw` with `image_transport:=compressed` | `sensor_msgs/msg/CompressedImage` |
+| `fixed` | `/cameras/fixed/color/image_raw` with `image_transport:=compressed` | `sensor_msgs/msg/CompressedImage` |
 
 - **Default launch resolution**: color and depth are configured to `640x480 @ 30Hz` by default (see launch profiles in [franka_bringup/launch/real/dual_franka_control_with_realsense.launch.py](franka_bringup/launch/real/dual_franka_control_with_realsense.launch.py#L81-L86)).
 
@@ -241,6 +241,34 @@ ros2 launch franka_bringup dual_franka_control_with_realsense.launch.py \
 | `/panda_right_gripper/grasp_desired` | `std_msgs/msg/Float64MultiArray` | Grasp command for right gripper |
 | `/panda_right_gripper/joint_states` | `sensor_msgs/msg/JointState` | Right gripper joint states |
 | `/panda_right_gripper/width_desired` | `std_msgs/msg/Float64` | Right gripper width command |
+
+#### Single Arm Joint Impedance Controller With 2 RealSense Cameras
+
+```bash
+ros2 launch franka_bringup franka_control_with_realsense.launch.py \
+  robot_ip:=172.16.0.2 \
+  load_gripper:=true \
+  controller_name:=joint_impedance_controller \
+  wrist_camera:=left \
+  launch_rqt_image_view:=true \
+  use_rviz:=false
+```
+
+**Launch Arguments (additional to `franka_control.launch.py`):**
+
+| Argument | Default | Description |
+| :--- | :--- | :--- |
+| `launch_realsense` | `true` | Whether to launch RealSense camera nodes together with robot bringup. |
+| `wrist_camera` | `left` | Wrist camera selector. Must be `left` or `right`. The launch file maps it to built-in D405 serial numbers, otherwise it raises an error. |
+
+**Camera Topics:**
+
+| Camera | Compressed topic | Message Type |
+| :--- | :--- | :--- |
+| `panda_wrist` (from `wrist_camera=left/right`) | `/cameras/panda_wrist/color/image_raw` with `image_transport:=compressed` | `sensor_msgs/msg/CompressedImage` |
+| `fixed` | `/cameras/fixed/color/image_raw` with `image_transport:=compressed` | `sensor_msgs/msg/CompressedImage` |
+
+- **Default launch resolution**: color and depth are configured to `640x480 @ 30Hz` by default (see launch profiles in [franka_bringup/launch/real/franka_control_with_realsense.launch.py](franka_bringup/launch/real/franka_control_with_realsense.launch.py)).
 
 
 ## Spacemouse Teleoperation

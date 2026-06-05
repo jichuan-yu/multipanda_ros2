@@ -75,7 +75,7 @@ ros2 launch franka_bringup franka_control.launch.py \
 
 Set Collision Behavior in a new terminal
 ```bash
-bash src/multipanda_ros2/franka_hardware/param_setter_scripts.sh
+bash src/multipanda_ros2/franka_hardware/param_setter_scripts.sh panda
 ```
 
 (Optional) Record rosbag data in a new terminal:

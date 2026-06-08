@@ -27,6 +27,8 @@ def _realsense_launch(
     depth_profile,
     depth_color_profile=None,
     rgb_color_profile=None,
+    depth_exposure=None,
+    rgb_exposure=None,
     condition=None,
 ):
     launch_arguments = {
@@ -45,6 +47,14 @@ def _realsense_launch(
 
     if rgb_color_profile is not None:
         launch_arguments['rgb_camera.color_profile'] = rgb_color_profile
+
+    if depth_exposure is not None:
+        launch_arguments['depth_module.enable_auto_exposure'] = 'false'
+        launch_arguments['depth_module.exposure'] = depth_exposure
+
+    if rgb_exposure is not None:
+        launch_arguments['rgb_camera.enable_auto_exposure'] = 'false'
+        launch_arguments['rgb_camera.exposure'] = rgb_exposure
 
     return IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -80,8 +90,8 @@ def generate_launch_description():
     d405_left_color_profile = '640,480,30'
     d405_right_depth_profile = '640,480,30'
     d405_right_color_profile = '640,480,30'
-    d435f_depth_profile = '640,480,30'
-    d435f_color_profile = '640,480,30'
+    d435f_depth_profile = '848,480,30'
+    d435f_color_profile = '848,480,30'
 
     robot_ip_1 = LaunchConfiguration(robot_ip_1_parameter_name)
     robot_ip_2 = LaunchConfiguration(robot_ip_2_parameter_name)
@@ -147,6 +157,7 @@ def generate_launch_description():
         d405_left_serial,
         d405_left_depth_profile,
         depth_color_profile=d405_left_color_profile,
+        depth_exposure='21000',
         condition=IfCondition(launch_realsense),
     )
     d405_right_launch = _realsense_launch(
@@ -154,6 +165,7 @@ def generate_launch_description():
         d405_right_serial,
         d405_right_depth_profile,
         depth_color_profile=d405_right_color_profile,
+        depth_exposure='21000',
         condition=IfCondition(launch_realsense),
     )
     d435f_launch = _realsense_launch(
@@ -161,6 +173,7 @@ def generate_launch_description():
         d435f_serial,
         d435f_depth_profile,
         rgb_color_profile=d435f_color_profile,
+        rgb_exposure='175',
         condition=IfCondition(launch_realsense),
     )
 

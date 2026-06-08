@@ -27,6 +27,8 @@ def _realsense_launch(
     depth_profile,
     depth_color_profile=None,
     rgb_color_profile=None,
+    depth_exposure=None,
+    rgb_exposure=None,
     condition=None,
 ):
     launch_arguments = {
@@ -45,6 +47,14 @@ def _realsense_launch(
 
     if rgb_color_profile is not None:
         launch_arguments['rgb_camera.color_profile'] = rgb_color_profile
+
+    if depth_exposure is not None:
+        launch_arguments['depth_module.enable_auto_exposure'] = 'false'
+        launch_arguments['depth_module.exposure'] = depth_exposure
+
+    if rgb_exposure is not None:
+        launch_arguments['rgb_camera.enable_auto_exposure'] = 'false'
+        launch_arguments['rgb_camera.exposure'] = rgb_exposure
 
     return IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -78,8 +88,8 @@ def generate_launch_description():
 
     d405_depth_profile = '640,480,30'
     d405_color_profile = '640,480,30'
-    d435f_depth_profile = '640,480,30'
-    d435f_color_profile = '640,480,30'
+    d435f_depth_profile = '848,480,30'
+    d435f_color_profile = '848,480,30'
 
     robot_ip = LaunchConfiguration(robot_ip_parameter_name)
     load_gripper = LaunchConfiguration(load_gripper_parameter_name)
@@ -173,6 +183,7 @@ def generate_launch_description():
             wrist_camera_map[wrist_camera_value],
             d405_depth_profile,
             depth_color_profile=d405_color_profile,
+            depth_exposure='21000',
             condition=IfCondition(launch_realsense),
         )
 
@@ -181,6 +192,7 @@ def generate_launch_description():
             d435f_serial,
             d435f_depth_profile,
             rgb_color_profile=d435f_color_profile,
+            rgb_exposure='175',
             condition=IfCondition(launch_realsense),
         )
 

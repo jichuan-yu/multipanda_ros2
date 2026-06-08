@@ -48,6 +48,14 @@ class JointImpedanceController : public controller_interface::ControllerInterfac
   Vector7d k_gains_;
   Vector7d d_gains_;
   rclcpp::Time start_time_;
+  // Publish rate control (Hz). Default set in on_init/on_configure.
+  double publish_rate_ = 1000.0;
+  double control_frequency_ = 1000.0;
+  // publish in integer multiples of control cycles
+  int publish_cycles_ = 1; // number of control cycles between publishes
+  int publish_cycle_counter_ = 0; // current cycle index (0 means publish this cycle)
+  bool publish_cycles_configured_ = false; // set once we observe control period
+  bool publish_allowed_ = true; // set each update to indicate whether publishing is allowed this cycle
   void updateJointStates();
   std::array<double, 7> saturateTorqueRate(
       const std::array<double, 7>& tau_d_calculated,
@@ -58,9 +66,11 @@ class JointImpedanceController : public controller_interface::ControllerInterfac
 
   std::shared_ptr<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>> realtime_pub_filt_state_;
   bool publish_filt_state_ = true;
+  std::shared_ptr<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>> realtime_joint_state_publisher_;
   std::shared_ptr<realtime_tools::RealtimePublisher<geometry_msgs::msg::WrenchStamped>> realtime_external_wrench_publisher_;
   std::vector<std::string> joint_names_;
 
+  void publishJointState(const rclcpp::Time& stamp);
   void publishFilteredState(const Vector7d& ddq_filt, const rclcpp::Time& stamp);
   void publishExternalWrench(const franka::RobotState& robot_state, const rclcpp::Time& stamp);
 };

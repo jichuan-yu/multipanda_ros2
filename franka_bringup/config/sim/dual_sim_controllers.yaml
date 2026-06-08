@@ -32,8 +32,6 @@ controller_manager:
       type: franka_example_controllers/MultiCartesianImpedanceController
     dual_joint_impedance_controller:
       type: franka_example_controllers/MultiJointImpedanceController
-    dualarm_mprc_controller:
-      type: franka_example_controllers/DualArmMprcController
     franka_right_robot_model_broadcaster:
       type: franka_robot_state_broadcaster/FrankaRobotModelBroadcaster
     dual_joint_impedance_example_controller:
@@ -137,63 +135,119 @@ sim_multi_mode_controller:
 dual_joint_impedance_controller:
   ros__parameters:
     arm_count: 2
+    control_frequency: 1000.0
+    publish_rate: 100.0
     arm_1:
       arm_id: mj_left
       k_gains:
-        - 24.0
-        - 24.0
-        - 24.0
-        - 24.0
-        - 10.0
-        - 6.0
-        - 2.0
+        - 600.0
+        - 600.0
+        - 600.0
+        - 600.0
+        - 250.0
+        - 150.0
+        - 100.0
       d_gains:
-        - 2.0
-        - 2.0
-        - 2.0
-        - 1.0
-        - 1.0
-        - 1.0
-        - 0.5
+        - 30.0
+        - 30.0
+        - 30.0
+        - 15.0
+        - 12.0
+        - 12.0
+        - 9.0
+      pub_filt_state: false
+      dq_max:
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+      ddq_max:
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+      k_filt:
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+      d_filt:
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
     arm_2:
       arm_id: mj_right
       k_gains:
-        - 24.0
-        - 24.0
-        - 24.0
-        - 24.0
-        - 10.0
-        - 6.0
-        - 2.0
+        - 600.0
+        - 600.0
+        - 600.0
+        - 600.0
+        - 250.0
+        - 150.0
+        - 100.0
       d_gains:
-        - 2.0
-        - 2.0
-        - 2.0
-        - 1.0
-        - 1.0
-        - 1.0
-        - 0.5
+        - 30.0
+        - 30.0
+        - 30.0
+        - 15.0
+        - 12.0
+        - 12.0
+        - 9.0
+      pub_filt_state: false
+      dq_max:
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+      ddq_max:
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+        - 4.0
+      k_filt:
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+      d_filt:
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
+        - 28.0
 
 multi_cartesian_impedance_controller:
   ros__parameters:
     arm_count: 2
     arm_1:
       arm_id: mj_left
-      pos_stiff: 100.0
-      rot_stiff: 10.0
+      pos_stiff: [100.0, 100.0, 100.0, 10.0, 10.0, 10.0]
     arm_2:
       arm_id: mj_right
-      pos_stiff: 100.0
-      rot_stiff: 10.0
+      pos_stiff: [100.0, 100.0, 100.0, 10.0, 10.0, 10.0]
 
-dualarm_mprc_controller:
-  ros__parameters:
-    arm_count: 2
-    arm_1:
-      arm_id: mj_left
-      pos_stiff: 400.0
-      rot_stiff: 15.0
-    arm_2:
-      arm_id: mj_right
-      pos_stiff: 400.0
-      rot_stiff: 15.0
+

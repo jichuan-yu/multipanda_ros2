@@ -170,19 +170,30 @@ def generate_launch_description():
     def _apply_collision_params(context):
         arm1 = arm_id_1.perform(context)
         arm2 = arm_id_2.perform(context)
-        actions = []
-        for arm in (arm1, arm2):
-            service_name = f"/{arm}_param_service_server/set_full_collision_behavior"
-            actions.append(
+        service_1 = f"/{arm1}_param_service_server/set_full_collision_behavior"
+        service_2 = f"/{arm2}_param_service_server/set_full_collision_behavior"
+
+        # Serialize calls to avoid overlapping clients: arm1 immediately, arm2 after 1s.
+        call_arm_1 = ExecuteProcess(
+            cmd=[
+                'bash', '-lc',
+                f"ros2 service call {service_1} franka_msgs/srv/SetFullCollisionBehavior '{collision_payload}' || true",
+            ],
+            output='screen',
+        )
+        call_arm_2 = TimerAction(
+            period=1.0,
+            actions=[
                 ExecuteProcess(
                     cmd=[
                         'bash', '-lc',
-                        f"ros2 service call {service_name} franka_msgs/srv/SetFullCollisionBehavior '{collision_payload}' || true",
+                        f"ros2 service call {service_2} franka_msgs/srv/SetFullCollisionBehavior '{collision_payload}' || true",
                     ],
                     output='screen',
                 )
-            )
-        return actions
+            ],
+        )
+        return [call_arm_1, call_arm_2]
 
     collision_timer = TimerAction(
         period=3.0,

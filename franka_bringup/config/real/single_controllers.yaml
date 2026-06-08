@@ -138,7 +138,9 @@ cartesian_impedance_controller:
 joint_impedance_controller:
   ros__parameters:
     arm_id: panda
+    control_frequency: 1000.0 # for publish rate control only
     pub_filt_state: false
+    publish_rate: 100.0
     k_gains:
       - 600.0
       - 600.0
@@ -151,7 +153,7 @@ joint_impedance_controller:
       - 30.0
       - 30.0
       - 30.0
-      - 12.0
+      - 15.0
       - 12.0
       - 12.0
       - 9.0

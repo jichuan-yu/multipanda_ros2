@@ -47,6 +47,12 @@ controller_interface::return_type MultiJointImpedanceController::update(
   updateJointStates();
   const double dt = period.seconds();
   const rclcpp::Time stamp = get_node()->now();
+
+  if (publish_rate_ <= 0.0) {
+    publish_allowed_ = true;
+  } else {
+    publish_allowed_ = (publish_cycle_counter_ == 0);
+  }
   
   size_t k = 0;
   for(auto& arm_container_pair : arms_){
@@ -67,14 +73,19 @@ controller_interface::return_type MultiJointImpedanceController::update(
         arm.k_gains_.cwiseProduct(arm.q_filt_ - arm.q_) +
         arm.d_gains_.cwiseProduct(arm.dq_filt_ - arm.dq_) + coriolis;
 
-    publishFilteredState(arm, ddq_filt, stamp);
-    publishExternalWrench(arm, stamp);
-    publishJointState(arm, stamp);
+    if (publish_allowed_) {
+      publishFilteredState(arm, ddq_filt, stamp);
+      publishExternalWrench(arm, stamp);
+      publishJointState(arm, stamp);
+    }
     
     for (int i = 0; i < num_joints; i++) {
       command_interfaces_[k].set_value(tau_d_calculated(i));
       k++;
     }
+  }
+  if (publish_rate_ > 0.0 && publish_cycles_ > 0) {
+    publish_cycle_counter_ = (publish_cycle_counter_ + 1) % publish_cycles_;
   }
   return controller_interface::return_type::OK;
 }
@@ -86,6 +97,8 @@ CallbackReturn MultiJointImpedanceController::on_init() {
     if(!bHas_arm_count){
       auto_declare<int>("arm_count", 0);
     }
+    auto_declare<double>("publish_rate", 100.0);
+    auto_declare<double>("control_frequency", 1000.0);
   } catch (const std::exception& e) {
     fprintf(stderr, "Exception thrown during init stage with message: %s \n", e.what());
     return CallbackReturn::ERROR;
@@ -101,6 +114,21 @@ CallbackReturn MultiJointImpedanceController::on_configure(
   } catch(const rclcpp::ParameterTypeException& e){
     RCLCPP_FATAL(get_node()->get_logger(), "arm_count missing");
     return CallbackReturn::FAILURE;
+  }
+
+  publish_rate_ = get_node()->get_parameter("publish_rate").as_double();
+  control_frequency_ = get_node()->get_parameter("control_frequency").as_double();
+  if (publish_rate_ > 0.0 && control_frequency_ > 0.0) {
+    publish_cycles_ = std::max(1, static_cast<int>(std::round(control_frequency_ / publish_rate_)));
+    publish_cycle_counter_ = 0;
+    const double adjusted_rate = control_frequency_ / static_cast<double>(publish_cycles_);
+    if (std::fabs(adjusted_rate - publish_rate_) > 1e-6) {
+      RCLCPP_WARN(get_node()->get_logger(),
+                  "publish_rate %.3f Hz is not an integer divisor of control_frequency %.3f Hz; using %d cycles => %.3f Hz.",
+                  publish_rate_, control_frequency_, publish_cycles_, adjusted_rate);
+    }
+  } else {
+    publish_cycle_counter_ = 0;
   }
 
   for(int i = 1; i <= num_robots; i++){

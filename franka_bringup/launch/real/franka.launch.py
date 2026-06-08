@@ -91,14 +91,13 @@ def generate_launch_description():
             executable='joint_state_publisher',
             name='joint_state_publisher',
             parameters=[
-                {'source_list': ['panda/joint_states', 'panda_gripper/joint_states'],
+                {'source_list': ['/joint_states', 'panda_gripper/joint_states'],
                  'rate': 30}],
         ),
         Node(
             package='franka_control2',
             executable='franka_control2_node',
             parameters=[{'robot_description': robot_description}, franka_controllers],
-            remappings=[('joint_states', 'panda/joint_states')],
             output={
                 'stdout': 'screen',
                 'stderr': 'screen',

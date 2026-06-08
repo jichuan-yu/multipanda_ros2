@@ -89,6 +89,8 @@ dual_joint_velocity_example_controller:
 dual_joint_impedance_controller:
   ros__parameters:
     arm_count: 2
+    control_frequency: 1000.0
+    publish_rate: 100.0
     arm_1:
       arm_id: panda_left
       k_gains:

@@ -56,6 +56,11 @@ class MultiJointImpedanceController : public controller_interface::ControllerInt
   const int num_joints = 7;
   std::map<std::string, ArmContainer> arms_;
   rclcpp::Time start_time_;
+    double publish_rate_ = 100.0;
+    double control_frequency_ = 1000.0;
+    int publish_cycles_ = 1;
+    int publish_cycle_counter_ = 0;
+    bool publish_allowed_ = true;
   void updateJointStates();
   void initializeJointStatePublisher(ArmContainer& arm);
   void publishJointState(ArmContainer& arm, const rclcpp::Time& stamp);

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, TimerAction, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
@@ -105,6 +105,22 @@ def generate_launch_description():
     controller_name = LaunchConfiguration(controller_name_parameter_name)
 
     launch_realsense = LaunchConfiguration(launch_realsense_parameter_name)
+    launch_rqt_image_view = LaunchConfiguration('launch_rqt_image_view')
+    apply_collision_params = LaunchConfiguration('apply_collision_params')
+
+    # Collision behavior payload (for cartesian assembly tasks)
+    collision_payload = (
+        "{ "
+        "lower_torque_thresholds_acceleration: [20.0,20.0,18.0,18.0,16.0,14.0,12.0], "
+        "upper_torque_thresholds_acceleration: [20.0,20.0,18.0,18.0,16.0,14.0,12.0], "
+        "lower_torque_thresholds_nominal: [20.0,20.0,18.0,18.0,16.0,14.0,12.0], "
+        "upper_torque_thresholds_nominal: [20.0,20.0,18.0,18.0,16.0,14.0,12.0], "
+        "lower_force_thresholds_acceleration: [20.0,20.0,20.0,25.0,25.0,25.0], "
+        "upper_force_thresholds_acceleration: [20.0,20.0,20.0,25.0,25.0,25.0], "
+        "lower_force_thresholds_nominal: [50.0,50.0,60.0,50.0,50.0,50.0], "
+        "upper_force_thresholds_nominal: [50.0,50.0,60.0,50.0,50.0,50.0] "
+        "}"
+    )
 
     base_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -151,6 +167,62 @@ def generate_launch_description():
         parameters=[{'arm_id': arm_id_2}],
         condition=IfCondition(load_gripper_2),
     )
+    def _apply_collision_params(context):
+        arm1 = arm_id_1.perform(context)
+        arm2 = arm_id_2.perform(context)
+        actions = []
+        for arm in (arm1, arm2):
+            service_name = f"/{arm}_param_service_server/set_full_collision_behavior"
+            actions.append(
+                ExecuteProcess(
+                    cmd=[
+                        'bash', '-lc',
+                        f"ros2 service call {service_name} franka_msgs/srv/SetFullCollisionBehavior '{collision_payload}' || true",
+                    ],
+                    output='screen',
+                )
+            )
+        return actions
+
+    collision_timer = TimerAction(
+        period=3.0,
+        actions=[OpaqueFunction(function=_apply_collision_params)],
+        condition=IfCondition(apply_collision_params),
+    )
+
+    # Launch rqt_image_view windows for both wrists and fixed camera when requested
+    def _launch_image_views(context):
+        launch_value = LaunchConfiguration('launch_rqt_image_view').perform(context).lower() == 'true'
+        if not launch_value:
+            return []
+        arm1 = arm_id_1.perform(context)
+        arm2 = arm_id_2.perform(context)
+        return [
+            ExecuteProcess(
+                cmd=[
+                    'ros2', 'run', 'rqt_image_view', 'rqt_image_view',
+                    f'/cameras/{arm1}_wrist/color/image_raw',
+                    '--ros-args', '-p', 'image_transport:=compressed',
+                ],
+                output='screen',
+            ),
+            ExecuteProcess(
+                cmd=[
+                    'ros2', 'run', 'rqt_image_view', 'rqt_image_view',
+                    f'/cameras/{arm2}_wrist/color/image_raw',
+                    '--ros-args', '-p', 'image_transport:=compressed',
+                ],
+                output='screen',
+            ),
+            ExecuteProcess(
+                cmd=[
+                    'ros2', 'run', 'rqt_image_view', 'rqt_image_view',
+                    '/cameras/fixed/color/image_raw',
+                    '--ros-args', '-p', 'image_transport:=compressed',
+                ],
+                output='screen',
+            ),
+        ]
 
     d405_left_launch = _realsense_launch(
         [arm_id_1, '_wrist'],
@@ -233,10 +305,22 @@ def generate_launch_description():
             default_value='true',
             description='Launch RealSense cameras together with dual-arm bringup.'
         ),
+        DeclareLaunchArgument(
+            'launch_rqt_image_view',
+            default_value='true',
+            description='Launch rqt_image_view windows for wrist and fixed cameras.'
+        ),
+        DeclareLaunchArgument(
+            'apply_collision_params',
+            default_value='true',
+            description='Call param service to set collision thresholds at startup.'
+        ),
         base_launch,
         controller_spawner,
         gripper_bridge_1,
         gripper_bridge_2,
+        collision_timer,
+        OpaqueFunction(function=_launch_image_views),
         d405_left_launch,
         d405_right_launch,
         d435f_launch,

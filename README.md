@@ -218,6 +218,8 @@ ros2 launch franka_bringup dual_franka_control_with_realsense.launch.py \
   load_gripper_1:=true \
   load_gripper_2:=true \
   controller_name:=dual_joint_impedance_controller \
+  launch_rqt_image_view:=true \
+  apply_collision_params:=true \
   use_rviz:=false
 ```
 
@@ -249,8 +251,9 @@ ros2 launch franka_bringup franka_control_with_realsense.launch.py \
   robot_ip:=172.16.0.2 \
   load_gripper:=true \
   controller_name:=joint_impedance_controller \
-  wrist_camera:=left \
+  wrist_camera:=right \
   launch_rqt_image_view:=true \
+  apply_collision_params:=true \
   use_rviz:=false
 ```
 

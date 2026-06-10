@@ -62,9 +62,9 @@ class SpacemouseConfig:
     base_frame: str = 'panda_link0'
     xacro_path: str = 'src/multipanda_ros2/franka_description/robots/real/panda_arm.urdf.xacro'
     xacro_hand: bool = True
-    publish_hz: float = 100.0
-    scale_pos: float = 0.1
-    scale_rot: float = 0.2
+    publish_hz: float = 10.0
+    scale_pos: float = 0.05
+    scale_rot: float = 0.1
     deadzone: float = 0.05
     gripper_open_width: float = 0.08
     gripper_close_width: float = 0.03

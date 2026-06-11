@@ -240,7 +240,7 @@ def generate_launch_description():
         d405_left_serial,
         d405_left_depth_profile,
         depth_color_profile=d405_left_color_profile,
-        depth_exposure='21000',
+        depth_exposure='24000',
         condition=IfCondition(launch_realsense),
     )
     d405_right_launch = _realsense_launch(
@@ -248,7 +248,7 @@ def generate_launch_description():
         d405_right_serial,
         d405_right_depth_profile,
         depth_color_profile=d405_right_color_profile,
-        depth_exposure='21000',
+        depth_exposure='24000',
         condition=IfCondition(launch_realsense),
     )
     d435f_launch = _realsense_launch(
@@ -256,7 +256,7 @@ def generate_launch_description():
         d435f_serial,
         d435f_depth_profile,
         rgb_color_profile=d435f_color_profile,
-        rgb_exposure='175',
+        rgb_exposure='185',
         condition=IfCondition(launch_realsense),
     )
 

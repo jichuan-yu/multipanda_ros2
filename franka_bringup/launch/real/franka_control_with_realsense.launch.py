@@ -183,7 +183,7 @@ def generate_launch_description():
             wrist_camera_map[wrist_camera_value],
             d405_depth_profile,
             depth_color_profile=d405_color_profile,
-            depth_exposure='21000',
+            depth_exposure='24000',
             condition=IfCondition(launch_realsense),
         )
 
@@ -192,7 +192,7 @@ def generate_launch_description():
             d435f_serial,
             d435f_depth_profile,
             rgb_color_profile=d435f_color_profile,
-            rgb_exposure='175',
+            rgb_exposure='185',
             condition=IfCondition(launch_realsense),
         )
 

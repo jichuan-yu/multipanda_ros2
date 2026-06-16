@@ -119,7 +119,7 @@ ros2 launch franka_bringup franka_control.launch.py \
 | :--- | :--- | :--- | :--- | :--- |
 | `/<arm_id>/joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | 100Hz by YAML default | Real-time joint states used by the controller. |
 | `/<arm_id>/joints_desired` | `sensor_msgs/msg/JointState` | Input (Sub) | 100Hz recommended | Desired joint positions and velocities. `position[0..6]` are the target joint positions, and `velocity[0..6]` are the target joint velocities. |
-| `/<arm_id>/filtered_joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | 100Hz by YAML default | Internal state-space filtered commands. Set `pub_filt_state=true` in the controller config to enable this topic. |
+| `/<arm_id>/filtered_joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | 100Hz by YAML default | Filtered desired commands. `position[0..6]` are filtered `q_d_target`, and `velocity[0..6]` are filtered `dq_d_target`. |
 | `/<arm_id>/external_wrench` | `geometry_msgs/msg/WrenchStamped` | Output (Pub) | 100Hz by YAML default | External wrench estimated from the Franka robot state. `wrench.force.xyz` is force and `wrench.torque.xyz` is torque. |
 
 
@@ -129,46 +129,44 @@ ros2 launch franka_bringup franka_control.launch.py \
 | `arm_id` | `string` | `panda` | Arm namespace used to resolve interfaces and robot model state. |
 | `k_gains` | `vector<double>` | see config | Joint position stiffness gains. Must contain 7 values. |
 | `d_gains` | `vector<double>` | see config | Joint damping gains. Must contain 7 values. |
-| `k_filt` | `vector<double>` | see config | State-space filter stiffness gains for the desired joint trajectory. Must contain 7 values. |
-| `d_filt` | `vector<double>` | see config | State-space filter damping gains for the desired joint trajectory. Must contain 7 values. |
-| `dq_max` | `vector<double>` | see config | Maximum absolute filtered joint velocity. Must contain 7 values. |
-| `ddq_max` | `vector<double>` | see config | Maximum absolute filtered joint acceleration. Must contain 7 values. |
-| `pub_filt_state` | `bool` | `false` | Publish `/<arm_id>/filtered_joint_states` when enabled. |
+| `e_q_max` | `vector<double>` | see config | Maximum absolute position tracking error used by the impedance law. Must contain 7 values. |
+| `alpha_filt` | `double` | `0.1` | First-order low-pass coefficient for desired position and velocity targets. The controller clamps it to `[0, 1]`; `1.0` disables filtering. |
+| `publish_rate` | `double` | see config | Publish rate for `joint_states`, `filtered_joint_states`, and `external_wrench`. |
+| `control_frequency` | `double` | `1000.0` | Nominal controller update frequency used to quantize `publish_rate` into an integer cycle interval. |
 
-The controller first filters the desired joint commands with a second-order state-space model:
-
-$$
-\ddot q_{filt} = \mathrm{clip}\left(k_{filt}(q_d - q_{filt}) + d_{filt}(\dot q_d - \dot q_{filt}), -\ddot q_{max}, \ddot q_{max}\right)
-$$
+The controller receives raw desired commands as `q_{d,raw}` and `\dot q_{d,raw}`. Each control cycle, it filters both desired position and desired velocity with a first-order IIR filter:
 
 $$
-\dot q_{filt} \leftarrow \mathrm{clip}(\dot q_{filt} + \ddot q_{filt} \Delta t, -\dot q_{max}, \dot q_{max})
+q_d[k] = (1-\alpha_{filt}) q_d[k-1] + \alpha_{filt} q_{d,raw}[k]
 $$
 
 $$
-q_{filt} \leftarrow q_{filt} + \dot q_{filt} \Delta t
+\dot q_d[k] = (1-\alpha_{filt}) \dot q_d[k-1] + \alpha_{filt} \dot q_{d,raw}[k]
 $$
 
-The torque command is then computed from the filtered states:
+For controller frequency `f_c` and cutoff frequency `f_{cut}`, a useful small-frequency approximation is:
 
 $$
-τ = K_p(q_{filt} - q) + K_d(\dot q_{filt} - \dot q) + τ_{coriolis}
+\alpha_{filt} \approx \frac{2\pi f_{cut}}{f_c}
 $$
 
-For low-frequency references, the filter delay can be estimated empirically from `k_filt` and `d_filt`:
+The position error is clipped before applying stiffness; the velocity error is not clipped:
 
-Without velocity feedforward:
 $$
-t_{delay} \approx \frac{d_{filt}}{k_{filt}}
-$$
-
-With velocity feedforward, $\omega \ll \sqrt{k_{filt}}$
-$$
-t_{delay} \approx \frac{d_{filt}}{k_{filt}^2} \omega^2 \quad 
+e_q = \mathrm{clip}(q_d - q, -e_{q,max}, e_{q,max})
 $$
 
+$$
+e_{\dot q} = \dot q_d - \dot q
+$$
 
-> The state-space filter allows the upper-level Policy Controller to send commands directly to the controller at a low frequency (for example, 10 Hz). The publish frequency is configured in the YAML file via `publish_rate` (default 100 Hz).
+The torque command is:
+
+$$
+τ = K_p e_q + K_d e_{\dot q} + τ_{coriolis}
+$$
+
+> `/<arm_id>/filtered_joint_states` is published by default and contains the filtered desired target, not the measured robot state.
 
 
 ### Dual Arm Joint Impedance Controller
@@ -201,9 +199,39 @@ ros2 launch franka_bringup dual_franka_control.launch.py \
 | `/dual_arm/joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | 1000Hz | Real-time joint states for both arms.|
 | `/<arm_id>/joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | 100Hz by YAML default | Real-time joint states for each arm, published separately per namespace. |
 | `/<arm_id>/joints_desired` | `sensor_msgs/msg/JointState` | Input (Sub) | Event-driven / 100Hz recommended | Desired joint positions and velocities per arm. Names must match `arm_id_joint1..7`. |
-| `/<arm_id>/filtered_joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | 100Hz by YAML default | Internal state-space filtered commands for each arm (enabled with `arm_i.pub_filt_state`). |
+| `/<arm_id>/filtered_joint_states` | `sensor_msgs/msg/JointState` | Output (Pub) | 100Hz by YAML default | Filtered desired commands for each arm. `position[0..6]` are filtered `q_d_target`, and `velocity[0..6]` are filtered `dq_d_target`. |
 | `/<arm_id>/external_wrench` | `geometry_msgs/msg/WrenchStamped` | Output (Pub) | 100Hz by YAML default | External wrench estimated from each arm's robot state. `wrench.force.xyz` is force and `wrench.torque.xyz` is torque. |
 
+**Controller Parameters:**
+| Parameter Name | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `arm_count` | `int` | see config | Number of arms managed by the controller. |
+| `control_frequency` | `double` | `1000.0` | Nominal controller update frequency used to quantize `publish_rate`. |
+| `publish_rate` | `double` | see config | Publish rate for per-arm `joint_states`, `filtered_joint_states`, and `external_wrench`. |
+| `arm_i.arm_id` | `string` | see config | Arm namespace for arm `i`. |
+| `arm_i.k_gains` | `vector<double>` | see config | Joint position stiffness gains for arm `i`. Must contain 7 values. |
+| `arm_i.d_gains` | `vector<double>` | see config | Joint damping gains for arm `i`. Must contain 7 values. |
+| `arm_i.e_q_max` | `vector<double>` | see config | Maximum absolute position tracking error used by the impedance law for arm `i`. Must contain 7 values. |
+| `arm_i.alpha_filt` | `double` | `0.1` | First-order low-pass coefficient for desired position and velocity targets for arm `i`. The controller clamps it to `[0, 1]`. |
+
+The dual-arm controller applies the same filtering and torque law independently for each arm:
+
+$$
+q_d[k] = (1-\alpha_{filt}) q_d[k-1] + \alpha_{filt} q_{d,raw}[k]
+$$
+
+$$
+\dot q_d[k] = (1-\alpha_{filt}) \dot q_d[k-1] + \alpha_{filt} \dot q_{d,raw}[k]
+$$
+
+$$
+e_q = \mathrm{clip}(q_d - q, -e_{q,max}, e_{q,max}), \quad
+e_{\dot q} = \dot q_d - \dot q
+$$
+
+$$
+τ = K_p e_q + K_d e_{\dot q} + τ_{coriolis}
+$$
 
 > Potential Bug: In `dual_franka_sim.launch.py`, the controller's output `/joint_states` cannot be remapped to `/dual_arm/joint_states`, causing both `/joint_state_publisher` and `/joint_state_broadcaster` to publish to `/joint_states` simultaneously, leading to confused messages.
 

@@ -33,18 +33,20 @@ class JointImpedanceController : public controller_interface::ControllerInterfac
   std::string arm_id_;
   const int num_joints = 7;
 
-  Vector7d e_q_max_;
+  Vector7d dq_max_;
+  Vector7d ddq_max_;
+  Vector7d k_filt_;
+  Vector7d d_filt_; 
   const double delta_tau_max_ = 1.0;  // max torque-rate step per control cycle (1000 Nm/s)
   std::unique_ptr<franka_semantic_components::FrankaRobotModel> franka_robot_model_;
   Vector7d q_;
   Vector7d dq_;
+  Vector7d q_filt_;
+  Vector7d dq_filt_;
   Vector7d q_d_target_;
-  Vector7d q_d_target_raw_;
   Vector7d dq_d_target_;
-  Vector7d dq_d_target_raw_;
   Vector7d k_gains_;
   Vector7d d_gains_;
-  double alpha_filt_ = 0.1;
   rclcpp::Time start_time_;
   // Publish rate control (Hz). Default set in on_init/on_configure.
   double publish_rate_ = 1000.0;
@@ -63,12 +65,13 @@ class JointImpedanceController : public controller_interface::ControllerInterfac
   void desiredJointCallback(const sensor_msgs::msg::JointState& msg);
 
   std::shared_ptr<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>> realtime_pub_filt_state_;
+  bool publish_filt_state_ = true;
   std::shared_ptr<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>> realtime_joint_state_publisher_;
   std::shared_ptr<realtime_tools::RealtimePublisher<geometry_msgs::msg::WrenchStamped>> realtime_external_wrench_publisher_;
   std::vector<std::string> joint_names_;
 
   void publishJointState(const rclcpp::Time& stamp);
-  void publishFilteredTarget(const rclcpp::Time& stamp);
+  void publishFilteredState(const Vector7d& ddq_filt, const rclcpp::Time& stamp);
   void publishExternalWrench(const franka::RobotState& robot_state, const rclcpp::Time& stamp);
 };
 

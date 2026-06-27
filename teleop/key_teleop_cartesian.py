@@ -15,11 +15,16 @@ Arm Selection:
   Z: Left arm
   X: Right arm
   B: Both arms
+Gripper Control:
+  N: Open gripper (0.08m)
+  M: Close gripper (0.0m)
 Step Size:
   [: Decrease step
   ]: Increase step
 
-Publishes: Float64MultiArray to /dualarm_teleop_cmd (standard ROS2 message)
+Publishes:
+  - Float64MultiArray to /dualarm_teleop_cmd (arm control)
+  - Float64 to /mj_{left,right}_gripper/width_desired (gripper control)
 
 Usage:
     source ~/myenv/bin/activate
@@ -28,7 +33,7 @@ Usage:
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import Float64MultiArray, Float64
 from sensor_msgs.msg import JointState
 import sys
 import select
@@ -66,11 +71,27 @@ class KeyCartesianTeleop(BaseTeleopNode):
         self.step_rotation = step_rotation
         self.joint_states_received = False
 
+        # Gripper control parameters
+        self.gripper_max_width = 0.08  # Franka gripper max opening (m)
+        self.gripper_min_width = 0.0   # Fully closed
+
         # Subscriber for current joint states
         self.joint_state_sub = self.create_subscription(
             JointState,
             '/joint_states',
             self.joint_state_callback,
+            10
+        )
+
+        # Gripper control publishers (for gripper_action_bridge)
+        self.left_gripper_pub = self.create_publisher(
+            Float64,
+            '/mj_left_gripper/width_desired',
+            10
+        )
+        self.right_gripper_pub = self.create_publisher(
+            Float64,
+            '/mj_right_gripper/width_desired',
             10
         )
 
@@ -95,6 +116,10 @@ Arm Selection:
   Z : Left arm
   X : Right arm
   B : Both arms
+
+Gripper Control:
+  N : Open gripper (0.08m)
+  M : Close gripper (0.0m)
 
 Step Size:
   [ : Decrease step
@@ -209,6 +234,14 @@ Ctrl-C to quit
             rot_delta[2] = -self.step_rotation
             updated = True
 
+        # Gripper control: N (open), M (close)
+        elif key == 'n':
+            self.control_gripper(self.gripper_max_width)  # Open gripper
+            return True
+        elif key == 'm':
+            self.control_gripper(self.gripper_min_width)  # Close gripper
+            return True
+
         if updated:
             self.publish_teleop_command(pos_delta, rot_delta)
             return True
@@ -246,6 +279,35 @@ Ctrl-C to quit
         )
 
         self.teleop_pub.publish(msg)
+
+    def control_gripper(self, width: float):
+        """
+        Control gripper opening width.
+
+        Publishes to gripper_action_bridge topics which handle the actual
+        gripper control in the simulation.
+
+        Args:
+            width: Desired gripper width in meters (0.0 = closed, 0.08 = fully open)
+        """
+        msg = Float64()
+        msg.data = width
+
+        gripper_name = ""
+        if self.selected_arm == 'left':
+            self.left_gripper_pub.publish(msg)
+            gripper_name = "LEFT"
+        elif self.selected_arm == 'right':
+            self.right_gripper_pub.publish(msg)
+            gripper_name = "RIGHT"
+        elif self.selected_arm == 'both':
+            # Control both grippers simultaneously
+            self.left_gripper_pub.publish(msg)
+            self.right_gripper_pub.publish(msg)
+            gripper_name = "BOTH"
+
+        action = "OPEN" if width > 0.04 else "CLOSE"
+        print(f"\n[{gripper_name} GRIPPER {action}] Width: {width:.3f}m", flush=True)
 
 
 def get_key(settings):

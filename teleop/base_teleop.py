@@ -48,7 +48,7 @@ class BaseTeleopNode(Node):
     JOINT_LIMITS_UPPER = np.array([2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973])
 
     # Default home position
-    HOME_POSITION = np.array([0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785])
+    HOME_POSITION = np.array([0.0, -0.785, 0.0, -2.356, 0.0, 1.571, -0.785])
 
     def __init__(
         self,

@@ -117,8 +117,8 @@ def generate_launch_description():
         "upper_torque_thresholds_nominal: [20.0,20.0,18.0,18.0,16.0,14.0,12.0], "
         "lower_force_thresholds_acceleration: [20.0,20.0,20.0,25.0,25.0,25.0], "
         "upper_force_thresholds_acceleration: [20.0,20.0,20.0,25.0,25.0,25.0], "
-        "lower_force_thresholds_nominal: [50.0,50.0,60.0,50.0,50.0,50.0], "
-        "upper_force_thresholds_nominal: [50.0,50.0,60.0,50.0,50.0,50.0] "
+        "lower_force_thresholds_nominal: [70.0,70.0,70.0,70.0,70.0,70.0], "
+        "upper_force_thresholds_nominal: [70.0,70.0,70.0,70.0,70.0,70.0] "
         "}"
     )
 

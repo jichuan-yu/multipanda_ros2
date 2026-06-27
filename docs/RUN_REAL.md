@@ -60,14 +60,14 @@ python3 spacemouse_teleop/spacemouse_pub_singlearm_real.py
 0. Ruturn to home position (0, -PI/4, 0, -3PI/4, 0, PI/2, PI/4):
 ```bash
 ros2 launch franka_bringup move_to_start.launch.py \
-  robot_ip:=172.16.0.3 \
+  robot_ip:=172.16.0.2 \
   load_gripper:=true
 ```
 
 1. Launch joint controller:
 ``` bash
 ros2 launch franka_bringup franka_control.launch.py \
-  robot_ip:=172.16.0.3 \
+  robot_ip:=172.16.0.2 \
   load_gripper:=true \
   controller_name:=joint_impedance_controller \
   use_rviz:=false
@@ -75,7 +75,7 @@ ros2 launch franka_bringup franka_control.launch.py \
 
 Set Collision Behavior in a new terminal
 ```bash
-bash src/multipanda_ros2/franka_hardware/param_setter_scripts.sh
+bash src/multipanda_ros2/franka_hardware/param_setter_scripts.sh panda
 ```
 
 (Optional) Record rosbag data in a new terminal:
@@ -91,7 +91,7 @@ ros2 bag record -o ./data/$(date +%Y%m%d_%H%M%S) \
   /panda_gripper/joint_states \
   /panda_gripper/width_desired \
   /panda_gripper/grasp_desired \
-  /joint_impedance/joints_desired 
+  /panda/joints_desired 
 ```
 Press `Ctrl+C` to stop recording when done.
 
@@ -129,6 +129,12 @@ ros2 launch franka_bringup dual_franka_control.launch.py \
   use_rviz:=false
 ```
 
+```bash
+ros2 launch franka_bringup dual_franka_sim_control.launch.py \
+  controller_name:=dual_joint_impedance_controller \
+  use_rviz:=false
+```
+
 2. SpaceMouse Teleop:
 First check connected spacemouse devices:
 ```bash
@@ -153,3 +159,34 @@ Add the paths to the `DualArmTeleopConfig` in `spacemouse_pub_dualarm_joint.py`,
 ```bash
 python3 spacemouse_teleop/spacemouse_pub_dualarm_joint.py
 ```
+
+
+
+## Dual-Arm Joint Impedance Controller With RealSense Cameras
+
+Launch Controller
+```bash
+ros2 launch franka_bringup dual_franka_control_with_realsense.launch.py \
+  robot_ip_1:=172.16.0.3 \
+  robot_ip_2:=172.16.0.2 \
+  arm_id_1:=panda_left \
+  arm_id_2:=panda_right \
+  load_gripper_1:=true \
+  load_gripper_2:=true \
+  controller_name:=dual_joint_impedance_controller \
+  use_rviz:=false
+```
+
+Visualize camera topics:
+```bash
+ros2 run rqt_image_view rqt_image_view
+```
+
+
+Topics:
+```bash
+```
+
+
+
+

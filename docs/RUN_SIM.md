@@ -134,6 +134,12 @@ source install/setup.bash
 docker exec -it multipanda-container bash
 source install/setup.bash
 ros2 run dual_arm_reactive_control main_sim_node
+或
+ros2 run dual_arm_reactive_control main_sim_node \
+  --ros-args \
+  -p data_record_ON:=true \
+  -p data_record_path:=/home/xiaozy24/dual_panda_ws/data/ \
+  -p data_record_prefix:=$(date +%Y%m%d_%H%M%S)
 ```
 
 控制器启动后会直接进入待命状态，监听以下话题：

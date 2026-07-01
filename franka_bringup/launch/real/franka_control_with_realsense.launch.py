@@ -72,6 +72,7 @@ def generate_launch_description():
     fake_sensor_commands_parameter_name = 'fake_sensor_commands'
     use_rviz_parameter_name = 'use_rviz'
     controller_name_parameter_name = 'controller_name'
+    arm_id_parameter_name = 'arm_id'
 
     launch_realsense_parameter_name = 'launch_realsense'
     launch_rqt_image_view_parameter_name = 'launch_rqt_image_view'
@@ -79,7 +80,6 @@ def generate_launch_description():
     wrist_camera_parameter_name = 'wrist_camera'
 
     # Fixed RealSense identities for this setup.
-    d405_wrist_topic_name = 'panda_wrist'
     d435f_fixed_topic_name = 'fixed'
 
     d405_left_serial = "'409122274276'"
@@ -97,6 +97,7 @@ def generate_launch_description():
     fake_sensor_commands = LaunchConfiguration(fake_sensor_commands_parameter_name)
     use_rviz = LaunchConfiguration(use_rviz_parameter_name)
     controller_name = LaunchConfiguration(controller_name_parameter_name)
+    arm_id = LaunchConfiguration(arm_id_parameter_name)
 
     launch_realsense = LaunchConfiguration(launch_realsense_parameter_name)
     launch_rqt_image_view = LaunchConfiguration(launch_rqt_image_view_parameter_name)
@@ -113,8 +114,8 @@ def generate_launch_description():
         'upper_torque_thresholds_nominal: [20.0,20.0,18.0,18.0,16.0,14.0,12.0], '
         'lower_force_thresholds_acceleration: [20.0,20.0,20.0,25.0,25.0,25.0], '
         'upper_force_thresholds_acceleration: [20.0,20.0,20.0,25.0,25.0,25.0], '
-        'lower_force_thresholds_nominal: [50.0,50.0,60.0,50.0,50.0,50.0], '
-        'upper_force_thresholds_nominal: [50.0,50.0,60.0,50.0,50.0,50.0] '
+        "lower_force_thresholds_nominal: [70.0,70.0,70.0,70.0,70.0,70.0], "
+        "upper_force_thresholds_nominal: [70.0,70.0,70.0,70.0,70.0,70.0] "
         '}'
     )
 
@@ -128,6 +129,7 @@ def generate_launch_description():
             use_fake_hardware_parameter_name: use_fake_hardware,
             fake_sensor_commands_parameter_name: fake_sensor_commands,
             use_rviz_parameter_name: use_rviz,
+            arm_id_parameter_name: arm_id,
         }.items(),
     )
 
@@ -141,25 +143,29 @@ def generate_launch_description():
     gripper_bridge = Node(
         package='franka_example_controllers',
         executable='gripper_action_bridge',
-        name=['', '_gripper_action_bridge'],
+        name=[arm_id, '_gripper_action_bridge'],
         output='screen',
-        parameters=[{'arm_id': 'panda'}],
+        parameters=[{'arm_id': arm_id}],
         condition=IfCondition(load_gripper),
     )
 
-    # TimerAction to call set_full_collision_behavior on common service prefixes
-    collision_timer = TimerAction(
-        period=3.0,
-        actions=[
+    def _call_collision_service(context):
+        arm = arm_id.perform(context)
+        return [
             ExecuteProcess(
                 cmd=[
                     'bash', '-lc',
-                    f"ros2 service call /panda_param_service_server/set_full_collision_behavior "
+                    f"ros2 service call /{arm}_param_service_server/set_full_collision_behavior "
                     f"franka_msgs/srv/SetFullCollisionBehavior '{collision_payload}' || true"
                 ],
                 output='screen',
             ),
-        ],
+        ]
+
+    # TimerAction to call set_full_collision_behavior on the selected arm service prefix
+    collision_timer = TimerAction(
+        period=3.0,
+        actions=[OpaqueFunction(function=_call_collision_service)],
         condition=IfCondition(apply_collision_params),
     )
 
@@ -179,7 +185,7 @@ def generate_launch_description():
             )
 
         wrist_launch = _realsense_launch(
-            d405_wrist_topic_name,
+            [arm_id, '_wrist'],
             wrist_camera_map[wrist_camera_value],
             d405_depth_profile,
             depth_color_profile=d405_color_profile,
@@ -202,7 +208,7 @@ def generate_launch_description():
                 ExecuteProcess(
                     cmd=[
                         'ros2', 'run', 'rqt_image_view', 'rqt_image_view',
-                        '/cameras/panda_wrist/color/image_raw',
+                        ['/cameras/', arm_id, '_wrist/color/image_raw'],
                         '--ros-args', '-p', 'image_transport:=compressed',
                     ],
                     output='screen',
@@ -245,6 +251,11 @@ def generate_launch_description():
             load_gripper_parameter_name,
             default_value='false',
             description='Use Franka Gripper as an end-effector.'
+        ),
+        DeclareLaunchArgument(
+            arm_id_parameter_name,
+            default_value='panda',
+            description='Name of the arm in the URDF and controller interfaces.'
         ),
         DeclareLaunchArgument(
             controller_name_parameter_name,

@@ -109,6 +109,7 @@ $$
 ```bash
 ros2 launch franka_bringup franka_control.launch.py \
   robot_ip:=172.16.0.3 \
+  arm_id:=panda \
   load_gripper:=true \
   controller_name:=joint_impedance_controller \
   use_rviz:=false
@@ -277,6 +278,7 @@ ros2 launch franka_bringup dual_franka_control_with_realsense.launch.py \
 ```bash
 ros2 launch franka_bringup franka_control_with_realsense.launch.py \
   robot_ip:=172.16.0.2 \
+  arm_id:=panda_right \
   load_gripper:=true \
   controller_name:=joint_impedance_controller \
   wrist_camera:=right \
@@ -289,6 +291,7 @@ ros2 launch franka_bringup franka_control_with_realsense.launch.py \
 
 | Argument | Default | Description |
 | :--- | :--- | :--- |
+| `arm_id` | `panda` | Arm namespace used for URDF, controller interfaces, gripper bridge, and wrist camera topic. |
 | `launch_realsense` | `true` | Whether to launch RealSense camera nodes together with robot bringup. |
 | `wrist_camera` | `left` | Wrist camera selector. Must be `left` or `right`. The launch file maps it to built-in D405 serial numbers, otherwise it raises an error. |
 
@@ -296,7 +299,7 @@ ros2 launch franka_bringup franka_control_with_realsense.launch.py \
 
 | Camera | Compressed topic | Message Type |
 | :--- | :--- | :--- |
-| `panda_wrist` (from `wrist_camera=left/right`) | `/cameras/panda_wrist/color/image_raw` with `image_transport:=compressed` | `sensor_msgs/msg/CompressedImage` |
+| `<arm_id>_wrist` (from `wrist_camera=left/right`) | `/cameras/<arm_id>_wrist/color/image_raw` with `image_transport:=compressed` | `sensor_msgs/msg/CompressedImage` |
 | `fixed` | `/cameras/fixed/color/image_raw` with `image_transport:=compressed` | `sensor_msgs/msg/CompressedImage` |
 
 - **Default launch resolution**: color and depth are configured to `640x480 @ 30Hz` by default (see launch profiles in [franka_bringup/launch/real/franka_control_with_realsense.launch.py](franka_bringup/launch/real/franka_control_with_realsense.launch.py)).

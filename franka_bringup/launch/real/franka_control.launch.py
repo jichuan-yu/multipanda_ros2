@@ -29,6 +29,7 @@ def generate_launch_description():
     fake_sensor_commands_parameter_name = 'fake_sensor_commands'
     use_rviz_parameter_name = 'use_rviz'
     controller_name_parameter_name = 'controller_name'
+    arm_id_parameter_name = 'arm_id'
 
 
     robot_ip = LaunchConfiguration(robot_ip_parameter_name)
@@ -37,6 +38,7 @@ def generate_launch_description():
     fake_sensor_commands = LaunchConfiguration(fake_sensor_commands_parameter_name)
     use_rviz = LaunchConfiguration(use_rviz_parameter_name)
     controller_name = LaunchConfiguration(controller_name_parameter_name)
+    arm_id = LaunchConfiguration(arm_id_parameter_name)
 
 
     base_launch = IncludeLaunchDescription(
@@ -53,6 +55,7 @@ def generate_launch_description():
             use_fake_hardware_parameter_name: use_fake_hardware,
             fake_sensor_commands_parameter_name: fake_sensor_commands,
             use_rviz_parameter_name: use_rviz,
+            arm_id_parameter_name: arm_id,
         }.items(),
     )
 
@@ -66,9 +69,9 @@ def generate_launch_description():
     gripper_bridge = Node(
         package='franka_example_controllers',
         executable='gripper_action_bridge',
-        name='gripper_action_bridge',
+        name=[arm_id, '_gripper_action_bridge'],
         output='screen',
-        parameters=[{'arm_id': 'panda'}],
+        parameters=[{'arm_id': arm_id}],
         condition=IfCondition(load_gripper),
     )
 
@@ -101,6 +104,11 @@ def generate_launch_description():
                 default_value='false',
                 description='Use Franka Gripper as an end-effector, otherwise, the robot is loaded '
                 'without an end-effector.',
+            ),
+            DeclareLaunchArgument(
+                arm_id_parameter_name,
+                default_value='panda',
+                description='Name of the arm in the URDF and controller interfaces.',
             ),
             DeclareLaunchArgument(
                 controller_name_parameter_name,

@@ -43,11 +43,11 @@ controller_manager:
 
 franka_robot_state_broadcaster:
   ros__parameters:
-    arm_id: panda
+    arm_id: $(var arm_id)
 
 model_example_controller:
   ros__parameters:
-    arm_id: panda
+    arm_id: $(var arm_id)
     
 joint_trajectory_controller:
   ros__parameters:
@@ -75,12 +75,12 @@ joint_trajectory_controller:
 
 cartesian_impedance_example_controller:
   ros__parameters:
-    arm_id: panda
+    arm_id: $(var arm_id)
 
 
 joint_impedance_example_controller:
   ros__parameters:
-    arm_id: panda
+    arm_id: $(var arm_id)
     k_gains:
       - 24.0
       - 24.0
@@ -100,7 +100,7 @@ joint_impedance_example_controller:
 
 move_to_start_example_controller:
   ros__parameters:
-    arm_id: panda
+    arm_id: $(var arm_id)
     k_gains:
       - 600.0
       - 600.0
@@ -119,25 +119,25 @@ move_to_start_example_controller:
       - 5.0
 joint_position_example_controller:
   ros__parameters:
-    arm_id: panda
+    arm_id: $(var arm_id)
 
 joint_velocity_example_controller:
   ros__parameters:
-    arm_id: panda
+    arm_id: $(var arm_id)
 
 cartesian_velocity_example_controller:
   ros__parameters:
-    arm_id: panda
+    arm_id: $(var arm_id)
 
 cartesian_impedance_controller:
   ros__parameters:
-    arm_id: panda
+    arm_id: $(var arm_id)
     pos_stiff: [2000.0, 2000.0, 2000.0, 50.0, 50.0, 50.0]
     n_stiffness: [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
 
 joint_impedance_controller:
   ros__parameters:
-    arm_id: panda
+    arm_id: $(var arm_id)
     control_frequency: 1000.0 # for publish rate control only
     publish_rate: 100.0
     k_gains:

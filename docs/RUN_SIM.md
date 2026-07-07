@@ -137,6 +137,8 @@ ros2 run dual_arm_reactive_control main_sim_node
 或
 ros2 run dual_arm_reactive_control main_sim_node \
   --ros-args \
+  -p bypass_qp_safety_for_debug:=true \
+  -p relative_pose_constraint_enabled:=false \
   -p data_record_ON:=true \
   -p data_record_path:=/home/xiaozy24/dual_panda_ws/data/ \
   -p data_record_prefix:=$(date +%Y%m%d_%H%M%S)
@@ -195,6 +197,20 @@ python3 src/multipanda_ros2/teleop/csv_teleop_cartesian.py --csv-file cartesian_
 ```
 
 更多遥操作脚本详情请参考：[遥操作脚本文档](teleop.md)
+
+---
+
+## 终端 6：实时查看 `/ee_pose` 六元组（白色窗口）
+
+```bash
+docker exec -it multipanda-container bash
+source /opt/ros/humble/setup.bash
+source /home/xiaozy24/dual_panda_ws/install/setup.bash
+# 输出左右臂六元组: (x,y,z,roll,pitch,yaw)，角度单位为弧度
+python3 /home/xiaozy24/dual_panda_ws/src/multipanda_ros2/teleop/show_ee_pose_six_tuple.py
+```
+
+注：脚本会弹出白底黑字窗口，实时显示左右臂六元组。
 
 ---
 

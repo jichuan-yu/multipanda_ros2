@@ -169,7 +169,7 @@ python3 src/multipanda_ros2/teleop/key_teleop_joint.py --step-size 0.002
 ```bash
 cd dual_panda_ws
 source ~/myenv/bin/activate
-python3 src/multipanda_ros2/teleop/key_teleop_cartesian.py --step-position 0.001 --step-rotation 0.01
+python3 src/multipanda_ros2/teleop/key_teleop_cartesian_absolute.py 
 ```
 
 ### 方式 3：SpaceMouse 任务空间控制

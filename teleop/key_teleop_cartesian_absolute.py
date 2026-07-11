@@ -2,7 +2,7 @@
 """
 Keyboard teleoperation for dual Panda robot in Cartesian/task space using absolute pose commands.
 
-This script uses ACTUAL end-effector pose from /ee_pose topic as integration base.
+This script uses LAST COMMAND position as integration base (not actual EE pose).
 Key mapping is identical to key_teleop_cartesian.py for consistency.
 
 Key Mapping:
@@ -23,7 +23,7 @@ Step Size:
   ]: Increase step
 
 Publishes: Float64MultiArray to /dualarm_teleop_cmd (command_type=5 TASK_SPACE_POSE)
-Subscribes: /ee_pose for actual end-effector pose feedback
+Subscribes: /ee_pose for actual end-effector pose feedback (for display only)
 
 Usage:
     source ~/myenv/bin/activate
@@ -33,7 +33,6 @@ Usage:
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float64MultiArray
-from sensor_msgs.msg import JointState
 import sys
 import select
 import termios
@@ -87,7 +86,11 @@ def quaternion_from_array(q_array):
 
 
 class KeyCartesianAbsoluteTeleop(BaseTeleopNode):
-    """Keyboard teleoperation for Cartesian space control with absolute pose commands."""
+    """Keyboard teleoperation for Cartesian space control with absolute pose commands.
+
+    Uses LAST COMMAND position as integration base (accumulates deltas from previous command).
+    First command uses default home position as base.
+    """
 
     # Command type constants
     TASK_SPACE_POSE = 5
@@ -104,11 +107,11 @@ class KeyCartesianAbsoluteTeleop(BaseTeleopNode):
         # Default home position
         self.actual_ee_poses = {
             'left': {
-                'position': np.array([0.307, 0.26, 0.487]),
+                'position': np.array([0.307, 0.26, 0.590]),
                 'quaternion': np.array([0.0, 1.0, 0.0, 0.0])  # [w, x, y, z] - 180° X rotation
             },
             'right': {
-                'position': np.array([0.307, -0.26, 0.487]),
+                'position': np.array([0.307, -0.26, 0.590]),
                 'quaternion': np.array([0.0, 1.0, 0.0, 0.0])  # [w, x, y, z] - 180° X rotation
             }
         }
@@ -124,36 +127,20 @@ class KeyCartesianAbsoluteTeleop(BaseTeleopNode):
         self.print_usage()
         self.target_ee_poses = {
             'left': {
-                'position': np.array([0.307, 0.26, 0.487]),
+                'position': np.array([0.307, 0.26, 0.590]),
                 'quaternion': np.array([0.0, 1.0, 0.0, 0.0])  # [w, x, y, z] - 180° X rotation
             },
             'right': {
-                'position': np.array([0.307, -0.26, 0.487]),
+                'position': np.array([0.307, -0.26, 0.590]),
                 'quaternion': np.array([0.0, 1.0, 0.0, 0.0])  # [w, x, y, z] - 180° X rotation
             }
         }
-
-        # Current joint states
-        self.current_joint_states = {
-            'left': self.HOME_POSITION.copy(),
-            'right': self.HOME_POSITION.copy()
-        }
-
-        # Subscriber for current joint states
-        self.joint_state_sub = self.create_subscription(
-            JointState,
-            '/joint_states',
-            self.joint_state_callback,
-            10
-        )
-
-        self.print_usage()
 
     def print_usage(self):
         msg = """
 ========================================
 Task Space Absolute Teleop for Dual Panda
-(Using ACTUAL EE pose as integration base)
+(Using LAST COMMAND position as integration base)
 ========================================
 Position Control:
   W/S: X axis (forward/back)
@@ -174,12 +161,12 @@ Step Size:
   [ : Decrease step
   ] : Increase step
 
-Note: Each keypress uses CURRENT end-effector pose as base
-      (no accumulation of errors from previous commands)
+Note: Each keypress uses LAST COMMAND position as base
+      (deltas accumulate from previous command)
+      First command uses default home position
 
 Ctrl-C to quit
 ========================================
-Waiting for end-effector pose feedback...
 """
         print(msg, flush=True)
 
@@ -210,15 +197,17 @@ Waiting for end-effector pose feedback...
     def status_callback(self):
         """Print status at 1Hz."""
         if self.ee_pose_received:
-            left_pos = self.actual_ee_poses['left']['position']
-            right_pos = self.actual_ee_poses['right']['position']
+            left_target_pos = self.target_ee_poses['left']['position']
+            right_target_pos = self.target_ee_poses['right']['position']
+            left_actual_pos = self.actual_ee_poses['left']['position']
+            right_actual_pos = self.actual_ee_poses['right']['position']
             print(f"\r[{self.selected_arm.upper()}] Pos: {self.step_position:.4f}m | Rot: {self.step_rotation:.4f}rad | "
-                  f"L: [{left_pos[0]:7.3f}, {left_pos[1]:7.3f}, {left_pos[2]:7.3f}] | "
-                  f"R: [{right_pos[0]:7.3f}, {right_pos[1]:7.3f}, {right_pos[2]:7.3f}]   ",
+                  f"L_target: [{left_target_pos[0]:7.3f}, {left_target_pos[1]:7.3f}, {left_target_pos[2]:7.3f}] | "
+                  f"R_target: [{right_target_pos[0]:7.3f}, {right_target_pos[1]:7.3f}, {right_target_pos[2]:7.3f}]   ",
                   end='', flush=True)
 
     def update_from_key(self, key: str) -> bool:
-        """Update pose based on key input, using ACTUAL current pose as base."""
+        """Update pose based on key input, using LAST COMMAND position as base."""
         # Arm selection
         if key == 'z':
             if self.selected_arm != 'left':
@@ -294,48 +283,48 @@ Waiting for end-effector pose feedback...
             updated = True
 
         if updated:
-            # Use ACTUAL current EE pose as base (not accumulated target)
+            # Use LAST COMMAND position as base (accumulates deltas from previous command)
             if self.selected_arm in ['left', 'both']:
-                # Base = actual position + delta
-                target_pos = self.actual_ee_poses['left']['position'] + pos_delta
+                # Base = last command position + delta
+                target_pos = self.target_ee_poses['left']['position'] + pos_delta
 
-                # Base = actual orientation + rotation delta
+                # Base = last command orientation + rotation delta
                 if np.linalg.norm(rot_delta) > 0:
                     rot_angle = np.linalg.norm(rot_delta)
                     rot_axis = rot_delta / rot_angle
                     delta_quat = quaternion_from_axis_angle(rot_axis, rot_angle)
                     target_quat = quaternion_multiply(
-                        delta_quat, self.actual_ee_poses['left']['quaternion']
+                        delta_quat, self.target_ee_poses['left']['quaternion']
                     )
                     # Normalize quaternion
                     target_quat /= np.linalg.norm(target_quat)
                 else:
-                    target_quat = self.actual_ee_poses['left']['quaternion'].copy()
+                    target_quat = self.target_ee_poses['left']['quaternion'].copy()
 
-                # Store for publishing
-                self.actual_ee_poses['left']['position'] = target_pos
-                self.actual_ee_poses['left']['quaternion'] = target_quat
+                # Update last command position
+                self.target_ee_poses['left']['position'] = target_pos
+                self.target_ee_poses['left']['quaternion'] = target_quat
 
             if self.selected_arm in ['right', 'both']:
-                # Base = actual position + delta
-                target_pos = self.actual_ee_poses['right']['position'] + pos_delta
+                # Base = last command position + delta
+                target_pos = self.target_ee_poses['right']['position'] + pos_delta
 
-                # Base = actual orientation + rotation delta
+                # Base = last command orientation + rotation delta
                 if np.linalg.norm(rot_delta) > 0:
                     rot_angle = np.linalg.norm(rot_delta)
                     rot_axis = rot_delta / rot_angle
                     delta_quat = quaternion_from_axis_angle(rot_axis, rot_angle)
                     target_quat = quaternion_multiply(
-                        delta_quat, self.actual_ee_poses['right']['quaternion']
+                        delta_quat, self.target_ee_poses['right']['quaternion']
                     )
                     # Normalize quaternion
                     target_quat /= np.linalg.norm(target_quat)
                 else:
-                    target_quat = self.actual_ee_poses['right']['quaternion'].copy()
+                    target_quat = self.target_ee_poses['right']['quaternion'].copy()
 
-                # Store for publishing
-                self.actual_ee_poses['right']['position'] = target_pos
-                self.actual_ee_poses['right']['quaternion'] = target_quat
+                # Update last command position
+                self.target_ee_poses['right']['position'] = target_pos
+                self.target_ee_poses['right']['quaternion'] = target_quat
 
             self.publish_teleop_command()
             return True
@@ -346,13 +335,13 @@ Waiting for end-effector pose feedback...
         """Publish absolute end-effector pose as teleop command."""
         # Format: [left_x,y,z,qx,qy,qz,qw, right_x,y,z,qx,qy,qz,qw] (14 elements)
         left_pose_data = np.concatenate([
-            self.actual_ee_poses['left']['position'],
-            quaternion_to_array(self.actual_ee_poses['left']['quaternion'])  # [x, y, z, w]
+            self.target_ee_poses['left']['position'],
+            quaternion_to_array(self.target_ee_poses['left']['quaternion'])  # [x, y, z, w]
         ])
 
         right_pose_data = np.concatenate([
-            self.actual_ee_poses['right']['position'],
-            quaternion_to_array(self.actual_ee_poses['right']['quaternion'])  # [x, y, z, w]
+            self.target_ee_poses['right']['position'],
+            quaternion_to_array(self.target_ee_poses['right']['quaternion'])  # [x, y, z, w]
         ])
 
         # Create and publish command message
@@ -365,6 +354,9 @@ Waiting for end-effector pose feedback...
         )
 
         self.teleop_pub.publish(msg)
+
+        # Print published data
+        print(f"\n[Publishing] data: {msg.data}")
 
 
 def get_key(settings):

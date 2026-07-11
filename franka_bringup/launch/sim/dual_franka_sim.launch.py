@@ -132,12 +132,12 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             initial_positions_1_param,
-            default_value='"0.0 -0.785 0.0 -2.356 0.0 1.571 -0.785"',
+            default_value='"0.0 -0.785 0.0 -2.356 0.0 1.571 0.785"',
             description='Initial joint positions of robot 1. Must be enclosed in quotes, and in pure number.'
                         'Defaults to the "communication_test" pose.'),
         DeclareLaunchArgument(
             initial_positions_2_param,
-            default_value='"0.0 -0.785 0.0 -2.356 0.0 1.571 -0.785"',
+            default_value='"0.0 -0.785 0.0 -2.356 0.0 1.571 0.785"',
             description='Initial joint positions of robot 2. Must be enclosed in quotes, and in pure number.'
                         'Defaults to the "communication_test" pose.'),
 

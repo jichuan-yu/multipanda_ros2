@@ -223,9 +223,9 @@ def generate_launch_description():
         DeclareLaunchArgument(
             arm_id_2_param, default_value='mj_right', description='Unique name of robot 2.'),
         DeclareLaunchArgument(
-            initial_positions_1_param, default_value='"0.0 -0.785 0.0 -2.356 0.0 1.571 -0.785"', description='Init pos robot 1.'),
+            initial_positions_1_param, default_value='"0.0 -0.785 0.0 -2.356 0.0 1.571 0.785"', description='Init pos robot 1.'),
         DeclareLaunchArgument(
-            initial_positions_2_param, default_value='"0.0 -0.785 0.0 -2.356 0.0 1.571 -0.785"', description='Init pos robot 2.'),
+            initial_positions_2_param, default_value='"0.0 -0.785 0.0 -2.356 0.0 1.571 0.785"', description='Init pos robot 2.'),
 
         IncludeLaunchDescription(
             FrontendLaunchDescriptionSource(franka_bringup_path + '/launch/sim/launch_mujoco_ros_server.launch'),

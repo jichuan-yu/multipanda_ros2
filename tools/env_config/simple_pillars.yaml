@@ -1,0 +1,32 @@
+# Simple pillar environment
+# 三个简单的障碍物配置
+
+description: "Simple test environment with a few obstacles"
+
+collision_objects:
+  # 方块
+  - id: "box_01"
+    type: "Box"
+    dimensions: [0.1, 0.1, 0.2]
+    pose:
+      position: [0.5, 0.0, 0.1]
+    material:
+      rgba: [1.0, 0.5, 0.0, 1.0]
+
+  # 圆柱
+  - id: "pillar_01"
+    type: "Cylinder"
+    dimensions: [0.05, 0.4]
+    pose:
+      position: [0.5, 0.2, 0.2]
+    material:
+      rgba: [0.2, 0.4, 0.8, 1.0]
+
+  # 球体
+  - id: "ball_01"
+    type: "Sphere"
+    dimensions: [0.08]
+    pose:
+      position: [0.6, -0.2, 0.08]
+    material:
+      rgba: [0.0, 1.0, 0.0, 1.0]

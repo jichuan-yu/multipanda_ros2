@@ -1,0 +1,57 @@
+# Narrow passage scenario
+# 窄通道场景 - 测试机器人的精细操作能力
+
+description: "Narrow passage between obstacles for precision manipulation"
+
+collision_objects:
+  # 左侧墙壁
+  - id: "left_wall_1"
+    type: "Box"
+    dimensions: [0.3, 0.02, 0.4]
+    pose:
+      position: [0.4, 0.15, 0.2]
+    material:
+      rgba: [0.7, 0.7, 0.7, 1.0]
+
+  - id: "left_wall_2"
+    type: "Box"
+    dimensions: [0.3, 0.02, 0.4]
+    pose:
+      position: [0.6, 0.15, 0.2]
+    material:
+      rgba: [0.7, 0.7, 0.7, 1.0]
+
+  # 右侧墙壁
+  - id: "right_wall_1"
+    type: "Box"
+    dimensions: [0.3, 0.02, 0.4]
+    pose:
+      position: [0.4, -0.15, 0.2]
+    material:
+      rgba: [0.7, 0.7, 0.7, 1.0]
+
+  - id: "right_wall_2"
+    type: "Box"
+    dimensions: [0.3, 0.02, 0.4]
+    pose:
+      position: [0.6, -0.15, 0.2]
+    material:
+      rgba: [0.7, 0.7, 0.7, 1.0]
+
+  # 中间悬垂圆柱 - 增加难度
+  - id: "hanging_cylinder"
+    type: "Cylinder"
+    dimensions: [0.04, 0.15]
+    pose:
+      position: [0.5, 0.0, 0.35]     # 悬空在通道上方
+    material:
+      rgba: [1.0, 0.3, 0.0, 1.0]     # 橙色
+
+  # 目标物体 (小方块)
+  - id: "target_box"
+    type: "Box"
+    dimensions: [0.04, 0.04, 0.04]
+    pose:
+      position: [0.5, 0.0, 0.02]
+    material:
+      rgba: [0.0, 0.8, 0.4, 1.0]     # 绿色 - 目标颜色

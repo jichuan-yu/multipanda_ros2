@@ -1,0 +1,58 @@
+# Table workspace scene
+# 包含桌面上多个障碍物的典型场景
+
+description: "Table workspace with multiple obstacles for manipulation tasks"
+
+collision_objects:
+  # 工作台面
+  - id: "table_surface"
+    type: "Box"
+    dimensions: [0.8, 1.0, 0.05]      # 80cm x 100cm x 5cm
+    pose:
+      position: [0.5, 0.0, -0.025]   # 桌面在 z=0 位置
+    material:
+      rgba: [0.6, 0.5, 0.4, 1.0]     # 木色
+
+  # 前方中央圆柱
+  - id: "front_cylinder"
+    type: "Cylinder"
+    dimensions: [0.04, 0.3]          # r=4cm, h=30cm
+    pose:
+      position: [0.5, 0.0, 0.15]
+    material:
+      rgba: [0.8, 0.2, 0.2, 1.0]     # 红色
+
+  # 左侧方块堆叠
+  - id: "left_box_1"
+    type: "Box"
+    dimensions: [0.06, 0.06, 0.06]
+    pose:
+      position: [0.4, 0.3, 0.03]
+    material:
+      rgba: [0.2, 0.6, 0.8, 1.0]
+
+  - id: "left_box_2"
+    type: "Box"
+    dimensions: [0.06, 0.06, 0.06]
+    pose:
+      position: [0.4, 0.3, 0.09]
+    material:
+      rgba: [0.2, 0.6, 0.8, 1.0]
+
+  # 右侧球体
+  - id: "right_ball"
+    type: "Sphere"
+    dimensions: [0.06]               # r=6cm
+    pose:
+      position: [0.45, -0.3, 0.06]
+    material:
+      rgba: [0.9, 0.7, 0.0, 1.0]     # 金色
+
+  # 中间障碍墙 (低矮)
+  - id: "middle_wall"
+    type: "Box"
+    dimensions: [0.02, 0.3, 0.08]
+    pose:
+      position: [0.55, 0.0, 0.04]
+    material:
+      rgba: [0.4, 0.4, 0.4, 1.0]     # 灰色

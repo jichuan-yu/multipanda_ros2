@@ -1,0 +1,48 @@
+description: "Environment with static obstacles and movable objects"
+
+collision_objects:
+  # Static obstacles (will appear in both XML and MPRC YAML)
+  - id: "shelf_01"
+    type: "Box"
+    dimensions: [0.4, 1.0, 0.02]
+    pose:
+      position: [0.60, 0.0, 0.20]
+    material:
+      rgba: [1.0, 0.5, 0.0, 1.0]
+
+  - id: "shelf_02"
+    type: "Box"
+    dimensions: [0.4, 1.0, 0.02]
+    pose:
+      position: [0.60, 0.0, 0.70]
+    material:
+      rgba: [1.0, 0.5, 0.0, 1.0]
+
+  # Movable objects (will appear ONLY in XML, NOT in MPRC YAML)
+  # These are objects that can be manipulated by the robot
+  - id: "movable_box_01"
+    type: "Box"
+    dimensions: [0.05, 0.05, 0.05]
+    pose:
+      position: [0.50, 0.0, 0.30]
+    movable: true
+    material:
+      rgba: [0.2, 0.8, 0.2, 1.0]
+
+  - id: "movable_cylinder_01"
+    type: "Cylinder"
+    dimensions: [0.03, 0.10]  # [radius, height]
+    pose:
+      position: [0.45, 0.10, 0.25]
+    movable: true
+    material:
+      rgba: [0.8, 0.2, 0.2, 1.0]
+
+  - id: "movable_sphere_01"
+    type: "Sphere"
+    dimensions: [0.04]  # [radius]
+    pose:
+      position: [0.55, -0.10, 0.25]
+    movable: true
+    material:
+      rgba: [0.2, 0.2, 0.8, 1.0]

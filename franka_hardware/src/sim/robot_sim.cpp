@@ -175,7 +175,7 @@ franka::RobotState RobotSim::populateFrankaState(){
   // 
   // Doesn't really work; set up the inverses and stuff properly later.
   // o_t_ee_ = xpose[link0] * xpose[link7]
-  int& s7 = joint_site_indices_[7];
+  int& s7 = joint_site_indices_[8];  // _ee_site on hand/gripper TCP, matching mj_dual.xml
   int& l0 = link_indices_[0];
   double eePosres[3] = {0};
   double eeQuatres[4] = {0};

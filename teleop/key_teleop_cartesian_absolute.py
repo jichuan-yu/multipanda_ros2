@@ -18,11 +18,16 @@ Arm Selection:
   Z: Left arm
   X: Right arm
   B: Both arms
+Gripper Control:
+  N: Open gripper (0.08m)
+  M: Close gripper (0.0m)
 Step Size:
   [: Decrease step
   ]: Increase step
 
-Publishes: Float64MultiArray to /dualarm_teleop_cmd (command_type=5 TASK_SPACE_POSE)
+Publishes:
+  - Float64MultiArray to /dualarm_teleop_cmd (command_type=5 TASK_SPACE_POSE)
+  - Float64MultiArray to /mj_{left,right}_gripper/grasp_desired (gripper force control)
 Subscribes: /ee_pose for actual end-effector pose feedback (for display only)
 
 Usage:
@@ -103,6 +108,10 @@ class KeyCartesianAbsoluteTeleop(BaseTeleopNode):
         self.step_rotation = step_rotation
         self.ee_pose_received = False
 
+        # Gripper control parameters
+        self.gripper_max_width = 0.08  # Franka gripper max opening (m)
+        self.gripper_min_width = 0.0   # Fully closed
+
         # ACTUAL end-effector poses from /ee_pose topic (position + quaternion [w, x, y, z])
         # Default home position
         self.actual_ee_poses = {
@@ -121,6 +130,18 @@ class KeyCartesianAbsoluteTeleop(BaseTeleopNode):
             Float64MultiArray,
             '/ee_pose',
             self.ee_pose_callback,
+            10
+        )
+
+        # Gripper control publishers (for gripper_action_bridge - force control)
+        self.left_gripper_pub = self.create_publisher(
+            Float64MultiArray,
+            '/mj_left_gripper/grasp_desired',
+            10
+        )
+        self.right_gripper_pub = self.create_publisher(
+            Float64MultiArray,
+            '/mj_right_gripper/grasp_desired',
             10
         )
 
@@ -156,6 +177,10 @@ Arm Selection:
   Z : Left arm
   X : Right arm
   B : Both arms
+
+Gripper Control:
+  N : Open gripper (0.08m)
+  M : Close gripper (0.0m)
 
 Step Size:
   [ : Decrease step
@@ -282,6 +307,14 @@ Ctrl-C to quit
             rot_delta[2] = -self.step_rotation
             updated = True
 
+        # Gripper control: N (open), M (close)
+        elif key == 'n':
+            self.control_gripper(self.gripper_max_width)  # Open gripper
+            return True
+        elif key == 'm':
+            self.control_gripper(self.gripper_min_width)  # Close gripper
+            return True
+
         if updated:
             # Use LAST COMMAND position as base (accumulates deltas from previous command)
             if self.selected_arm in ['left', 'both']:
@@ -357,6 +390,49 @@ Ctrl-C to quit
 
         # Print published data
         print(f"\n[Publishing] data: {msg.data}")
+
+    def control_gripper(self, width: float):
+        """
+        Control gripper with force-based grasp.
+
+        Publishes to gripper_action_bridge topics which handle the actual
+        gripper control in the simulation using force control parameters.
+
+        Args:
+            width: Desired gripper width in meters (0.0 = closed, 0.08 = fully open)
+
+        Grasp data format: [width, speed, force, epsilon_inner, epsilon_outer]
+        - width: Target width (m)
+        - speed: Closing speed (m/s)
+        - force: Grasping force (N)
+        - epsilon_inner: Inner tolerance (m)
+        - epsilon_outer: Outer tolerance (m)
+        """
+        msg = Float64MultiArray()
+        # Hardcoded force control parameters
+        msg.data = [
+            width,          # Target width (m)
+            0.05,           # Speed (m/s)
+            30.0,           # Force (N)
+            0.005,          # epsilon_inner (m)
+            0.005           # epsilon_outer (m)
+        ]
+
+        gripper_name = ""
+        if self.selected_arm == 'left':
+            self.left_gripper_pub.publish(msg)
+            gripper_name = "LEFT"
+        elif self.selected_arm == 'right':
+            self.right_gripper_pub.publish(msg)
+            gripper_name = "RIGHT"
+        elif self.selected_arm == 'both':
+            # Control both grippers simultaneously
+            self.left_gripper_pub.publish(msg)
+            self.right_gripper_pub.publish(msg)
+            gripper_name = "BOTH"
+
+        action = "OPEN" if width > 0.04 else "CLOSE"
+        print(f"\n[{gripper_name} GRIPPER {action}] Width: {width:.3f}m | Speed: 0.05m/s | Force: 30.0N", flush=True)
 
 
 def get_key(settings):

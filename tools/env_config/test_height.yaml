@@ -1,0 +1,18 @@
+description: "Simple test environment with a few obstacles"
+
+collision_objects:
+  - id: "pillar_01"
+    type: "Cylinder"
+    dimensions: [0.01, 0.487]
+    pose:
+      position: [0.307, 0.26, 0.2435]
+    material:
+      rgba: [0.2, 0.4, 0.8, 1.0]
+
+  - id: "pillar_02"
+    type: "Cylinder"
+    dimensions: [0.01, 0.590]
+    pose:
+      position: [0.267, -0.26, 0.295]
+    material:
+      rgba: [0.2, 0.4, 0.8, 1.0]

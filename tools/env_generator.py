@@ -51,6 +51,7 @@ class CollisionObject:
     pose: Pose = field(default_factory=Pose)
     material: Material = field(default_factory=Material)
     movable: bool = False  # If True, object can be moved (only in XML, not in MPRC YAML)
+    density: float = 1000.0  # Density for movable objects (kg/m^3), default 1000
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'CollisionObject':
@@ -75,7 +76,8 @@ class CollisionObject:
             dimensions=data['dimensions'],
             pose=pose,
             material=material,
-            movable=data.get('movable', False)
+            movable=data.get('movable', False),
+            density=data.get('density', 1000.0)
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -180,6 +182,7 @@ class EnvGenerator:
 
             # Add material properties
             lines[-1] += f' friction="{" ".join(str(v) for v in obj.material.friction)}"'
+            lines[-1] += f' density="{obj.density}"'
             lines[-1] += f' solimp="0.998 0.998 0.001" solref="0.001 1"'
             lines[-1] += f' rgba="{" ".join(str(v) for v in obj.material.rgba)}"'
             lines[-1] += '/>'

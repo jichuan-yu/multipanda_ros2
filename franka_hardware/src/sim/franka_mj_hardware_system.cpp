@@ -247,6 +247,10 @@ hardware_interface::return_type FrankaMjHardwareSystem::read(const rclcpp::Time&
     arm.hw_efforts_ = arm.hw_franka_robot_state_.tau_J;
     if(arm.robot_->has_gripper_){
       gripper_states_ptrs_[arm.robot_name_]->at(1) = d_->qpos[arm.robot_->gripper_joint_qpos_indices_[0]];
+      // Read gripper force from MuJoCo actuator
+      gripper_states_ptrs_[arm.robot_name_]->at(2) = std::abs(
+          d_->actuator_force[arm.robot_->gripper_act_idx_]
+      );
     }
   }
 //   for(auto& obj_pair: mj_objs_){

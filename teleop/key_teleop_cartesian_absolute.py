@@ -113,14 +113,14 @@ class KeyCartesianAbsoluteTeleop(BaseTeleopNode):
         self.gripper_min_width = 0.0   # Fully closed
 
         # ACTUAL end-effector poses from /ee_pose topic (position + quaternion [w, x, y, z])
-        # Default home position
+        # Default home position (gripper tip position, not flange)
         self.actual_ee_poses = {
             'left': {
-                'position': np.array([0.307, 0.26, 0.590]),
+                'position': np.array([0.307, 0.26, 0.487]),
                 'quaternion': np.array([0.0, 1.0, 0.0, 0.0])  # [w, x, y, z] - 180° X rotation
             },
             'right': {
-                'position': np.array([0.307, -0.26, 0.590]),
+                'position': np.array([0.307, -0.26, 0.487]),
                 'quaternion': np.array([0.0, 1.0, 0.0, 0.0])  # [w, x, y, z] - 180° X rotation
             }
         }
@@ -148,11 +148,11 @@ class KeyCartesianAbsoluteTeleop(BaseTeleopNode):
         self.print_usage()
         self.target_ee_poses = {
             'left': {
-                'position': np.array([0.307, 0.26, 0.590]),
+                'position': np.array([0.307, 0.26, 0.487]),
                 'quaternion': np.array([0.0, 1.0, 0.0, 0.0])  # [w, x, y, z] - 180° X rotation
             },
             'right': {
-                'position': np.array([0.307, -0.26, 0.590]),
+                'position': np.array([0.307, -0.26, 0.487]),
                 'quaternion': np.array([0.0, 1.0, 0.0, 0.0])  # [w, x, y, z] - 180° X rotation
             }
         }

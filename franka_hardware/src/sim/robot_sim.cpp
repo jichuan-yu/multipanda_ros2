@@ -143,30 +143,111 @@ franka::RobotState RobotSim::populateFrankaState(){
     current_state_.tau_ext_hat_filtered[i] = tau_ext_hat_filtered[i];
   }
 
-  // calculate end effector jacobian, and then compose the EE force transform
-  double basePos[3] = {0};
-  double basePos_I[3] = {0};
-  double baseQuat[4] = {0};
-  double baseQuat_I[4] = {0};
-  franka_hardware_model_->getXPosQuatbyLink(basePos, baseQuat, link_indices_[8]);
-  mju_negPose(basePos_I, baseQuat_I, basePos, baseQuat);
-  double forceTMat[36] = {0};
-  franka_hardware_model_->composeForceTransform(forceTMat, basePos_I, baseQuat_I);
-  // compose the 6*7
-  double Jac[42] = {0};
-  franka_hardware_model_->get6x7Jacobian(Jac, joint_site_indices_[8]);
+  // Compute external wrench using a simplified approach
+  // Since MuJoCo contact forces are handled by the constraint solver,
+  // we use actuator forces as a proxy for external forces
+  const mjModel* m = franka_hardware_model_->getMjModel();
 
-  // multiply the jac
-  double rJac[42] = {0};
-  mju_mulMatMat(rJac, forceTMat, Jac, 6, 6, 7);
-  // finally, get the force
-  double eeForce[6] = {0};
-  mju_mulMatVec(eeForce, rJac, tau_ext_hat_filtered, 6, 7);
-  // forceTMat * Jac * torques
+  // Initialize to zero
   for(int i=0; i<6; i++){
-    // we want the end-effector external forces, so 8th body in the link indices.
-    // This needs to be transformed into the base frame.
-    current_state_.O_F_ext_hat_K[i] = eeForce[i];
+    current_state_.K_F_ext_hat_K[i] = 0.0;
+    current_state_.O_F_ext_hat_K[i] = 0.0;
+  }
+
+  // TEMPORARY: Apply simulated external force when contact is detected
+  // Check if there are any contacts involving robot geoms
+  int ee_body_id = link_indices_[8];  // link8 (end-effector body)
+
+  bool has_contact = false;
+  int contact_count = 0;
+
+  // Debug: print contact info (only once per 1000 cycles to avoid spam)
+  static int debug_counter = 0;
+  debug_counter++;
+
+  // Debug: Show EE body ID and its geoms
+  if(debug_counter % 1000 == 0){
+    std::cerr << "Robot " << robot_name_ << " EE body ID: " << ee_body_id << std::endl;
+    std::cerr << "  Geoms attached to EE body: ";
+    for(int j = 0; j < m->ngeom; j++){
+      if(m->geom_bodyid[j] == ee_body_id){
+        std::cerr << j << " ";
+      }
+    }
+    std::cerr << std::endl;
+
+    // Show what bodies geoms 0, 72, 73, 167 belong to
+    int check_geoms[] = {0, 72, 73, 167};
+    for(int geom_id : check_geoms){
+      if(geom_id < m->ngeom){
+        std::cerr << "  Geom " << geom_id << " belongs to body " << m->geom_bodyid[geom_id] << std::endl;
+      }
+    }
+  }
+
+  for(int i = 0; i < d->ncon; i++){
+    const mjContact& contact = d->contact[i];
+
+    // Check if contact involves our end-effector body's geoms
+    for(int j = 0; j < m->ngeom; j++){
+      if(m->geom_bodyid[j] == ee_body_id){
+        if(contact.geom1 == j || contact.geom2 == j){
+          has_contact = true;
+          contact_count++;
+
+          if(debug_counter % 1000 == 0 && has_contact){
+            std::cerr << "Robot " << robot_name_ << " contact detected!" << std::endl;
+            std::cerr << "  Contact geom1: " << contact.geom1 << ", geom2: " << contact.geom2 << std::endl;
+            std::cerr << "  EE geom: " << j << ", EE body: " << ee_body_id << std::endl;
+            std::cerr << "  Distance: " << contact.dist << std::endl;
+          }
+
+          // Simple force estimation based on penetration depth
+          double penetration = -contact.dist;
+          if(penetration > 0){
+            // Use contact normal for force direction
+            double force_mag = penetration * 100.0; // stiffness factor (N/m)
+
+            // Apply force in normal direction (contact frame first column)
+            // contact.frame is 3x3 row-major: frame[0-2] = normal, [3-5] = tangent1, [6-8] = tangent2
+            double force_x = contact.frame[0] * force_mag;
+            double force_y = contact.frame[1] * force_mag;
+            double force_z = contact.frame[2] * force_mag;
+
+            // Determine direction (force is applied to geom1, so if we're geom1, reverse)
+            int ee_geom_idx = j;
+            if(contact.geom1 == ee_geom_idx){
+              current_state_.K_F_ext_hat_K[0] -= force_x;
+              current_state_.K_F_ext_hat_K[1] -= force_y;
+              current_state_.K_F_ext_hat_K[2] -= force_z;
+            } else {
+              current_state_.K_F_ext_hat_K[0] += force_x;
+              current_state_.K_F_ext_hat_K[1] += force_y;
+              current_state_.K_F_ext_hat_K[2] += force_z;
+            }
+
+            // Copy to O_F_ext_hat_K
+            current_state_.O_F_ext_hat_K[0] = current_state_.K_F_ext_hat_K[0];
+            current_state_.O_F_ext_hat_K[1] = current_state_.K_F_ext_hat_K[1];
+            current_state_.O_F_ext_hat_K[2] = current_state_.K_F_ext_hat_K[2];
+          }
+          break;
+        }
+      }
+      if(has_contact) break;
+    }
+  }
+
+  // Debug: show total contacts periodically
+  if(debug_counter % 1000 == 0){
+    std::cerr << "Robot " << robot_name_ << " - Total contacts in scene: " << d->ncon << std::endl;
+    if(d->ncon > 0){
+      for(int i = 0; i < std::min(5, d->ncon); i++){
+        std::cerr << "  Contact " << i << ": geom1=" << d->contact[i].geom1
+                  << ", geom2=" << d->contact[i].geom2
+                  << ", dist=" << d->contact[i].dist << std::endl;
+      }
+    }
   }
 
   // xpos is in W;

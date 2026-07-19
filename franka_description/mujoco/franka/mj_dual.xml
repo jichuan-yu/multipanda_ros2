@@ -505,5 +505,18 @@
         gainprm="0.01568627451 0 0" biasprm="0 -100 -10"/>
   </actuator>
 
+  <!-- Force/Torque Sensors for External Force Estimation -->
+  <sensor>
+    <!-- Left arm force/torque sensor at end-effector -->
+    <force name="mj_left_ee_force" site="mj_left_ee_site"/>
+    <torque name="mj_left_ee_torque" site="mj_left_ee_site"/>
+
+    <!-- Right arm force/torque sensor at end-effector -->
+    <force name="mj_right_ee_force" site="mj_right_ee_site"/>
+    <torque name="mj_right_ee_torque" site="mj_right_ee_site"/>
+
+    <!-- Touch sensors for fingertip collision detection -->
+    <!-- Note: touch sensors can be added on geoms if needed for collision detection -->
+  </sensor>
 
 </mujoco>

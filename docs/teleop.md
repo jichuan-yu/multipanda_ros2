@@ -21,7 +21,7 @@
 | 索引 | 字段 | 类型 | 说明 |
 |------|------|------|------|
 | 0-13 | data | float64[14] | 命令数据（根据命令类型不同） |
-| 14 | command_type | float64 | 命令类型（0-5） |
+| 14 | command_type | float64 | 命令类型（0-3） |
 | 15 | arm_selector | float64 | 手臂选择（1-3） |
 | 16 | allow_safety_violation | float64 | 安全覆盖标志（0-1，可选） |
 
@@ -33,8 +33,6 @@
 | 1 | JOINT_VELOCITY | 关节空间速度 | `[左臂7关节, 右臂7关节]` 全部14个位置 |
 | 2 | TASK_SPACE_INCREMENT | 末端位姿增量 | `[左x,y,z,qx,qy,qz, 右x,y,z,qx,qy,qz, 0, 0]` 使用前12个 |
 | 3 | TASK_SPACE_VELOCITY | 末端速度 | `[左vx,vy,vz,wx,wy,wz, 右vx,vy,vz,wx,wy,wz, 0, 0]` 使用前12个 |
-| 4 | JOINT_POSITION | 关节空间绝对位置 | `[左臂7关节, 右臂7关节]` 全部14个绝对位置 |
-| 5 | TASK_SPACE_POSE | 末端绝对位姿 | `[左x,y,z,qx,qy,qz,qw, 右x,y,z,qx,qy,qz,qw]` 全部14个 |
 
 ### 手臂选择 (索引 15)
 
@@ -93,24 +91,7 @@ python3 src/multipanda_ros2/teleop/key_teleop_cartesian.py --step-position 0.001
 | `U/O` | Yaw（绕Z轴旋转） |
 | `Z/X/B` | 选择左臂/右臂/双臂 |
 
-### 4. 键盘任务空间控制 + 脚本内IK (key_teleop_cartesian_absolute_ik.py)
-
-`key_teleop_cartesian_absolute.py` 的变体。按键映射与笛卡尔积分逻辑完全一致，区别在于：**在脚本内部完成逆运动学（IK）求解，再向安全控制器发送关节空间绝对位置指令**（`command_type=4 JOINT_POSITION`），而不是发送任务空间位姿由控制器内部做 IK。
-
-IK 方法与 `dualarm_mprc` 安全控制器 `DualArmSafeControllerSim::computeJointFromTaskSpace()` 一致：阻尼最小二乘（DLS）雅可比伪逆 `J# = Jᵀ(JJᵀ + λ²I)⁻¹`（`λ=0.01`），并以 `/joint_states` 中的实际关节角作为线性化点（与控制器一致），迭代至收敛。机器人模型（DH 参数、FK、雅可比）在 `teleop/panda_kinematics.py` 中，是对 `robot_kinematics.cpp` 的忠实移植。
-
-**使用方法**:
-```bash
-python3 src/multipanda_ros2/teleop/key_teleop_cartesian_absolute_ik.py --step-position 0.001 --step-rotation 0.01
-```
-
-**按键映射**: 与 `key_teleop_cartesian_absolute.py` 完全相同（`W/S A/D Q/E` 平移，`J/L I/K U/O` 旋转，`Z/X/B` 选臂，`N/M` 夹爪，`[/]` 步长）。
-
-**输出**: `command_type=4`，`data` 为 `[左臂7关节, 右臂7关节]` 共14个绝对关节位置；未被选中的臂保持其当前关节构型。
-
----
-
-### 5. SpaceMouse 任务空间控制 (spacemouse_teleop_cartesian.py)
+### 4. SpaceMouse 任务空间控制 (spacemouse_teleop_cartesian.py)
 
 使用 3Dconnexion SpaceMouse 进行直观的六自由度控制。
 
@@ -125,7 +106,7 @@ python3 src/multipanda_ros2/teleop/spacemouse_teleop_cartesian.py --scale-transl
 | 按钮1 | 选择左臂 |
 | 按钮2 | 选择右臂 |
 
-### 6. CSV 关节空间回放 (csv_teleop_joint.py)
+### 5. CSV 关节空间回放 (csv_teleop_joint.py)
 
 从CSV文件读取关节轨迹并模拟遥操作命令发送。
 
@@ -142,7 +123,7 @@ timestamp,q1_left,q2_left,q3_left,q4_left,q5_left,q6_left,q7_left,q1_right,q2_ri
 ...
 ```
 
-### 7. CSV 任务空间回放 (csv_teleop_cartesian.py)
+### 6. CSV 任务空间回放 (csv_teleop_cartesian.py)
 
 从CSV文件读取末端轨迹并模拟遥操作命令发送。
 

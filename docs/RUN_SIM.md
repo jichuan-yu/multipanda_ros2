@@ -144,6 +144,11 @@ ros2 run dual_arm_reactive_control main_sim_node \
   -p data_record_prefix:=$(date +%Y%m%d_%H%M%S)
 ```
 
+ros2 run dual_arm_reactive_control safe_index_monitor_node --ros-args \
+  -p output_path:=/home/xiaozy24/dual_panda_ws/data/mpc/ \
+  -p output_prefix:=$(date +%Y%m%d_%H%M%S) \
+  -p d_safe:=0.05
+
 控制器启动后会直接进入待命状态，监听以下话题：
 - `/dualarm_teleop_cmd` - 遥操作命令（键盘/SpaceMouse/CSV回放）
 - `/dualArm_traj` - 轨迹命令（可选，用于预定义轨迹）
@@ -151,6 +156,16 @@ ros2 run dual_arm_reactive_control main_sim_node \
 发送遥操作命令后会自动切换到 `TELEOPERATING` 模式。
 
 更多遥操作实现细节请参考：[dualarm_mprc 遥操作文档](../../dualarm_mprc/docs/tele_operation.md)
+
+---
+
+MPC控制器作为baseline时：
+
+```bash
+docker exec -it multipanda-container bash
+source install/setup.bash
+python -m curobo.examples.getting_started.reactive_control_ros2
+```
 
 ---
 

@@ -4,7 +4,7 @@
     <!-- Simple test environment with a few obstacles -->
 
     <!-- box_01: Box, dims=[0.3, 0.4, 1.0] -->
-    <geom name="box_01" type="box" size="0.1500 0.2000 0.5000" pos="0.7000 0.1500 0.5000"
+    <geom name="box_01" type="box" size="0.1500 0.2000 0.5000" pos="0.7000 0.0000 0.5000"
           friction="2.0 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
           rgba="1.0 0.5 0.0 1.0"/>
 

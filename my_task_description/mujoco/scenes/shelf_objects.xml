@@ -1,0 +1,35 @@
+<mujocoinclude>
+  <worldbody>
+
+    <!-- ============ 双层货架 (static, 无 joint) ============ -->
+    <!-- 4 根立柱：截面 0.04x0.04，高 0.80；前柱 x=0.42，后柱 x=0.68，左右 y=±0.30（给双臂 ±0.26 基座留出抓取空间） -->
+    <body name="shelf" pos="0 0 0">
+      <geom name="shelf_post_1" type="box" size="0.02 0.02 0.40" pos="0.42 -0.30 0.40" rgba="0.25 0.45 0.65 1"/>
+      <geom name="shelf_post_2" type="box" size="0.02 0.02 0.40" pos="0.42  0.30 0.40" rgba="0.25 0.45 0.65 1"/>
+      <geom name="shelf_post_3" type="box" size="0.02 0.02 0.40" pos="0.68 -0.30 0.40" rgba="0.25 0.45 0.65 1"/>
+      <geom name="shelf_post_4" type="box" size="0.02 0.02 0.40" pos="0.68  0.30 0.40" rgba="0.25 0.45 0.65 1"/>
+      <!-- 下层 z=0.15、上层 z=0.55（直上直下搬运不被中间层板挡住） -->
+      <geom name="shelf_layer_1" type="box" size="0.13 0.25 0.01" pos="0.55 0 0.15" rgba="0.45 0.65 0.85 1"/>
+      <geom name="shelf_layer_2" type="box" size="0.13 0.25 0.01" pos="0.55 0 0.55" rgba="0.45 0.65 0.85 1"/>
+    </body>
+
+    <!-- ============ 待搬运箱子 (free joint, 0.06m) ============ -->
+    <!-- 放在下层板顶面：下层板顶 z=0.16，箱半高 0.03 → 中心 z=0.19，位于 (0.55, 0, 0.19) -->
+    <body name="obj_box_01" pos="0.55 0 0.19">
+      <geom name="obj_box_01" type="box" size="0.03 0.03 0.03" friction="2 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1" density="100" rgba="1 0.56 0.43 1"/>
+      <joint name="obj_box_01_joint" type="free" damping="0.0005"/>
+    </body>
+
+    <!-- ============ 可拖动障碍球 (mocap, 可在 MuJoCo viewer 里鼠标拖拽) ============ -->
+    <body name="sphere_obs_1" pos="0.30  0.28 0.42" mocap="true">
+      <geom name="sphere_obs_1" type="sphere" size="0.07" rgba="0 1 0 1"/>
+    </body>
+    <body name="sphere_obs_2" pos="0.30 -0.28 0.42" mocap="true">
+      <geom name="sphere_obs_2" type="sphere" size="0.07" rgba="0 1 0 1"/>
+    </body>
+    <body name="sphere_obs_3" pos="0.55  0.0  0.80" mocap="true">
+      <geom name="sphere_obs_3" type="sphere" size="0.07" rgba="0 1 0 1"/>
+    </body>
+
+  </worldbody>
+</mujocoinclude>

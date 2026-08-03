@@ -89,7 +89,7 @@ PointCloudXyzrgbNode::PointCloudXyzrgbNode(const rclcpp::NodeOptions & options)
   std::lock_guard<std::mutex> lock(connect_mutex_);
   // TODO(ros2) Implement connect_cb when SubscriberStatusCallback is available
   // pub_point_cloud_ = depth_nh.advertise<PointCloud>("points", 1, connect_cb, connect_cb);
-  pub_point_cloud_ = create_publisher<PointCloud2>("points", rclcpp::SensorDataQoS());
+  pub_point_cloud_ = create_publisher<PointCloud2>("points", rclcpp::QoS(1));
   // TODO(ros2) Implement connect_cb when SubscriberStatusCallback is available
 }
 

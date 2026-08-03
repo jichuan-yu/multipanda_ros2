@@ -17,7 +17,14 @@ std::string MujocoRos2ControlPluginPrivate::getURDF() const
 	std::string urdf_string;
 
 	using namespace std::chrono_literals;
-	auto parameters_client = std::make_shared<rclcpp::AsyncParametersClient>(node_, robot_description_node_);
+	// The mujoco_node's executor is already spinning, so spin_until_future_complete()
+	// on the shared executor would throw "called while already spinning". Use a
+	// dedicated client node with its own local executor to fetch robot_description.
+	auto client_node = std::make_shared<rclcpp::Node>(
+		node_->get_name() + std::string("_param_client"), node_->get_namespace());
+	auto parameters_client = std::make_shared<rclcpp::AsyncParametersClient>(client_node, robot_description_node_);
+	rclcpp::executors::SingleThreadedExecutor client_executor;
+	client_executor.add_node(client_node->get_node_base_interface());
 	while (!parameters_client->wait_for_service(0.5s)) {
 		if (!rclcpp::ok()) {
 			RCLCPP_ERROR(node_->get_logger(), "Interrupted while waiting for %s service. Exiting.",
@@ -35,7 +42,7 @@ std::string MujocoRos2ControlPluginPrivate::getURDF() const
 
 		try {
 			auto f = parameters_client->get_parameters({ this->robot_description_ });
-			executor_->spin_until_future_complete(f);
+			client_executor.spin_until_future_complete(f);
 			std::vector<rclcpp::Parameter> values = f.get();
 			urdf_string                           = values[0].as_string();
 		} catch (const std::exception &e) {
@@ -52,6 +59,7 @@ std::string MujocoRos2ControlPluginPrivate::getURDF() const
 		}
 		std::this_thread::sleep_for(std::chrono::microseconds(100000));
 	}
+	client_executor.remove_node(client_node->get_node_base_interface());
 	RCLCPP_INFO(node_->get_logger(), "Received URDF from param server");
 
 	return urdf_string;

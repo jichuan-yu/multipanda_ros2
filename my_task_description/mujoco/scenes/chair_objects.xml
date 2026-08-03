@@ -1,0 +1,22 @@
+<mujocoinclude>
+  <worldbody>
+
+    <!-- ============ 可旋转椅子 (mocap, 带靠背, 缩小版) ============ -->
+    <!-- mocap body：在 MuJoCo viewer 中 双击选中 → Ctrl+左键拖动=旋转 / Ctrl+右键拖动=平移 -->
+    <!-- 旋转轴 = 椅子的竖直中心轴（body 原点，位于座面中心下方地面） -->
+    <body name="chair" pos="0.20 -0.60 0" mocap="true">
+      <!-- 4 条椅腿：从地面到座面下沿（原尺寸的一半） -->
+      <geom name="chair_leg_1" type="box" size="0.01 0.01 0.11" pos=" 0.09  0.09 0.11" rgba="0.42 0.30 0.18 1"/>
+      <geom name="chair_leg_2" type="box" size="0.01 0.01 0.11" pos=" 0.09 -0.09 0.11" rgba="0.42 0.30 0.18 1"/>
+      <geom name="chair_leg_3" type="box" size="0.01 0.01 0.11" pos="-0.09  0.09 0.11" rgba="0.42 0.30 0.18 1"/>
+      <geom name="chair_leg_4" type="box" size="0.01 0.01 0.11" pos="-0.09 -0.09 0.11" rgba="0.42 0.30 0.18 1"/>
+      <!-- 座面：顶面约 z=0.24 -->
+      <geom name="chair_seat" type="box" size="0.10 0.10 0.015" pos="0 0 0.225" rgba="0.55 0.40 0.25 1"/>
+      <!-- 靠背：竖直立在座面后侧（-Y 方向），顶到 z≈0.53，旋转时可明显看出朝向变化 -->
+      <geom name="chair_backrest" type="box" size="0.10 0.015 0.15" pos="0 -0.105 0.375" rgba="0.55 0.40 0.25 1"/>
+      <!-- 靠背横撑（美观） -->
+      <geom name="chair_backrest_bar" type="box" size="0.10 0.01 0.02" pos="0 -0.105 0.29" rgba="0.48 0.34 0.20 1"/>
+    </body>
+
+  </worldbody>
+</mujocoinclude>

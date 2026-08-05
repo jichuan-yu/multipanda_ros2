@@ -53,6 +53,7 @@ class CollisionObject:
     material: Material = field(default_factory=Material)
     movable: bool = False  # If True, object can be moved (only in XML, not in MPRC YAML)
     density: float = 1000.0  # Density for movable objects (kg/m^3), default 1000
+    gravcomp: float = 0.0  # Gravity compensation: 0=none, 1=full compensation (disable gravity effect)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'CollisionObject':
@@ -78,7 +79,8 @@ class CollisionObject:
             pose=pose,
             material=material,
             movable=data.get('movable', False),
-            density=data.get('density', 1000.0)
+            density=data.get('density', 1000.0),
+            gravcomp=data.get('gravcomp', 0.0)
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -173,10 +175,11 @@ class EnvGenerator:
             # Movable object: wrap in <body> with free joint, geom at local origin
             body_pos = f'pos="{pos}"'
             body_quat = f'quat="{qx:.4f} {qy:.4f} {qz:.4f} {qw:.4f}"' if obj.pose.orientation != (0.0, 0.0, 0.0, 1.0) else ''
+            gravcomp_attr = f' gravcomp="{obj.gravcomp:.1f}"' if obj.gravcomp != 0.0 else ''
 
             lines = [
                 f'    <!-- {obj.id}: {obj.type}, dims={obj.dimensions} [MOVABLE] -->',
-                f'    <body name="{obj.id}" {body_pos} {body_quat}>',
+                f'    <body name="{obj.id}" {body_pos} {body_quat}{gravcomp_attr}>',
                 f'      <freejoint name="{obj.id}_joint"/>',
                 f'      <geom name="{obj.id}_geom" type="{geom_type}" size="{size}"',
             ]

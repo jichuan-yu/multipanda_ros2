@@ -128,6 +128,8 @@ source install/setup.bash
 
 ### 运行控制器
 
+**使用 MPRC :**
+
 编译后运行安全控制器节点：
 
 ```bash
@@ -144,11 +146,6 @@ ros2 run dual_arm_reactive_control main_sim_node \
   -p data_record_prefix:=$(date +%Y%m%d_%H%M%S)
 ```
 
-ros2 run dual_arm_reactive_control safe_index_monitor_node --ros-args \
-  -p output_path:=/home/xiaozy24/dual_panda_ws/data/mpc/ \
-  -p output_prefix:=$(date +%Y%m%d_%H%M%S) \
-  -p d_safe:=0.05
-
 控制器启动后会直接进入待命状态，监听以下话题：
 - `/dualarm_teleop_cmd` - 遥操作命令（键盘/SpaceMouse/CSV回放）
 - `/dualArm_traj` - 轨迹命令（可选，用于预定义轨迹）
@@ -157,7 +154,7 @@ ros2 run dual_arm_reactive_control safe_index_monitor_node --ros-args \
 
 更多遥操作实现细节请参考：[dualarm_mprc 遥操作文档](../../dualarm_mprc/docs/tele_operation.md)
 
----
+**使用 MPC :**
 
 MPC控制器作为baseline时：
 
@@ -169,7 +166,84 @@ python -m curobo.examples.getting_started.reactive_control_ros2
 
 ---
 
-## 终端 5：运行遥操作脚本
+## 终端 5：数据监控器
+
+### `safe_index`监控器
+
+```bash
+docker exec -it multipanda-container bash
+source install/setup.bash
+ros2 run dual_arm_reactive_control safe_index_monitor_node --ros-args \
+  -p output_path:=/home/xiaozy24/dual_panda_ws/data/mpc/ \
+  -p output_prefix:=$(date +%Y%m%d_%H%M%S) \
+  -p d_safe:=0.05
+```
+
+**监听话题：**
+- `/dualarm_teleop_cmd` - 遥操作命令（键盘/SpaceMouse/CSV回放）
+- `/joint_states` - 当前关节状态（用于遥操作的初始位置）
+- `/mj_left/joints_desired` - 左臂期望关节命令
+- `/mj_right/joints_desired` - 右臂期望关节命令
+
+**输出 CSV 格式：**
+| 列名 | 说明 |
+|------|------|
+| timestamp | 时间戳 |
+| source | 数据源 ("left_desired" / "right_desired" / "left_teleop" / "right_teleop") |
+| arm_id | 机械臂 ID (1=左, 2=右) |
+| q1-q7 | 关节位置 (rad) |
+| dq1-dq7 | 关节速度 (rad/s) |
+| distance | 碰撞距离 (m) |
+| safe_index | 安全指数 (distance - d_safe) |
+
+### `pose_error`监控器
+
+监控**遥操作命令目标位姿**与**实际关节状态**之间的任务空间误差（位置 + 朝向）。
+
+```bash
+docker exec -it multipanda-container bash
+source install/setup.bash
+ros2 run dual_arm_reactive_control pose_error_monitor_node --ros-args \
+  -p output_path:=/home/xiaozy24/dual_panda_ws/data/mpc/ \
+  -p output_prefix:=$(date +%Y%m%d_%H%M%S)_pose_error
+```
+
+**监听话题：**
+- `/dualarm_teleop_cmd` - 遥操作命令（键盘/SpaceMouse/CSV回放）
+- `/joint_states` - 当前关节状态（mj_left_joint1-7, mj_right_joint1-7）
+
+**输出 CSV 格式：**
+| 列名 | 说明 |
+|------|------|
+| timestamp | 时间戳 |
+| arm | 机械臂标识 ("left" / "right") |
+| pos_err_x/y/z | 位置误差分量 (m) |
+| pos_err_norm | 位置误差范数 (m) |
+| orient_err_x/y/z | 朝向误差旋转向量分量 (rad) |
+| orient_err_norm | 朝向误差旋转角度 (rad) |
+| curr_x/y/z | 当前末端位置 (m) |
+| target_x/y/z | 目标末端位置 (m) |
+
+### `rosbag`录制
+
+```bash
+docker exec -it multipanda-container bash
+source install/setup.bash
+ros2 bag record -o teleop_safe_controller \
+    /dualarm_teleop_cmd \
+    /mj_left_gripper/grasp_desired \
+    /mj_right_gripper/grasp_desired \
+    /mj_left/joints_desired \
+    /mj_right/joints_desired \
+    /ee_pose \
+    /min_distance \
+    /collision_pairs \
+    /joint_states
+```
+
+---
+
+## 终端 6：运行遥操作脚本
 
 ### 方式 1：键盘关节空间控制
 
@@ -215,7 +289,7 @@ python3 src/multipanda_ros2/teleop/csv_teleop_cartesian.py --csv-file cartesian_
 
 ---
 
-## 终端 6：实时查看 `/ee_pose` 六元组（白色窗口）
+## 终端 7：实时查看 `/ee_pose` 六元组（白色窗口）
 
 ```bash
 docker exec -it multipanda-container bash

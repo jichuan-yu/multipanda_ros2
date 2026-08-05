@@ -3,10 +3,27 @@
 
     <!-- Simple test environment with a few obstacles -->
 
-    <!-- box_01: Box, dims=[0.3, 0.4, 1.0] -->
-    <geom name="box_01" type="box" size="0.1500 0.2000 0.5000" pos="0.7000 0.0000 0.5000"
+    <!-- box_01: Box, dims=[0.2, 0.2, 0.04] -->
+    <geom name="box_01" type="box" size="0.1000 0.1000 0.0200" pos="0.4500 0.0000 0.2000"
           friction="2.0 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
           rgba="1.0 0.5 0.0 1.0"/>
+
+    <!-- box_02: Box, dims=[0.4, 1.0, 0.04] -->
+    <geom name="box_02" type="box" size="0.2000 0.5000 0.0200" pos="0.8000 0.0000 0.5000"
+          friction="2.0 0.005 0.0001" solimp="0.998 0.998 0.001" solref="0.001 1"
+          rgba="0.0 0.5 1.0 1.0"/>
+
+    <!-- box_03: Box, dims=[0.2, 0.6, 0.04] [MOVABLE] -->
+    <body name="box_03" pos="0.4500 0.0000 0.2400" >
+      <freejoint name="box_03_joint"/>
+      <geom name="box_03_geom" type="box" size="0.1000 0.3000 0.0200" friction="2.0 0.005 0.0001" density="1.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.2 0.8 0.2 1.0"/>
+    </body>
+
+    <!-- ball_01: Sphere, dims=[0.05] [MOVABLE] -->
+    <body name="ball_01" pos="0.5000 0.0000 0.4000"  gravcomp="1.0">
+      <freejoint name="ball_01_joint"/>
+      <geom name="ball_01_geom" type="sphere" size="0.0500 0.0500 0.0500" friction="2.0 0.005 0.0001" density="10000.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.8 0.2 0.2 1.0"/>
+    </body>
 
   </worldbody>
 </mujocoinclude>

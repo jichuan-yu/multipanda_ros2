@@ -139,7 +139,7 @@ ros2 run dual_arm_reactive_control main_sim_node
 或
 ros2 run dual_arm_reactive_control main_sim_node \
   --ros-args \
-  -p bypass_qp_safety_for_debug:=false \
+  -p bypass_qp_safety_for_debug:=true \
   -p relative_pose_constraint_enabled:=false \
   -p data_record_ON:=true \
   -p data_record_path:=/home/xiaozy24/dual_panda_ws/data/ \
@@ -223,6 +223,45 @@ ros2 run dual_arm_reactive_control pose_error_monitor_node --ros-args \
 | orient_err_norm | 朝向误差旋转角度 (rad) |
 | curr_x/y/z | 当前末端位置 (m) |
 | target_x/y/z | 目标末端位置 (m) |
+
+### `relative_error`监控器
+
+监控**双臂相对位置**，计算 teleop command 和 safe command 相对于初始基准的误差。
+
+首次从 `/joint_states` 获取初始位置并设置相对位置基准，然后持续计算 teleop 和 safe 命令相对于该基准的偏差。
+
+```bash
+docker exec -it multipanda-container bash
+source install/setup.bash
+ros2 run dual_arm_reactive_control relative_error_monitor_node --ros-args \
+  -p output_path:=/home/xiaozy24/dual_panda_ws/data/mprc/ \
+  -p output_prefix:=$(date +%Y%m%d_%H%M%S)_relative_error
+```
+
+**监听话题：**
+- `/joint_states` - 当前关节状态（用于设置初始基准）
+- `/dualarm_teleop_cmd` - 遥操作命令（键盘/SpaceMouse/CSV回放）
+- `/mj_left/joints_desired` - 左臂期望关节命令（safe command）
+- `/mj_right/joints_desired` - 右臂期望关节命令（safe command）
+
+**输出 CSV 格式：**
+| 列名 | 说明 |
+|------|------|
+| timestamp | 时间戳 |
+| init_rel_x/y/z | 初始相对位置基准 (right_ee - left_ee, m) |
+| init_rel_dist | 初始相对距离 (m) |
+| curr_rel_x/y/z | 当前实际相对位置 (m) |
+| curr_rel_dist | 当前实际相对距离 (m) |
+| teleop_rel_x/y/z | Teleop目标相对位置 (m) |
+| teleop_rel_dist | Teleop目标相对距离 (m) |
+| teleop_err_x/y/z | Teleop相对基准的误差 (m) |
+| teleop_err_norm | Teleop误差范数 (m) |
+| safe_rel_x/y/z | Safe command目标相对位置 (m) |
+| safe_rel_dist | Safe command目标相对距离 (m) |
+| safe_err_x/y/z | Safe command相对基准的误差 (m) |
+| safe_err_norm | Safe command误差范数 (m) |
+
+注：当 teleop 或 safe 数据不可用时，对应字段输出为 `NaN`。
 
 ### `rosbag`录制
 

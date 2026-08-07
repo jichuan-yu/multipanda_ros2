@@ -25,6 +25,8 @@ find_package(franka_semantic_components REQUIRED)
 find_package(generate_parameter_library)
 find_package(franka_msgs REQUIRED)
 find_package(multi_mode_control_msgs REQUIRED)
+find_package(multi_mode_controller REQUIRED)
+find_package(visualization_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
 
 add_library(
@@ -55,6 +57,7 @@ target_include_directories(
         include
         ${EIGEN3_INCLUDE_DIRS}
 )
+
 ament_target_dependencies(
         ${PROJECT_NAME}
         controller_interface
@@ -64,6 +67,9 @@ ament_target_dependencies(
         rclcpp_lifecycle
         franka_semantic_components
         multi_mode_control_msgs
+        multi_mode_controller
+        std_msgs
+        visualization_msgs
 )
 
 generate_parameter_library(franka_example_controllers_parameters src/comless/model_example_controller_parameters.yaml)

@@ -1,21 +1,13 @@
 import os
-import sys
 import tempfile
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.launch_description_sources import FrontendLaunchDescriptionSource
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, Shutdown
 from launch.conditions import IfCondition
 from launch.substitutions import Command, FindExecutable, LaunchConfiguration
 from launch_ros.actions import Node
-
-_my_task_dir = get_package_share_directory('my_task_description')
-_scenes_dir = os.path.join(_my_task_dir, 'scenes')
-if _scenes_dir not in sys.path:
-    sys.path.insert(0, _scenes_dir)
-import task_scenes  # noqa: E402
-
 
 def concatenate_ns(ns1, ns2, absolute=False):
     if len(ns1) == 0: return ns2
@@ -27,17 +19,25 @@ def concatenate_ns(ns1, ns2, absolute=False):
     if absolute: ns1 = '/' + ns1
     return ns1 + '/' + ns2
 
+def generate_launch_description():
+    arm_id_1_param = "arm_id_1"
+    arm_id_2_param = "arm_id_2"
+    initial_positions_1_param = 'initial_positions_1'
+    initial_positions_2_param = 'initial_positions_2'
+    use_rviz_param = 'use_rviz'
 
-def _build_mujoco_server(context, *args, **kwargs):
-    """运行期生成仿真 XML（含相机注入 + 场景注入）并返回 mujoco server 的 IncludeLaunchDescription。"""
-    import re
-    import yaml
+    arm_id_1 = LaunchConfiguration(arm_id_1_param)
+    arm_id_2 = LaunchConfiguration(arm_id_2_param)
+    initial_positions_1 = LaunchConfiguration(initial_positions_1_param)
+    initial_positions_2 = LaunchConfiguration(initial_positions_2_param)
+    use_rviz = LaunchConfiguration(use_rviz_param)
 
-    scene = LaunchConfiguration('scene').perform(context)
-
-    franka_desc_dir = get_package_share_directory('franka_description')
-    franka_bringup_path = get_package_share_directory('franka_bringup')
     load_gripper = True
+    
+    franka_desc_dir = get_package_share_directory('franka_description')
+    _my_task_dir = get_package_share_directory('my_task_description')
+    franka_bringup_path = get_package_share_directory('franka_bringup')
+    mprc_dir = get_package_share_directory('dual_arm_reactive_control')
 
     mj_dual_file = 'mj_dual.xml' if load_gripper else 'mj_dual_ng.xml'
     mj_dual_path = os.path.join(franka_desc_dir, 'mujoco', 'franka', mj_dual_file)
@@ -48,144 +48,121 @@ def _build_mujoco_server(context, *args, **kwargs):
 
     task_run_dir = os.path.join(tempfile.gettempdir(), 'mujoco_test_env')
     os.makedirs(task_run_dir, exist_ok=True)
-
-    # assets 目录 symlink 到 /tmp 下，mj_dual.xml 的 meshdir="assets" 才能解析
+    
     franka_assets = os.path.join(franka_desc_dir, 'mujoco', 'franka', 'assets')
     symlink_assets = os.path.join(task_run_dir, 'assets')
     if os.path.exists(symlink_assets):
         try:
             os.remove(symlink_assets)
-        except Exception:
+        except:
             pass
     try:
         os.symlink(franka_assets, symlink_assets)
-    except Exception:
+    except:
         pass
 
-    # 读双臂 mj_dual.xml，注入左右相机 body（挂在手部 link 下）
+    import re
     with open(mj_dual_path, 'r') as f:
         mj_dual_text = f.read()
+    
+
 
     mj_dual_text = re.sub(
         r'(<body name="mj_left_hand"[^>]*>)',
-        r'\1\n                        <body name="left_real_camera" pos="0 0 0" quat="1 0 0 0">\n                          <camera name="left_arm_cam" pos="0.104437 0.000332 0.053574" xyaxes="0 -1 0 -0.889756 0 -0.5129 " fovy="100"/>\n                          <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.25" contype="0" conaffinity="0"/>\n                          <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.25" contype="0" conaffinity="0"/>\n                        </body>',
+        r'\1\n                        <body name="left_real_camera" pos="0 0 0" quat="1 0 0 0">\n                          <camera name="left_arm_cam" pos="0.104437 0.000332 0.053574" xyaxes="0 -1 0 -0.889756 0 -0.5129 " fovy="100"/>\n                          <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.25" contype="1" conaffinity="1"/>\n                          <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.25" contype="1" conaffinity="1"/>\n                        </body>',
         mj_dual_text
     )
-
+  
     mj_dual_text = re.sub(
         r'(<body name="mj_right_hand"[^>]*>)',
-        r'\1\n                        <body name="right_real_camera" pos="0 0 0" quat="1 0 0 0">\n                          <camera name="right_arm_cam" pos="0.104437 0.000332 0.053574" xyaxes=" 0 -1 0 -0.889756 0 -0.5129" fovy="100"/>\n                          <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.25" contype="0" conaffinity="0"/>\n                          <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.25" contype="0" conaffinity="0"/>\n                        </body>',
+        r'\1\n                        <body name="right_real_camera" pos="0 0 0" quat="1 0 0 0">\n                          <camera name="right_arm_cam" pos="0.104437 0.000332 0.053574" xyaxes=" 0 -1 0 -0.889756 0 -0.5129" fovy="100"/>\n                          <geom type="mesh" mesh="cam1" material="cam_mat" mass="0.25" contype="1" conaffinity="1"/>\n                          <geom type="mesh" mesh="cam2" material="cam_mat" mass="0.25" contype="1" conaffinity="1"/>\n                        </body>',
         mj_dual_text
     )
-
+    
     dynamic_mj_dual_path = os.path.join(task_run_dir, 'mj_dual_dynamic.xml')
     with open(dynamic_mj_dual_path, 'w') as f:
         f.write(mj_dual_text)
 
-    # 场景注入：按 scene 参数选择任务物体文件（scene='none' 回退默认 objects.xml）
-    scene_include = task_scenes.inject_scene(
-        scene,
-        scenes_dir=os.path.join(_my_task_dir, 'mujoco', 'scenes'),
-        default_objects=objects_path)
-
+    # Generate custom mujoco xml
     xml_content = f"""<mujoco model="my_task_scene">
+
+  <!-- Load the dynamically modified mj_dual model with tracking cameras -->
   <include file="{dynamic_mj_dual_path}"/>
-  {scene_include}
-  <statistic center="0.5 0 0.45" extent="1.2"/>
+  <include file="{objects_path}"/>
+
+  <!-- Visual/Environment Settings -->
+  <statistic center="0.3 0 0.4" extent="1"/>
   <visual>
     <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0"/>
     <rgba haze="0.15 0.25 0.35 1"/>
     <global azimuth="120" elevation="-20" offwidth="640" offheight="480"/>
   </visual>
+
+  <!-- Ground plane & Skybox -->
   <asset>
     <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
     <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3" markrgb="0.8 0.8 0.8" width="300" height="300"/>
     <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+  </asset>
+
+ <!-- My Custom Objects -->
+  <asset>
+    <!-- Use absolute path so MuJoCo finds them from anywhere -->
     <mesh name="cam1" file="{stl_cam1}" scale="0.001 0.001 0.001"/>
     <mesh name="cam2" file="{stl_cam2}" scale="0.001 0.001 0.001"/>
     <material name="cam_mat" rgba="0.7 0.7 0.7 1"/>
   </asset>
+
   <worldbody>
     <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
     <geom name="floor" size="0 0 0.05" pos="0 0 0" type="plane" material="groundplane"/>
-    <camera name="fixed_cam" pos="0.55 0 1.6" fovy="50"/>
-  </worldbody>
+    
+    <!-- World cameras -->
+    <camera name="fixed_cam" pos="1.3 0.0 0.8" xyaxes="0 1 0 -0.5 0 1" fovy="60"/>
+    
+  </worldbody> 
 </mujoco>
 """
+
     temp_xml_path = os.path.join(task_run_dir, 'my_task_scene_dynamic.xml')
     with open(temp_xml_path, 'w') as f:
         f.write(xml_content)
+
     xml_file = temp_xml_path
 
-    # 合并控制器配置 + 相机流参数
-    mjros_config_file = os.path.join(franka_bringup_path, 'config', 'sim',
-                                     'dual_sim_controllers.yaml')
+    franka_xacro_file = os.path.join(franka_desc_dir, 'robots', 'sim', "dual_panda_arm_sim.urdf.xacro")
+
+    mjros_config_file = os.path.join(franka_bringup_path, 'config', 'sim', 'dual_sim_controllers.yaml')
+
+
+    import yaml
     with open(mjros_config_file, 'r') as f:
         merged_config = yaml.safe_load(f)
+    
     if 'mujoco_server' not in merged_config:
         merged_config['mujoco_server'] = {'ros__parameters': {}}
     if 'ros__parameters' not in merged_config['mujoco_server']:
         merged_config['mujoco_server']['ros__parameters'] = {}
-
-    cam_params = {
-        # CPU-only 软渲染下降低分辨率/频率以减小离屏渲染负载（viewer 更流畅）。
-        # 需要高清相机/点云时可调回 width=320 height=240 frequency=30.0。
-        'fixed_cam': {'stream_type': 3, 'frequency': 10.0, 'width': 160, 'height': 120},
-        'left_arm_cam': {'stream_type': 3, 'frequency': 10.0, 'width': 160, 'height': 120},
-        'right_arm_cam': {'stream_type': 3, 'frequency': 10.0, 'width': 160, 'height': 120},
+        
+    merged_config['mujoco_server']['ros__parameters']['cam_config'] = {
+        'fixed_cam': {'stream_type': 1, 'frequency': 30.0, 'width': 320, 'height': 240},
+        'left_arm_cam': {'stream_type': 1, 'frequency': 30.0, 'width': 320, 'height': 240},
+        'right_arm_cam': {'stream_type': 1, 'frequency': 30.0, 'width': 320, 'height': 240}
     }
-    for cam_name, params in cam_params.items():
-        for key, val in params.items():
-            merged_config['mujoco_server']['ros__parameters'][f'{cam_name}.{key}'] = val
-
+    
     merged_mjros_config_file = os.path.join(task_run_dir, 'merged_sim_controllers.yaml')
     with open(merged_mjros_config_file, 'w') as f:
         yaml.dump(merged_config, f)
 
-    # OpaqueFunction 回调必须返回可迭代的 launch action 列表
-    return [IncludeLaunchDescription(
-        FrontendLaunchDescriptionSource(
-            franka_bringup_path + '/launch/sim/launch_mujoco_ros_server.launch'),
-        launch_arguments={
-            'use_sim_time': "true",
-            'unpause': "true",
-            'modelfile': xml_file,
-            'verbose': "true",
-            'ns': "",
-            'mujoco_plugin_config': merged_mjros_config_file
-        }.items()
-    )]
+
+    ns=""
 
 
-def generate_launch_description():
-    arm_id_1_param = "arm_id_1"
-    arm_id_2_param = "arm_id_2"
-    initial_positions_1_param = 'initial_positions_1'
-    initial_positions_2_param = 'initial_positions_2'
-    use_rviz_param = 'use_rviz'
-    cameras_param = 'cameras'
-    scene_param = 'scene'
 
-    arm_id_1 = LaunchConfiguration(arm_id_1_param)
-    arm_id_2 = LaunchConfiguration(arm_id_2_param)
-    initial_positions_1 = LaunchConfiguration(initial_positions_1_param)
-    initial_positions_2 = LaunchConfiguration(initial_positions_2_param)
-    use_rviz = LaunchConfiguration(use_rviz_param)
-    cameras = LaunchConfiguration(cameras_param)
-
-    load_gripper = True
-
-    franka_desc_dir = get_package_share_directory('franka_description')
-    franka_bringup_path = get_package_share_directory('franka_bringup')
-
-    franka_xacro_file = os.path.join(franka_desc_dir, 'robots', 'sim',
-                                     "dual_panda_arm_sim.urdf.xacro")
-
-    ns = ""
 
     robot_description = Command(
-        [FindExecutable(name='xacro'), ' ', franka_xacro_file,
-            ' arm_id_1:=', arm_id_1,
+        [FindExecutable(name='xacro'), ' ', franka_xacro_file, 
+            ' arm_id_1:=', arm_id_1, 
             ' arm_id_2:=', arm_id_2,
             ' hand_1:=', str(load_gripper).lower(),
             ' hand_2:=', str(load_gripper).lower(),
@@ -197,7 +174,7 @@ def generate_launch_description():
         package='robot_state_publisher',
         executable='robot_state_publisher',
         output='screen',
-        namespace=ns,
+        namespace= ns,
         parameters=[params]
     )
 
@@ -210,12 +187,11 @@ def generate_launch_description():
             package='joint_state_publisher',
             executable='joint_state_publisher',
             name='joint_state_publisher',
-            namespace=ns,
+            namespace= ns,
             parameters=[{'source_list': jsp_source_list, 'rate': 30}],
     )
 
-    # Static TF from world to base_link (identity): MuJoCo worldbody == robot base_link.
-    # Required for the fixed_cam point cloud to be transformable into the RViz fixed frame.
+    # Static TF from base_link to world (required for RViz RobotModel)
     node_base_link_tf = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
@@ -223,63 +199,50 @@ def generate_launch_description():
         output='screen',
     )
 
-    def make_pointcloud_node(cam_name):
-        cam_ns = f'/mujoco_server/cameras/{cam_name}'
-        return Node(
-            package='depth_image_proc',
-            executable='point_cloud_xyzrgb_node',
-            name=f'{cam_name}_pointcloud',
-            remappings=[
-                ('depth_registered/image_rect', f'{cam_ns}/depth/image_raw'),
-                ('depth_registered/camera_info', f'{cam_ns}/depth/camera_info'),
-                ('rgb/image_rect_color', f'{cam_ns}/rgb/image_raw'),
-                ('rgb/camera_info', f'{cam_ns}/rgb/camera_info'),
-                ('points', f'{cam_ns}/points'),
-            ],
-            output='screen',
-            # cameras:=false 时跳过点云节点：相机无人订阅即不渲染，
-            # 把 CPU 软渲染预算留给 MuJoCo viewer，避免卡顿。
-            condition=IfCondition(cameras),
-        )
+    node_left_camera_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        arguments=['0', '0', '0', '0.93969262', '0.34202014', '0', '0', 'mj_left_link8', 'left_real_camera'],
+        output='screen',
+    )
 
-    pointcloud_nodes = [
-        make_pointcloud_node('left_arm_cam'),
-        make_pointcloud_node('right_arm_cam'),
-        make_pointcloud_node('fixed_cam'),
-    ]
+    node_right_camera_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        arguments=['0', '0', '0', '0.93969262', '0.34202014', '0', '0', 'mj_right_link8', 'right_real_camera'],
+        output='screen',
+    )
 
-    rviz_file = os.path.join(get_package_share_directory('franka_description'), 'rviz',
-                             'visualize_dual_franka.rviz')
+    rviz_file = os.path.join(get_package_share_directory('franka_description'), 'rviz', 'visualize_dual_franka.rviz')
 
     return LaunchDescription([
         DeclareLaunchArgument(
             use_rviz_param, default_value='false', description='Visualize the robot in Rviz'),
         DeclareLaunchArgument(
-            cameras_param, default_value='true',
-            description='Start the 3 point-cloud nodes (forces continuous camera rendering). '
-                        'Set to false for a smoother MuJoCo viewer on CPU-only machines.'),
-        DeclareLaunchArgument(
-            scene_param, default_value=task_scenes.DEFAULT_SCENE,
-            description=f'Task scene to inject. Available: {task_scenes.KNOWN_SCENES}'),
-        DeclareLaunchArgument(
             arm_id_1_param, default_value='mj_left', description='Unique name of robot 1.'),
         DeclareLaunchArgument(
             arm_id_2_param, default_value='mj_right', description='Unique name of robot 2.'),
         DeclareLaunchArgument(
-            initial_positions_1_param,
-            default_value='"0.0 -0.785 0.0 -2.356 0.0 1.571 0.785"',
-            description='Init pos robot 1.'),
+            initial_positions_1_param, default_value='"0.0 -0.785 0.0 -2.356 0.0 1.571 0.785"', description='Init pos robot 1.'),
         DeclareLaunchArgument(
-            initial_positions_2_param,
-            default_value='"0.0 -0.785 0.0 -2.356 0.0 1.571 0.785"',
-            description='Init pos robot 2.'),
+            initial_positions_2_param, default_value='"0.0 -0.785 0.0 -2.356 0.0 1.571 0.785"', description='Init pos robot 2.'),
 
-        OpaqueFunction(function=_build_mujoco_server),
+        IncludeLaunchDescription(
+            FrontendLaunchDescriptionSource(franka_bringup_path + '/launch/sim/launch_mujoco_ros_server.launch'),
+            launch_arguments={
+                'use_sim_time': "true",
+                'modelfile': xml_file,
+                'verbose': "false",
+                'ns': ns,
+                'mujoco_plugin_config': merged_mjros_config_file
+            }.items()
+        ),
 
         node_robot_state_publisher,
         node_joint_state_publisher,
         node_base_link_tf,
-        *pointcloud_nodes,
+        node_left_camera_tf,
+        node_right_camera_tf,
 
         Node(
             package='controller_manager',
@@ -290,7 +253,7 @@ def generate_launch_description():
         Node(
             package='controller_manager',
             executable='spawner',
-            arguments=['multi_cartesian_impedance_controller', '-c', concatenate_ns(ns, 'controller_manager', True)],
+            arguments=['dual_joint_impedance_controller', '-c', concatenate_ns(ns, 'controller_manager', True), '--param-file', merged_mjros_config_file],
             output='screen',
         ),
         Node(
@@ -312,5 +275,21 @@ def generate_launch_description():
              name='rviz2',
              arguments=['--display-config', rviz_file],
              condition=IfCondition(use_rviz)
-             )
+             ),
+        # Collision environment visualizer
+        Node(
+            package='dual_arm_reactive_control',
+            executable='collision_env_visualizer_node',
+            name='collision_env_visualizer',
+            output='screen',
+            parameters=[{
+                'collision_env_config': os.path.join(mprc_dir, 'config', 'collision_env_my_task.yaml'),
+                'collision_spheres_config': os.path.join(mprc_dir, 'config', 'panda_collision_spheres.yaml'),
+                'base_frame': 'base_link',
+                'robot1_prefix': 'mj_left',
+                'robot2_prefix': 'mj_right',
+                'robot1_xyz': [0.0, 0.26, 0.0],
+                'robot2_xyz': [0.0, -0.26, 0.0]
+            }]
+        )
     ])

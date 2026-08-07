@@ -3,6 +3,7 @@ mujoco_server:
     MujocoPlugins:
       names:
         - mujoco_ros2_control
+        - dynamic_obstacles
       mujoco_ros2_control:
         type: mujoco_ros2_control::MujocoRos2ControlPlugin
         hardware:
@@ -12,6 +13,8 @@ mujoco_server:
           namespace: ""
           robot_description_node: "robot_state_publisher"
           robot_description: "robot_description"
+      dynamic_obstacles:
+        type: mujoco_ros::DynamicObstaclesPlugin
 
 controller_manager:
   ros__parameters:
@@ -132,51 +135,70 @@ sim_multi_mode_controller:
 dual_joint_impedance_controller:
   ros__parameters:
     arm_count: 2
+    control_frequency: 1000.0
+    publish_rate: 100.0
     arm_1:
       arm_id: mj_left
       k_gains:
-        - 24.0
-        - 24.0
-        - 24.0
-        - 24.0
-        - 10.0
-        - 6.0
-        - 2.0
+        - 600.0
+        - 600.0
+        - 600.0
+        - 600.0
+        - 250.0
+        - 150.0
+        - 100.0
       d_gains:
-        - 2.0
-        - 2.0
-        - 2.0
-        - 1.0
-        - 1.0
-        - 1.0
-        - 0.5
+        - 30.0
+        - 30.0
+        - 30.0
+        - 15.0
+        - 12.0
+        - 12.0
+        - 9.0
+      e_q_max:
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+      alpha_filt: 0.01
     arm_2:
       arm_id: mj_right
       k_gains:
-        - 24.0
-        - 24.0
-        - 24.0
-        - 24.0
-        - 10.0
-        - 6.0
-        - 2.0
+        - 600.0
+        - 600.0
+        - 600.0
+        - 600.0
+        - 250.0
+        - 150.0
+        - 100.0
       d_gains:
-        - 2.0
-        - 2.0
-        - 2.0
-        - 1.0
-        - 1.0
-        - 1.0
-        - 0.5
+        - 30.0
+        - 30.0
+        - 30.0
+        - 15.0
+        - 12.0
+        - 12.0
+        - 9.0
+      e_q_max:
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+      alpha_filt: 0.01
 
 multi_cartesian_impedance_controller:
   ros__parameters:
     arm_count: 2
     arm_1:
       arm_id: mj_left
-      pos_stiff: 100.0
-      rot_stiff: 10.0
+      pos_stiff: [100.0, 100.0, 100.0, 10.0, 10.0, 10.0]
     arm_2:
       arm_id: mj_right
-      pos_stiff: 100.0
-      rot_stiff: 10.0
+      pos_stiff: [100.0, 100.0, 100.0, 10.0, 10.0, 10.0]
+

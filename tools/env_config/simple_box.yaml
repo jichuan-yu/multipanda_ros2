@@ -1,0 +1,10 @@
+description: "Simple test environment with a few obstacles"
+
+collision_objects:
+  - id: "box_01"
+    type: "Box"
+    dimensions: [0.3, 0.4, 1.0]
+    pose:
+      position: [0.70, 0.00, 0.50]
+    material:
+      rgba: [1.0, 0.5, 0.0, 1.0]

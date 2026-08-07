@@ -1,0 +1,39 @@
+description: "Simple test environment with a few obstacles"
+
+collision_objects:
+  - id: "box_01"
+    type: "Box"
+    dimensions: [0.4, 1.0, 0.02]
+    pose:
+      position: [0.65, 0.0, 0.10]
+    material:
+      rgba: [1.0, 0.5, 0.0, 1.0]
+
+  - id: "box_02"
+    type: "Box"
+    dimensions: [0.4, 1.0, 0.02]
+    pose:
+      position: [0.65, 0.0, 0.60]
+    material:
+      rgba: [1.0, 0.5, 0.0, 1.0]
+
+  - id: "box_03"
+    type: "Box"
+    dimensions: [0.02, 0.8, 0.08]
+    pose:
+      position: [0.55, 0.0, 0.15]
+    movable: true
+    density: 1.0
+    material:
+      rgba: [0.2, 0.8, 0.2, 1.0]
+
+  - id: "ball_01"
+    type: "Sphere"
+    dimensions: [0.05]
+    pose:
+      position: [0.60, 0.0, 0.25]
+    movable: true
+    density: 10000.0
+    gravcomp: 1.0
+    material:
+      rgba: [0.8, 0.2, 0.2, 1.0]

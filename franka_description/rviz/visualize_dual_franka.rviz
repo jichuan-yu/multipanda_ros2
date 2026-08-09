@@ -8,7 +8,8 @@ Panels:
         - /Status1
         - /RobotModel1
         - /RobotModel1/Description Topic1
-        - /RobotModel1/Links1
+        - /Right Arm PointCloud1
+        - /Right Arm PointCloud1/Topic1
         - /TF1
       Splitter Ratio: 0.5
     Tree Height: 787
@@ -59,7 +60,7 @@ Visualization Manager:
         Value: /robot_description
       Enabled: true
       Links:
-        All Links Enabled: false
+        All Links Enabled: true
         Expand Joint Details: false
         Expand Link Details: false
         Expand Tree: false
@@ -68,135 +69,145 @@ Visualization Manager:
           Alpha: 1
           Show Axes: false
           Show Trail: false
-          Value: false
-        left_hand:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: false
-        left_hand_tcp:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        left_leftfinger:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: false
-        left_link0:
+          Value: true
+        left_real_camera:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        left_link1:
+        mj_left_hand:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        left_link2:
+        mj_left_hand_tcp:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        mj_left_leftfinger:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        left_link3:
+        mj_left_link0:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        left_link4:
+        mj_left_link1:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        left_link5:
+        mj_left_link2:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        left_link6:
+        mj_left_link3:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        left_link7:
+        mj_left_link4:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        left_link8:
+        mj_left_link5:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        left_rightfinger:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: false
-        right_hand:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: false
-        right_hand_tcp:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        right_leftfinger:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: false
-        right_link0:
+        mj_left_link6:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        right_link1:
+        mj_left_link7:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        right_link2:
+        mj_left_link8:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        right_link3:
+        mj_left_rightfinger:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        right_link4:
+        mj_right_hand:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        right_link5:
+        mj_right_hand_tcp:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        mj_right_leftfinger:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        right_link6:
+        mj_right_link0:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        right_link7:
+        mj_right_link1:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        right_link8:
+        mj_right_link2:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        right_rightfinger:
+        mj_right_link3:
           Alpha: 1
           Show Axes: false
           Show Trail: false
-          Value: false
+          Value: true
+        mj_right_link4:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        mj_right_link5:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        mj_right_link6:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        mj_right_link7:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        mj_right_link8:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        mj_right_rightfinger:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        right_real_camera:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
       Mass Properties:
         Inertia: false
         Mass: false
@@ -232,6 +243,7 @@ Visualization Manager:
       Topic:
         Depth: 5
         Durability Policy: Volatile
+        Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /mujoco_server/cameras/left_arm_cam/points
@@ -265,8 +277,9 @@ Visualization Manager:
       Topic:
         Depth: 5
         Durability Policy: Volatile
+        Filter size: 10
         History Policy: Keep Last
-        Reliability Policy: Reliable
+        Reliability Policy: Best Effort
         Value: /mujoco_server/cameras/right_arm_cam/points
       Use Fixed Frame: true
       Use rainbow: true
@@ -298,6 +311,7 @@ Visualization Manager:
       Topic:
         Depth: 5
         Durability Policy: Volatile
+        Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /mujoco_server/cameras/fixed_cam/points
@@ -309,13 +323,129 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: true
+        base_link:
+          Value: true
+        fixed_cam_link:
+          Value: true
+        fixed_cam_optical_frame:
+          Value: true
+        left_arm_cam_link:
+          Value: true
+        left_arm_cam_optical_frame:
+          Value: true
+        left_real_camera:
+          Value: true
+        mj_left_hand:
+          Value: true
+        mj_left_hand_tcp:
+          Value: true
+        mj_left_leftfinger:
+          Value: true
+        mj_left_link0:
+          Value: true
+        mj_left_link1:
+          Value: true
+        mj_left_link2:
+          Value: true
+        mj_left_link3:
+          Value: true
+        mj_left_link4:
+          Value: true
+        mj_left_link5:
+          Value: true
+        mj_left_link6:
+          Value: true
+        mj_left_link7:
+          Value: true
+        mj_left_link8:
+          Value: true
+        mj_left_rightfinger:
+          Value: true
+        mj_right_hand:
+          Value: true
+        mj_right_hand_tcp:
+          Value: true
+        mj_right_leftfinger:
+          Value: true
+        mj_right_link0:
+          Value: true
+        mj_right_link1:
+          Value: true
+        mj_right_link2:
+          Value: true
+        mj_right_link3:
+          Value: true
+        mj_right_link4:
+          Value: true
+        mj_right_link5:
+          Value: true
+        mj_right_link6:
+          Value: true
+        mj_right_link7:
+          Value: true
+        mj_right_link8:
+          Value: true
+        mj_right_rightfinger:
+          Value: true
+        right_arm_cam_link:
+          Value: true
+        right_arm_cam_optical_frame:
+          Value: true
+        right_real_camera:
+          Value: true
+        world:
+          Value: true
       Marker Scale: 1
       Name: TF
       Show Arrows: true
       Show Axes: true
       Show Names: false
       Tree:
-        {}
+        world:
+          base_link:
+            mj_left_link0:
+              mj_left_link1:
+                mj_left_link2:
+                  mj_left_link3:
+                    mj_left_link4:
+                      mj_left_link5:
+                        mj_left_link6:
+                          mj_left_link7:
+                            mj_left_link8:
+                              left_real_camera:
+                                left_arm_cam_link:
+                                  left_arm_cam_optical_frame:
+                                    {}
+                              mj_left_hand:
+                                mj_left_hand_tcp:
+                                  {}
+                                mj_left_leftfinger:
+                                  {}
+                                mj_left_rightfinger:
+                                  {}
+            mj_right_link0:
+              mj_right_link1:
+                mj_right_link2:
+                  mj_right_link3:
+                    mj_right_link4:
+                      mj_right_link5:
+                        mj_right_link6:
+                          mj_right_link7:
+                            mj_right_link8:
+                              mj_right_hand:
+                                mj_right_hand_tcp:
+                                  {}
+                                mj_right_leftfinger:
+                                  {}
+                                mj_right_rightfinger:
+                                  {}
+                              right_real_camera:
+                                right_arm_cam_link:
+                                  right_arm_cam_optical_frame:
+                                    {}
+          fixed_cam_link:
+            fixed_cam_optical_frame:
+              {}
       Update Interval: 0
       Value: true
   Enabled: true
@@ -364,7 +494,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 2.6592085361480713
+      Distance: 1.6854033470153809
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -379,10 +509,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.5853976607322693
+      Pitch: 0.15039785206317902
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 6.112242221832275
+      Yaw: 5.772244453430176
     Saved: ~
 Window Geometry:
   Displays:
@@ -398,5 +528,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1850
-  X: 70
-  Y: 27
+  X: 106
+  Y: 336

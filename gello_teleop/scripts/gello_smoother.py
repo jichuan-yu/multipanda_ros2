@@ -96,14 +96,6 @@ class Smoother:
 
         self.q_target_smooth += move
 
-        # 限位裁剪
-        for i in range(7):
-            self.q_target_smooth[i] = np.clip(
-                self.q_target_smooth[i],
-                self.joint_limits[i, 0],
-                self.joint_limits[i, 1]
-            )
-
         return self.q_target_smooth.copy()
 
     # ---------- 状态查询 ----------

@@ -1,0 +1,342 @@
+# 相对误差复现实验 · 分步操作手册（手动模式）
+
+> 复现 `docs/relative_error.md` 的 6 组实验：双臂绝对式任务空间遥操作，向前 0.01 m
+> 再返回，监控 teleop / safe 相对位姿误差并绘图。
+>
+> 跟上**原版做法**，脚本尽量少：monitor 只对 `command_type=5`（TASK_SPACE_POSE）有意义地算
+> `teleop_err`，且它只要求“命令里左右手的相对几何不变”。那就用仓库 7/31 就为
+> “重复实验”准备好的一对原版工具（提交 `efde396`，均为已跟踪脚本）：
+>
+>   **录制** `record_teleop_cmd.py`（把 `/dualarm_teleop_cmd` 原样存 CSV）
+>   → **回放** `replay_teleop_cmd.py`（100 Hz 原样重发）——录一次，六组实验任意回放。
+>
+> 键盘绝对版 `key_teleop_cartesian_absolute.py` 启动会把命令基**锚定到真实 EE**（首帧
+> `/joint_states` 的 FK；`/ee_pose` 有流则优先用它），因此一致/不一致（exp03/06）六组
+> 都能直接驱动、保持相对几何；若想用
+> 「方案 B」造锚定当前真实 EE 的波形也可（同为仓库脚本，效果等价），按需二选一。
+>
+> 别用本地新增的 `auto_absolute_teleop.py`：远程仓库没有这个文件（未跟踪），原版实验不可能用它；
+> 且绝对位姿命令在 `bypass_qp_safety_for_debug:=true` 下
+> 速度 = `Jᶜⁱ·(T_target−T_current)/0.01`、**没有任何限幅**，锚点与真实 EE 稍有偏差就会
+> 完全失控，与 error.md 中 bypass 组平滑且 safe_err≈0 的行为不符。
+>
+> 这批结果输出到 **`data/mprc/`** 下，前缀统一用 `exp01_…` ~ `exp06_…`。
+> 注意：`data/mprc/20260813_*.csv`（约 24MB / 17MB）是失败/NaN 的旧数据，请忽略。
+
+---
+
+## 0. 前置（每个终端都执行一次）
+
+在**桌面终端**里打开 4 个标签页（sim 需要图形显示，不要在纯 SSH 无头会话里起 sim）：
+
+```bash
+cd ~/dual_panda_ws
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+# 如果你平时还要额外 source 别的东西（例如导出 DISPLAY），保持你平时的环境即可
+```
+
+确认话题能通（起过一次后可用）：
+
+```bash
+ros2 topic list | grep -E 'joint_states|joints_desired'
+```
+
+---
+
+## 1. 每组实验只做 6 步
+
+> 以「实验 1：缓速 + Safe + 关节一致」为例；每组差异只在这 6 步的参数里。
+>
+> **注意**：以下所有命令默认在 `~/dual_panda_ws` 下运行，每段代码块第一行都已内置
+> `cd && source`，整段复制粘贴即可（之前已 source 过环境的话，重复 source 无副作用）。
+
+### 步骤 A（终端 1）启动仿真器 sim
+
+```bash
+cd ~/dual_panda_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
+ros2 launch my_task_description my_task_sim.launch.py use_rviz:=false \
+  'initial_positions_1:="0.0 -0.785 0.0 -2.356 0.0 1.571 0.785"' \
+  'initial_positions_2:="0.0 -1.100 0.0 -2.800 0.0 1.900 0.900"'
+```
+
+- **构型（关节角度）由 initial_positions_1/2 决定**，必须整条用**单引号**包住 `name:=value`，
+  值内部还要保留一对**双引号**（这是 `my_task_sim.launch.py` 的 Command 拼接要求，
+  否则 ros2 launch 会把空格拆开，xacro 报 `error: no such option: -0`）。
+- 每个构型换参数即可：
+
+| 构型 | initial_positions_1 | initial_positions_2 |
+|------|--------------------|--------------------|
+| 一致（symmetric） | `"0.0 -0.785 0.0 -2.356 0.0 1.571 0.785"` | `"0.0 -0.785 0.0 -2.356 0.0 1.571 0.785"` |
+| 不一致（asymmetric，右臂） | `"0.0 -0.785 0.0 -2.356 0.0 1.571 0.785"` | `"0.0 -1.100 0.0 -2.800 0.0 1.900 0.900"` |
+
+等待 `joint_states` 有频率（约 30~60 s；等不到就再等一会儿）：
+
+```bash
+cd ~/dual_panda_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
+ros2 topic hz /joint_states
+```
+
+出现形如 `average rate: 1000.XXX` 即可 Ctrl-C 退出 hz。
+
+### 步骤 B（终端 2）启动安全控制器 main_sim_node
+
+Safe 组（开 QP + 协同约束，默认也是这组值）：
+
+```bash
+cd ~/dual_panda_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
+ros2 run dual_arm_reactive_control main_sim_node --ros-args \
+  -p bypass_qp_safety_for_debug:=false \
+  -p relative_pose_constraint_enabled:=true
+```
+（控制器用相对路径读 `./src/dualarm_mprc/.../config/*.yaml`，**必须在工作区根启动**，否则报 `YAML::BadFile`）
+
+Bypass 组：
+
+```bash
+cd ~/dual_panda_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
+ros2 run dual_arm_reactive_control main_sim_node --ros-args \
+  -p bypass_qp_safety_for_debug:=true \
+  -p relative_pose_constraint_enabled:=false
+```
+
+等待期望关节命令话题就绪：
+
+```bash
+cd ~/dual_panda_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
+ros2 topic hz /mj_left/joints_desired
+ros2 topic hz /mj_right/joints_desired
+```
+
+### 步骤 C（终端 3）启动 relative_error_monitor（写 CSV）
+
+```bash
+cd ~/dual_panda_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
+ros2 run dual_arm_reactive_control relative_error_monitor_node --ros-args \
+  -p output_path:=/home/botao/dual_panda_ws/data/mprc/ \
+  -p output_prefix:=exp01_relative_error
+```
+
+- 输出文件：`data/mprc/exp01_relative_error.csv`（`output_path + output_prefix + ".csv"`）。
+- 启动日志里应看到 **"Initial relative position baseline set"** 以及左右 EE 坐标、
+  相对距离（一致构型 ≈ 0.52）。这行出现后再做步骤 D。
+
+### 步骤 D（终端 4）录制指令 → 回放（原版工具：record_teleop_cmd + replay_teleop_cmd）
+
+> 为什么这样做（简短版）：monitor 从 `/dualarm_teleop_cmd` 读 `data[14]` 作为 command_type，
+> 只有 type=5 时会直接取命令里的左右 EE（`data[0..2]` / `data[7..9]`）算 `teleop_err`。
+> 所以只要“命令里左右手相对几何不变”，六组都能得到 `teleop_err ≈ 0`。而绝对位姿命令在
+> bypass 下速度 = `Jᶜⁱ·(T_target−T_current)/0.01`、**无任何限幅**，目标必须等于真实 EE。
+> 仓库原版的做法就是**先录后放**：录制时是什么命令，回放就是什么命令——相对几何天然不变。
+
+**D-1 录制一段「相对几何不变」的 type=5 驱动**（一个构型录一次即可，六组实验可反复回放）。
+开车源二选一：
+
+- **方法一（最省事，六组 exp01–06 均可用）**：开键盘绝对版 `key_teleop_cartesian_absolute.py`
+  （命令见步骤 D′）当驱动器，按 **W×5**（+0.01 m）→ 停 ~6 s → **S×5** 回原点 → 停 ~6 s。
+  左右 x 同步、相对距离恒定 → 录到的命令天然满足 teleop_err≈0。脚本启动时会把命令基
+  **锚定到真实左右 EE**（首帧 `/joint_states` 的 FK；`/ee_pose` 有流则优先用它），
+   因此一致、非一致（exp03/06）构型都适用。
+- **方法二（通用，含不一致构型 exp03/06）**：用下文「方案 B」先造一段锚定当前真实 EE 的波形，
+  开着录制器边播边录（先起录制器，再起播放，播完停录制器）。
+
+录制命令（终端 4；先启动，再在别的终端开车）：
+
+```bash
+cd ~/dual_panda_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
+export LD_LIBRARY_PATH=/opt/ros/humble/lib:${LD_LIBRARY_PATH}
+export PYTHONPATH=/opt/ros/humble/local/lib/python3.10/dist-packages:/opt/ros/humble/lib/python3.10/site-packages:${PWD}/src/multipanda_ros2:${PYTHONPATH}
+python3 src/multipanda_ros2/teleop/record_teleop_cmd.py data/mprc/exp01_cmd.csv
+```
+
+看到 `已录制 2000+ 条指令` 后 Ctrl-C 停录。录音文件 17 列、含 `command_type=5`。
+
+**D-2 回放**（每组实验监视器起来后只做这一步；按 Enter 开始，和录制时同样的波形、同样的速度）：
+
+```bash
+cd ~/dual_panda_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
+export LD_LIBRARY_PATH=/opt/ros/humble/lib:${LD_LIBRARY_PATH}
+export PYTHONPATH=/opt/ros/humble/local/lib/python3.10/dist-packages:/opt/ros/humble/lib/python3.10/site-packages:${PWD}/src/multipanda_ros2:${PYTHONPATH}
+python3 src/multipanda_ros2/teleop/replay_teleop_cmd.py data/mprc/exp01_cmd.csv
+```
+
+- 回放时长 = 录音时长（缓速 ~20–30 s / 快速 ~10 s）；看到 `回放完成！共发送 N 条指令` 后，
+  再等 ~6 s（控制器 0.5 s 超时回 STOPPING 停在终点/原点），然后进入步骤 E。
+- 六组实验可共用同一份录音（一致组共 `exp01_cmd.csv`，不一致组用方案 B 造的 `exp03_cmd.csv`）。
+
+### 方案 B（备用信号源 / exp03/06 录制时的“造波形”工具）
+
+等价链依然是仓库已跟踪脚本：`record_ee_pose.py`（录真实 EE）→ `gen_anchored_sweep.py`
+（造 ±0.01 m 回返波形）→ `csv_teleop_cartesian_absolute.py`（100 Hz 播放）。
+也可以边播边用 D-1 的录制器，把它转成 cmd CSV 后统一走 D-2 回放。
+
+**B-1 录制当前真实末端位姿**（录 3~5 s，看到 `Recorded … rows` 后 Ctrl-C）：
+
+```bash
+cd ~/dual_panda_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
+export LD_LIBRARY_PATH=/opt/ros/humble/lib:${LD_LIBRARY_PATH}
+export PYTHONPATH=/opt/ros/humble/local/lib/python3.10/dist-packages:/opt/ros/humble/lib/python3.10/site-packages:${PWD}/src/multipanda_ros2:${PYTHONPATH}
+python3 src/multipanda_ros2/teleop/record_ee_pose.py data/mprc/exp01_ee_base.csv
+```
+
+**B-2 生成「锚定当前位姿」的 ±0.01 m sweep 轨迹**（`<interval>` 缓速填 `2.0`、快速填 `0.1`）：
+
+```bash
+cd ~/dual_panda_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
+export LD_LIBRARY_PATH=/opt/ros/humble/lib:${LD_LIBRARY_PATH}
+export PYTHONPATH=/opt/ros/humble/local/lib/python3.10/dist-packages:/opt/ros/humble/lib/python3.10/site-packages:${PWD}/src/multipanda_ros2:${PYTHONPATH}
+python3 src/multipanda_ros2/teleop/gen_anchored_sweep.py data/mprc/exp01_ee_base.csv data/mprc/exp01_teleop.csv 2.0
+```
+
+- 输出 `wrote ... : 12 pts, apex l_x=0.3172`（apex ≈ 锚点 + 0.01 m）。它做的事：以 B-1 录到的
+  “两只手真实位置”为起点，双臂每次一起沿 x 走 0.002 m、5 步到 +0.01 m，顶点停 6 s，再一步步
+  回到原点停 6 s。**左右手相对位置全程不变** → 任何构型下播放都满足 teleop_err≈0。
+- `gen_anchored_sweep.py` 是本地新增的辅助脚本（不在远程仓库），只把生成算术固化成一行，
+  原版可执行链仍只有 `record_ee_pose.py` + `csv_teleop_cartesian_absolute.py`。
+
+**B-3 播放**（等等 `/joint_states` 就绪后自动开始；两时间戳之间 100 Hz 保持同一条目标）：
+
+```bash
+cd ~/dual_panda_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
+export LD_LIBRARY_PATH=/opt/ros/humble/lib:${LD_LIBRARY_PATH}
+export PYTHONPATH=/opt/ros/humble/local/lib/python3.10/dist-packages:/opt/ros/humble/lib/python3.10/site-packages:${PWD}/src/multipanda_ros2:${PYTHONPATH}
+python3 src/multipanda_ros2/teleop/csv_teleop_cartesian_absolute.py --csv-file data/mprc/exp01_teleop.csv --rate 100.0
+```
+
+- 正常输出看 L/R 的 x 从 ~0.307 走到 ~0.317 再回 ~0.307，最后 `Trajectory playback complete.`。
+- 缓速（interval=2.0）约 26 s、快速（0.1）约 7 s；播完再等 ~6 s 进步骤 E。
+- 若同时开着录制器，这段播放会被原样录成 cmd CSV，之后统一用 D-2 回放。
+
+### 步骤 D′（可选）键盘手动绝对遥操作 — 六组全部适用（exp01–06）
+
+现成脚本 `teleop/key_teleop_cartesian_absolute.py` 同用 `command_type=5` 通路，
+启动时**用首帧 `/joint_states` 的 FK 把命令基锚定到真实左右 EE**（`/ee_pose` 有流则
+优先用该话题；锚定值即真实 EE，不再是硬编码 home `[0.307, ±0.26, 0.487]`），
+后续按键 = `锚定点 + 步长`。命令相对几何 == 真实起始相对几何，与步骤 D（录播）语义等价，
+一致、非一致（exp03/06）构型都适用，可直接当 D-1 方法一的“开车源”。
+
+> **注意**：等终端打出 `End-effector pose feedback received. Ready for control!` 和
+> `Command base anchored to startup real EE pose ...` 后再按键。锚定数据源 = 首帧
+> `/joint_states` 的 FK（与 monitor 基线同源；`/ee_pose` 有流则优先用它）。锚定前移动键
+> 会被忽略（`target_ee_poses is None` 门控，提示 `Waiting for real EE feedback...`），
+> 避免把命令基准错在旧硬编码 home 上导致跳变/猛冲。
+
+```bash
+cd ~/dual_panda_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
+export LD_LIBRARY_PATH=/opt/ros/humble/lib:${LD_LIBRARY_PATH}
+export PYTHONPATH=/opt/ros/humble/local/lib/python3.10/dist-packages:/opt/ros/humble/lib/python3.10/site-packages:${PWD}/src/multipanda_ros2:${PYTHONPATH}
+python3 src/multipanda_ros2/teleop/key_teleop_cartesian_absolute.py --arm both --step-position 0.002
+```
+
+键位：W/S=X 轴前/后（+0.002/−0.002 m）、A/D=Y、Q/E=Z、J/L/I/K/U/O=旋转、
+Z/X/B=左臂/右臂/双臂、N/M=夹爪、Ctrl-C=退出。操作：**W 按 5 次**（0.01 m）
+→ 保持 ~6 s → **S 按 5 次** 返回 → 保持 ~6 s → 步骤 E。
+
+- **六组（exp01–06）均可使用**：启动即锚定真实 EE，命令相对几何与真实起始相对构型一致，
+  Safe/bypass 首条指令 delta≈0，无跳变、无猛冲，行为与步骤 D 等价。
+- 若按移动键只提示 `Waiting for real EE feedback (FK from /joint_states, or /ee_pose)...`，
+  说明还没锚定（通常 sim/控制器未起），等 "Ready for control!" 后再操作。
+- 非一致组（exp03/06）若仍想用“方案 B”造波形，可继续走
+  `record_ee_pose.py → gen_anchored_sweep.py → csv_teleop_cartesian_absolute.py` 的回放路线；
+  但键盘手动现在也是等价可用的开车源。
+- **不要改用增量版 `key_teleop_cartesian.py`（command_type=2）**：monitor 会把它误路由为关节增量
+  （`processTaskSpaceCommand → processJointCommand(JOINT_POSITION_INCREMENT)`），
+  算出的 `teleop_err` 语义错误，复现不了 error.md 的 `teleop_err ≈ 0 mm`。
+
+### 步骤 E（收尾）清场 + 检查 CSV
+
+```bash
+pkill -f replay_teleop_cmd; pkill -f record_teleop_cmd; pkill -f record_ee_pose; pkill -f csv_teleop_cartesian_absolute; pkill -f gen_anchored_sweep; pkill -f key_teleop_cartesian_absolute; pkill -f key_teleop_cartesian; pkill -f relative_error_monitor_node
+pkill -f main_sim_node; pkill -f my_task_sim.launch.py; sleep 3
+```
+
+检查 CSV 是否有效（应有真实数值，NaN 比例应很低）：
+
+```bash
+cd ~/dual_panda_ws
+head -5 data/mprc/exp01_relative_error.csv
+wc -l data/mprc/exp01_relative_error.csv
+```
+
+> 8/13 那批 24 MB 的 CSV 是 NaN 灌水，**无效**。每行都有合理数的 CSV（通常 ~100 Hz，
+> 30 s 实验 ≈ 3000 行）才是有效数据。
+
+### 步骤 F（后处理）绘图
+
+```bash
+cd ~/dual_panda_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
+python3 src/multipanda_ros2/teleop/plot_relative_error.py \
+  data/mprc/exp01_relative_error.csv -o data/mprc/exp01_relative_error_plot.png
+```
+
+---
+
+## 2. 六组实验对照表
+
+| # | 构型 | interval(s) | bypass_qp_safety_for_debug | relative_pose_constraint_enabled | CSV 前缀 |
+|---|------|------------|---------------------------|--------------------------------|----------|
+| 1 | 一致 | 2.0 | false | true | exp01 |
+| 2 | 一致 | 0.1 | false | true | exp02 |
+| 3 | 不一致 | 0.1 | false | true | exp03 |
+| 4 | 一致 | 2.0 | true | false | exp04 |
+| 5 | 一致 | 0.1 | true | false | exp05 |
+| 6 | 不一致 | 0.1 | true | false | exp06 |
+
+每组按第 1 节的 A→B→C→D→E→F 走一遍，把步骤 D/C 里的 `exp0X` 前缀和参数换成表内值。
+预计每组 2~3 分钟，6 组共 15~20 分钟。
+
+## 3. 汇总（跑完第 2 节全部实验之后）
+
+一键统计 6 组 CSV 的峰值误差，复制到终端：
+
+```bash
+cd ~/dual_panda_ws && python3 - <<'PY'
+import pandas as pd, glob, os, numpy as np
+files = sorted(glob.glob('data/mprc/exp0*_relative_error.csv'))
+print(f"{'file':38s} {'rows':>7s} {'NaN%':>6s} {'teleop_max_mm':>13s} {'safe_max_mm':>12s}")
+for f in files:
+    df = pd.read_csv(f)
+    n_nan = int(df[['teleop_err_norm','safe_err_norm']].isna().sum().sum())
+    tot = df[['teleop_err_norm','safe_err_norm']].size
+    print(f"{os.path.basename(f):38s} {len(df):7d} {100*n_nan/tot:5.1f}% "
+          f"{np.nanmax(df['teleop_err_norm'])*1e3:10.3f} {np.nanmax(df['safe_err_norm'])*1e3:10.3f}")
+PY
+```
+
+画六合一对比图（可选）：
+
+```bash
+cd ~/dual_panda_ws && python3 - <<'PY'
+import pandas as pd, matplotlib.pyplot as plt, glob, os
+fig, axes = plt.subplots(2,3, figsize=(18,8), sharex=True)
+for ax, f in zip(axes.ravel(), sorted(glob.glob('data/mprc/exp0*_relative_error.csv'))):
+    df = pd.read_csv(f)
+    df['time'] = df['timestamp'] - df['timestamp'].iloc[0]
+    ax.plot(df['time'], df['teleop_err_norm']*1e3, label='teleop', lw=1.2)
+    ax.plot(df['time'], df['safe_err_norm']*1e3, label='safe', lw=1.2)
+    ax.set_title(os.path.basename(f)[:8]); ax.legend(); ax.grid(alpha=.3)
+    ax.set_xlabel('t(s)'); ax.set_ylabel('mm')
+plt.tight_layout(); plt.savefig('data/mprc/exp01-06_compare.png', dpi=130); print('saved exp01-06_compare.png')
+PY
+```
+
+---
+
+## 4. 常见问题
+
+| 现象 | 原因 / 处理 |
+|------|------------|
+| 在 `~` 或其他目录复制命令，报找不到包 / `YAML::BadFile` / 找不到 yaml | 控制器按相对路径读 ./src/... 配置，必须先 `cd ~/dual_panda_ws`。本手册每段命令已内置 cd，整段复制即可 |
+| teleop 报 `ModuleNotFoundError: No module named 'rclpy'` | 漏了 ROS 底层环境。先 `source /opt/ros/humble/setup.bash` 再 `source install/setup.bash`。本手册窗口型命令块已统一内置两步 source，整段复制即可 |
+| 已带双 source 仍报 `No module named 'rclpy'`（终端不加载环境变量） | 你的终端没有真正载入 humble。用步骤 D 命令块里的两行 `export` 显式注入 `/opt/ros/humble/*` 路径（保底写法，已验证），随后手动注入后可先跑 `python3 -c "import rclpy"` 自检 |
+| launch 报 `xacro: error: no such option: -0` | initial_positions 传参丢引号。按本手册写：外层单引号 + 值内双引号 |
+| mujoco 报 `Failed to initialize GLFW` | 在无图形终端（纯 SSH）起 sim。改用桌面终端，或 `xvfb-run -a ros2 launch ...` |
+| teleop 打印 `FAIL: no /joint_states within 20s` | sim 还没就绪，先确认 `ros2 topic hz /joint_states` 有输出再跑 |
+| teleop 一直收不到目标/手臂不动 | 步骤 A/B 的话题都就绪后再跑 C/D；顺序别反 |
+| CSV 前 1-2 行 NaN | 正常（monitor 等第一条 teleop/safe 命令），建议从第 3 行起统计 |
+| 旧掉线后 monitor 不再写 | Ctrl-C 该组 monitor 进程，下组用新前缀重新起 |
+| 键盘脚本报 `ModuleNotFoundError: No module named 'rclpy'` | 与自动版同理，用步骤 D′ 命令块里两行 `export` 显式注入 `/opt/ros/humble/*` 路径（已验证） |
+| 按 W 右臂先「跳」到 home 附近再走 | 说明命令基仍是旧硬编码 home（老版本脚本）。用更新后的绝对版：启动时会在首帧 `/joint_states` FK 自动锚定（`/ee_pose` 有流则优先用它）并打印 `Command base anchored...`；若仍跳，重启脚本等锚定提示后再按键 |
+| bypass 组一开就失控/猛冲 | 绝对命令 bypass 下速度=`Jᶜⁱ·(T_target−T_current)/0.01`、无任何限幅，锚点必须等于真实 EE。录制/锚定务必在机器人稳定到初始构型后进行；不要用本地新增的 `auto_absolute_teleop.py` |
+| 想用键盘在 exp03/06 手动走 | 现在可直接用绝对版 `key_teleop_cartesian_absolute.py`（启动锚定真实 EE，六组通用）；不要用增量版 `key_teleop_cartesian.py`（command_type=2，monitor 会误当关节增量，`teleop_err` 无意义） |
+| 键盘停在原地不动 / 间隔 >0.5 s 才按一次 | 控制器 `teleop_timeout` 回 `STOPPING` 保持当前位姿，属正常；连续按（间隔 <0.5 s）即继续移动 |

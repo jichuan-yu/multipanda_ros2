@@ -11,21 +11,28 @@
     ref    : --refL/--refR 叠加 controller data_record 的 q_r (仅位姿/相对位姿图)
 输出 10 张 PNG:
   01_fk_pos_x.png / 02_fk_pos_y.png / 03_fk_pos_z.png   左右臂 EE 位姿, L/R 两个子图, 各层同图
-  04_fk_rel_x.png / 05_fk_rel_y.png / 06_fk_rel_z.png   相对位姿 rel=(T_L^-1 T_R) 平移量
+  04_fk_rel_x.png / 05_fk_rel_y.png / 06_fk_rel_z.png   相对位姿三轴: 世界系 rel=pR-pL 减初始基线, mm
+                     (monitor relative_error_monitor.cpp 的 curr_rel 口径分解成三正交量;
+                      --rel-frame 可改回 body 系 rel=(T_L^-1 T_R) 平移的绝对值版本)
   07_fk_vel_L.png / 08_fk_vel_R.png                     关节速度 safe/filt/actual 同图
   09_fk_acc_L.png / 10_fk_acc_R.png                     差分加速度 safe/filt/actual 同图
 
 FK 口径与 controller 完全一致 (复用 PandaRobot::getT 同款 DH 表,
 teleop/utils/panda_dh_kinematics.py), 因此本脚本 FK 位姿 == /ee_pose 口径。
 
-用法:
+用法 (建议新布局: 一次实验的 CSV 全在 data/mprc/<exp>/, 图全进 data/mprc/<exp>_figs/):
   source ~/myenv/bin/activate
-  python3 src/multipanda_ros2/teleop/plot_experiment_fk.py data/mprc/exp02.csv \
-      -o data/mprc/exp02_fk [--refL data/mprc/robot1_reference_*.csv \
-      --refR data/mprc/robot2_reference_*.csv] [--start 0 --end 20] [--show]
+  python3 src/multipanda_ros2/teleop/plot_experiment_fk.py data/mprc/exp02/exp02.csv
+      # --refL/--refR 与 -o 均可省: 同目录自动找 robot{1,2}_reference_exp02.csv,
+      # 图默认进 data/mprc/exp02_figs/ ([--start 0 --end 20] [--show] 可选)
 
 说明:
 - 加速度均为 velocity 一阶差分 (100Hz), 第一拍为空。
+- 默认自动把横坐标裁剪到 teleop 数据起止 (tel_type 非空首末行), 避免 recorder 空转段把
+  运动区压扁; 横坐标时间仍为 t_rel 原值, 只是视野收缩。--no-teleop-trim 可画全段。
+- ref 层时间轴 = controller reference CSV 的绝对 sim 时钟秒 减去 recorder 首帧绝对 sim 秒 (t_sim),
+  与 safe/filt/actual 层共用 recorder t_rel 轴; 若 recorder CSV 无 t_sim 列则退回首行对齐 (t - t[0])。
+  对齐后在 teleop 窗口内裁剪; 若与窗口无重叠则不画。
 - teleop 层只对 JOINT_POSITION (type=4) 的绝对关节目标做 FK, 避免增量/速度/任务空间
   指令被误画成目标位姿。
 """
@@ -105,20 +112,68 @@ def load_teleop(df):
 
 
 def load_ref(path):
-    """controller data_record reference CSV (列0=时间, 列1..7=q_r), 可含 NaN 行首。"""
+    """controller data_record reference CSV (列0=绝对 sim 时钟秒, 列1..7=q_r), 可含 NaN 行首。
+    返回 (t_ref, q_ref); t_ref = node_->now().seconds() (dual_arm_safe_controller_sim.cpp recordData)。"""
     if not path:
         return None
-    arr = pd.read_csv(path, header=None).to_numpy()
-    return arr[:, 1:8].astype(float)
+    arr = pd.read_csv(path, header=None).to_numpy(dtype=float)
+    return arr[:, 0], arr[:, 1:8]
+
+
+_XWIN = None  # 已裁剪的 teleop 窗口 (t_lo, t_hi) in t_rel, 供 xlabel/ref 对齐使用
+
+
+def teleop_window(df):
+    """teleop 数据起止: tel_type 非空首末行的 (t_lo, t_hi)。无 teleop 数据 -> None。"""
+    if "tel_type" not in df.columns or df["tel_type"].isna().all():
+        return None
+    tt = pd.to_numeric(df["tel_type"], errors="coerce").to_numpy()
+    m = ~np.isnan(tt)
+    if not m.any():
+        return None
+    t = t_of(df)
+    return float(t[int(np.argmax(m))]), float(t[int(len(m) - 1 - np.argmax(m[::-1]))])
+
+
+def align_ref(ref, sim0=None):
+    """把 load_ref 的 (t_ref_abs, q_ref) 换算到 recorder t_rel 轴:
+    t_rel = t_ref_abs - sim0 (sim0 = recorder 首帧绝对 sim 秒, 来自 CSV t_sim 首行)。
+    recorder 无 t_sim 列时退回首行对齐 (t - t[0])。返回 (t, q) 或 None。"""
+    if ref is None:
+        return None
+    t_ref, q = ref
+    t = t_ref - sim0 if sim0 is not None else t_ref - t_ref[0]
+    return t, q
+
+
+def trim_ref(ref, t_lo, t_hi, sim0=None):
+    """先 align_ref 换算到 t_rel 轴, 再裁剪到 (t_lo, t_hi) 窗口; 窗口内无数据 -> None。"""
+    ref = align_ref(ref, sim0)
+    if ref is None:
+        return None
+    t, q = ref
+    m = (t >= t_lo - 1e-9) & (t <= t_hi + 1e-9)
+    if not m.any():
+        return None
+    return t[m], q[m]
+
+
+def _set_xlabel(ax):
+    if _XWIN is not None:
+        ax.set_xlabel("t [s] — trimmed to teleop window [%.2f, %.2f] (t=0 at recorder start)" % _XWIN)
+    else:
+        ax.set_xlabel("t [s]")
 
 
 def fk_layer(qL, qR):
-    """对 (qL, qR) 逐行 FK, 返回 (pL, pR, rel) 各 (N,3)。
-    rel = (T_L^-1 T_R) 平移量 — 与 constraint_manager.relative_pose_error 口径一致。"""
+    """对 (qL, qR) 逐行 FK, 返回 (pL, pR, rel, rel_frame) 各 (N,3)。
+    rel       = pR - pL     世界系相对位置 (右臂减左臂, MIT-based monitor 的 curr_rel 口径)
+    rel_frame = (T_L^-1 T_R) 平移 — body 系口径 (右臂在左臂末端系里的坐标), 仅 --rel-frame 用。"""
     n = min(len(qL), len(qR))
     pL = np.full((n, 3), np.nan)
     pR = np.full((n, 3), np.nan)
     rel = np.full((n, 3), np.nan)
+    rel_frame = np.full((n, 3), np.nan)
     for i in range(n):
         ql, qr = qL[i], qR[i]
         if not (np.isfinite(ql).all() and np.isfinite(qr).all()):
@@ -127,8 +182,9 @@ def fk_layer(qL, qR):
         TR = KIN["R"].forward_kinematics(qr)
         pL[i] = TL[:3, 3]
         pR[i] = TR[:3, 3]
-        rel[i] = (np.linalg.inv(TL) @ TR)[:3, 3]
-    return pL, pR, rel
+        rel[i] = pR[i] - pL[i]
+        rel_frame[i] = (np.linalg.inv(TL) @ TR)[:3, 3]
+    return pL, pR, rel, rel_frame
 
 
 def finite_diff_acc(dq, t):
@@ -155,7 +211,8 @@ def series_all_blank(series):
 
 
 def build_pose_series(df, refL, refR):
-    """位姿层列表: 每层 dict(key, t, L, R, rel)。ref 层用自身等距时间轴。"""
+    """位姿层列表: 每层 dict(key, t, L, R, rel)。
+    ref 时间轴已在 main 中换算到 t_rel 基准并裁剪到 teleop 窗口, 与其他层共用横坐标。"""
     items = []
     qL, qR = load_teleop(df)
     if qL is not None:
@@ -165,17 +222,18 @@ def build_pose_series(df, refL, refR):
         if qL is not None:
             items.append((key, qL, qR, t_of(df)))
     if refL is not None or refR is not None:
-        n = min(refL.shape[0] if refL is not None else 1 << 30,
-                refR.shape[0] if refR is not None else 1 << 30)
-        qL = refL[:n] if refL is not None else None
-        qR = refR[:n] if refR is not None else None
-        items.append(("ref", qL, qR, np.arange(n) * 0.01))
+        n = min(refL[1].shape[0] if refL is not None else 1 << 30,
+                refR[1].shape[0] if refR is not None else 1 << 30)
+        tref = refL[0][:n] if refL is not None else refR[0][:n]
+        qL = refL[1][:n] if refL is not None else None
+        qR = refR[1][:n] if refR is not None else None
+        items.append(("ref", qL, qR, tref))
     out = []
     for key, qL, qR, t in items:
         if qL is None or qR is None:
             continue
-        pL, pR, rel = fk_layer(qL, qR)
-        s = dict(key=key, t=t, L=pL, R=pR, rel=rel)
+        pL, pR, rel, rel_frame = fk_layer(qL, qR)
+        s = dict(key=key, t=t, L=pL, R=pR, rel=rel, rel_frame=rel_frame)
         if series_all_blank(s):
             continue
         out.append(s)
@@ -233,31 +291,65 @@ def fig_pos_axis(series, axis, out):
         ax.set_title("%s arm EE position %s — all layers" % (side, "xyz"[axis]))
         ax.legend(fontsize=8, ncol=3)
         ax.grid(alpha=0.3)
-    axs[-1].set_xlabel("t [s]")
+    _set_xlabel(axs[-1])
     fig.suptitle("EE position %s — teleop target / safe cmd / filtered / actual" % "xyz"[axis])
     fig.tight_layout()
     fig.savefig(os.path.join(out, "0%d_fk_pos_%s.png" % (axis + 1, "xyz"[axis])), dpi=150)
     plt.close(fig)
 
 
-def fig_rel_axis(series, axis, out):
+def _rel_baseline(series, key="rel"):
+    """各层共享的初始基线: 时间最早的有限 rel 向量 (monitor initial baseline 口径)"""
+    best = None
+    for s in series:
+        r = s.get(key)
+        if r is None:
+            continue
+        fin = np.isfinite(r).all(1)
+        if not fin.any():
+            continue
+        t = np.asarray(s["t"])
+        i = int(np.argmax(fin))
+        t0 = float(t[i])
+        if best is None or t0 < best[0]:
+            best = (t0, r[i].astype(float).copy())
+    return best[1] if best is not None else None
+
+
+def fig_rel_axis(series, axis, out, use_frame=False):
     fig, ax = plt.subplots(figsize=(13, 5))
     drew = False
+    rel_key = "rel_frame" if use_frame else "rel"
+    base = _rel_baseline(series, rel_key)
     for s in series:
-        if not _valid(s, "rel"):
+        if not _valid(s, rel_key):
             continue
         st = STYLE[s["key"]]
-        ax.plot(s["t"], s["rel"][:, axis], color=COLOR[s["key"]], ls=st["ls"],
+        if use_frame:
+            y = s[rel_key][:, axis]
+            ylab = "rel %s (T_L^-1 T_R) [m]" % "xyz"[axis]
+            title = "Relative pose (body frame) %s — right EE w.r.t. left (T_L^-1 T_R)" % "xyz"[axis]
+            fname = "0%d_fk_relbody_%s.png" % (axis + 4, "xyz"[axis])
+        else:
+            if base is not None:
+                y = (s[rel_key] - base)[:, axis] * 1000.0
+            else:
+                y = s[rel_key][:, axis] * 1000.0
+            ylab = "d(rel %s) = (pR-pL) - baseline [mm]" % "xyz"[axis]
+            title = ("World-frame relative pos %s deviation from initial baseline — pR-pL [mm]\n"
+                     "= relative_error_monitor curr_rel 口径, 分解成三正交量" % "xyz"[axis])
+            fname = "0%d_fk_rel_%s.png" % (axis + 4, "xyz"[axis])
+        ax.plot(s["t"], y, color=COLOR[s["key"]], ls=st["ls"],
                 lw=st["lw"], alpha=st["alpha"], label=st["label"])
         drew = True
-    ax.set_xlabel("t [s]")
-    ax.set_ylabel("rel %s [m]" % "xyz"[axis])
-    ax.set_title("Relative pose %s — right EE w.r.t. left (T_L^-1 T_R)" % "xyz"[axis])
+    _set_xlabel(ax)
+    ax.set_ylabel(ylab)
+    ax.set_title(title)
     if drew:
         ax.legend(fontsize=8)
     ax.grid(alpha=0.3)
     fig.tight_layout()
-    fig.savefig(os.path.join(out, "0%d_fk_rel_%s.png" % (axis + 4, "xyz"[axis])), dpi=150)
+    fig.savefig(os.path.join(out, fname), dpi=150)
     plt.close(fig)
 def _fig_mseries(series, side, kind, out, fname):
     """速度/加速度图: 每关节一颜色, 每层一线型。"""
@@ -272,7 +364,7 @@ def _fig_mseries(series, side, kind, out, fname):
         for j in JOINT:
             ax.plot(s["t"], y[:, j], color=cmap(j), ls=st["ls"],
                     lw=st["lw"], alpha=st["alpha"], zorder=z)
-    ax.set_xlabel("t [s]")
+    _set_xlabel(ax)
     ax.set_ylabel({"vel": "joint velocity [rad/s]",
                    "acc": "joint acceleration [rad/s^2]"}[kind])
     ax.set_title("%s arm joint %s — safe cmd / filtered / actual" % (side, kind))
@@ -287,6 +379,33 @@ def _fig_mseries(series, side, kind, out, fname):
     plt.close(fig)
 
 
+def _layout_out_dir(csv_path):
+    """布局感知的默认图目录:
+    新布局 data/mprc/<exp>/<exp>.csv                -> data/mprc/<exp>_figs
+    新布局 data/mprc/<exp>/<exp>_relative_error.csv -> data/mprc/<exp>_figs
+    旧布局 data/mprc/<exp>.csv 等                    -> <csv 去扩展名>_figs
+    """
+    apath = os.path.abspath(csv_path)
+    d = os.path.dirname(apath)
+    stub = os.path.splitext(os.path.basename(apath))[0]
+    if stub.endswith("_relative_error"):
+        exp = stub[:-len("_relative_error")]
+        if os.path.basename(d) == exp:
+            return os.path.join(os.path.dirname(d), exp + "_figs")
+    if os.path.basename(d) == stub:
+        return os.path.join(os.path.dirname(d), stub + "_figs")
+    return os.path.join(d, stub + "_figs")
+
+
+def _auto_ref_path(csv_path, side):
+    """自动发现 controller data_record 的 reference CSV:
+    新布局 data/mprc/<exp>/robot{1,2}_reference_<exp>.csv; 找不到返回 None。"""
+    apath = os.path.abspath(csv_path)
+    stub = os.path.splitext(os.path.basename(apath))[0]
+    cand = os.path.join(os.path.dirname(apath), "robot%d_reference_%s.csv" % (side, stub))
+    return cand if os.path.isfile(cand) else None
+
+
 def main():
     ap = argparse.ArgumentParser(description="FK 分层对比: 位姿/相对位姿/速度/加速度 10 张图")
     ap.add_argument("csv", help="record_experiment.py 的全链 CSV")
@@ -295,6 +414,10 @@ def main():
     ap.add_argument("--refR", default=None, help="robot2_reference_*.csv (q_r)")
     ap.add_argument("--start", type=float, default=None)
     ap.add_argument("--end", type=float, default=None)
+    ap.add_argument("--no-teleop-trim", action="store_true",
+                    help="不按 teleop 数据起止裁剪横坐标 (默认自动裁剪)")
+    ap.add_argument("--rel-frame", action="store_true",
+                    help="04-06 改画 body 系 rel=(T_L^-1 T_R) 平移绝对值 (默认: 世界系 pR-pL 减基线 mm)")
     ap.add_argument("--show", action="store_true")
     args = ap.parse_args()
 
@@ -302,6 +425,12 @@ def main():
     if "cmd_qL0" not in df.columns or "act_qL0" not in df.columns:
         print("[plot_experiment_fk] 需要 record_experiment.py 的全链 CSV (缺 cmd_qL0/act_qL0)")
         return 1
+
+    # recorder 首帧绝对 sim 秒 —— 必须在 start/end 过滤前取, 作为 ref 层绝对时间->t_rel 的锚点
+    sim0 = None
+    if "t_sim" in df.columns and pd.to_numeric(df["t_sim"], errors="coerce").notna().any():
+        sim0 = float(pd.to_numeric(df["t_sim"], errors="coerce").iloc[0])
+        print("[plot_experiment_fk] recorder t_sim[0]=%.6f  (ref 绝对时间锚点)" % sim0)
 
     t = t_of(df)
     m0 = np.ones(len(df), dtype=bool)
@@ -311,10 +440,47 @@ def main():
         m0 &= t <= args.end
     df = df[m0].reset_index(drop=True)
 
-    out = args.out or (os.path.splitext(args.csv)[0] + "_fk")
+    global _XWIN
+    _XWIN = None
+    if not args.no_teleop_trim:
+        win = teleop_window(df)
+        if win is None:
+            print("[plot_experiment_fk] 无 teleop 数据, 横坐标保持全段")
+        else:
+            t = t_of(df)
+            m = (t >= win[0] - 1e-9) & (t <= win[1] + 1e-9)
+            df = df[m].reset_index(drop=True)
+            _XWIN = (float(win[0]), float(win[1]))
+            print("[plot_experiment_fk] 横坐标裁剪到 teleop 窗口: t_rel [%.2f, %.2f] (%.2f s)"
+                  % (_XWIN[0], _XWIN[1], _XWIN[1] - _XWIN[0]))
+
+    # 布局自动发现: 新布局下 recorder CSV 在 data/mprc/<exp>/<exp>.csv,
+    # reference CSV 在同目录 robot{1,2}_reference_<exp>.csv; 未显式给 --refL/--refR 时自动找
+    if args.refL is None:
+        args.refL = _auto_ref_path(args.csv, 1)
+        if args.refL:
+            print("[plot_experiment_fk] 自动发现 --refL: %s" % args.refL)
+    if args.refR is None:
+        args.refR = _auto_ref_path(args.csv, 2)
+        if args.refR:
+            print("[plot_experiment_fk] 自动发现 --refR: %s" % args.refR)
+
+    out = args.out or _layout_out_dir(args.csv)
     os.makedirs(out, exist_ok=True)
 
-    refL, refR = load_ref(args.refL), load_ref(args.refR)
+    refL0 = load_ref(args.refL) if args.refL else None
+    refR0 = load_ref(args.refR) if args.refR else None
+    refL = trim_ref(refL0, *_XWIN, sim0=sim0) if (_XWIN and refL0 is not None) else align_ref(refL0, sim0)
+    refR = trim_ref(refR0, *_XWIN, sim0=sim0) if (_XWIN and refR0 is not None) else align_ref(refR0, sim0)
+    if args.refL and refL is None:
+        print("[plot_experiment_fk] 警告: %s 与 teleop 窗口无重叠, ref L 层跳过" % args.refL)
+    if args.refR and refR is None:
+        print("[plot_experiment_fk] 警告: %s 与 teleop 窗口无重叠, ref R 层跳过" % args.refR)
+    for tag, ref in (("L", refL), ("R", refR)):
+        if ref is not None and len(ref[0]):
+            print("[plot_experiment_fk] ref %s 层对齐到 recorder 轴后: t_rel [%.2f, %.2f]"
+                  % (tag, float(ref[0][0]), float(ref[0][-1])))
+
     pos_s = build_pose_series(df, refL, refR)
     vel_s = build_vel_series(df)
     acc_s = build_acc_series(df)
@@ -325,7 +491,10 @@ def main():
 
     for axis in range(3):
         fig_pos_axis(pos_s, axis, out)
-        fig_rel_axis(pos_s, axis, out)
+        fig_rel_axis(pos_s, axis, out, use_frame=args.rel_frame)
+    if not args.rel_frame:
+        print("[plot_experiment_fk] 04-06 = 世界系 (pR-pL) 减初始基线 [mm], 三正交量; "
+              "加 --rel-frame 可改画 body 系 (T_L^-1 T_R)")
     if vel_s:
         _fig_mseries(vel_s, "L", "vel", out, "07_fk_vel_L.png")
         _fig_mseries(vel_s, "R", "vel", out, "08_fk_vel_R.png")

@@ -6,20 +6,23 @@ plot_experiment.py — 一次实验一张图的看图工具：从一张 CSV 一�
   A) record_experiment.py 生成的全链 CSV（含 cmd_qL0..6 / act_qL0..6 / dev / acc / ee / min_distance 列）
   B) relative_error_monitor 的旧版相对误差 CSV（含 teleop_err_norm / safe_err_norm 列，如 exp01_relative_error.csv）
 
-用法:
+用法 (建议新布局: 一次实验的 CSV 全在 data/mprc/<exp>/, 图全进 data/mprc/<exp>_figs/):
     source ~/myenv/bin/activate
     # 全链模式：一次生成 01_joint_pos.png ... 07_ee_pose.png ... 等一组图
-    python3 src/multipanda_ros2/teleop/plot_experiment.py data/mprc/exp02.csv -o data/mprc/exp02_plots
-    # 相对误差模式（旧数据）
-    python3 src/multipanda_ros2/teleop/plot_experiment.py data/mprc/exp01_relative_error.csv -o data/mprc/exp01_plots
+    python3 src/multipanda_ros2/teleop/plot_experiment.py data/mprc/exp02/exp02.csv
+    #   --refL/--refR/--rel 与 -o 均可省: 新布局下同目录自动找
+    #   robot{1,2}_reference_exp02.csv 与 exp02_relative_error.csv,
+    #   图默认进 data/mprc/exp02_figs/
+    # 相对误差模式（旧数据，单文件出图）
+    python3 src/multipanda_ros2/teleop/plot_experiment.py data/mprc/exp01_relative_error.csv
     # 可选叠加: --refL/--refR 是 controller data_record 里 robot1/robot2_reference_*.csv（q_r）
     #           --rel CSV 是 relative_error_monitor 输出，用于相对误差面板对齐
     #           --start/--end 时间窗(相对 CSV 起点)
 输出: out 目录下 markdown 化的多个 PNG（一次出多个图）。
 
 说明:
-- 节点时钟与 controller 同为 100Hz，直接用行号/首行时间换算相对时间。
-- 全链模式下 t 取 t_rel 列（不存在则用行首换算）。
+- 时间轴优先取 t_rel 列（相对 recorder 首帧）；reference CSV (q_r) 用其绝对 sim 秒减 recorder
+  首帧绝对 sim 秒 (t_sim) 对齐到同一 t_rel 轴；recorder 无 t_sim 列时退回首行对齐。
 """
 
 import argparse
@@ -85,15 +88,14 @@ def plot_full(df, t, out_dir, refL, refR, rel_df):
     """全链模式：一批 PNG。"""
     figs = {}
 
-    # 01 关节位置（每臂一图，q_r 可选叠加）
+    # 01 关节位置（每臂一图，q_r 可选叠加；ref 时间轴绝对对齐到 recorder t_rel）
     f, axs = plt.subplots(2, 1, figsize=(13, 8), sharex=True)
     for arm, ax in zip("LR", axs):
         _plot_joint_ax(ax, t, df, arm, kind="q")
         ref = refL if arm == "L" else refR
-        if ref is not None and len(ref):
-            rt = np.arange(len(ref)) * 0.01
+        if ref is not None and len(ref[1]):
             for j in JOINT:
-                ax.plot(rt, ref[:, j], color="gray", lw=0.5, alpha=0.5)
+                ax.plot(ref[0], ref[1][:, j], color="gray", lw=0.5, alpha=0.5)
     axs[0].legend([f"cmd{q}" for q in range(7)] + [f"act{q}" for q in range(7)],
                   ncol=7, fontsize=8)
     f.suptitle("Joint position: dashed=cmd(safe) solid=actual gray=q_r")
@@ -192,6 +194,24 @@ def plot_relonly(df, t, out_dir):
     return figs
 
 
+def _layout_out_dir(csv_path):
+    """布局感知的默认图目录:
+    新布局 data/mprc/<exp>/<exp>.csv                -> data/mprc/<exp>_figs
+    新布局 data/mprc/<exp>/<exp>_relative_error.csv -> data/mprc/<exp>_figs
+    旧布局 data/mprc/<exp>.csv 等                    -> <csv 去扩展名>_figs
+    """
+    apath = os.path.abspath(csv_path)
+    d = os.path.dirname(apath)
+    stub = os.path.splitext(os.path.basename(apath))[0]
+    if stub.endswith("_relative_error"):
+        exp = stub[:-len("_relative_error")]
+        if os.path.basename(d) == exp:
+            return os.path.join(os.path.dirname(d), exp + "_figs")
+    if os.path.basename(d) == stub:
+        return os.path.join(os.path.dirname(d), stub + "_figs")
+    return os.path.join(d, stub + "_figs")
+
+
 def main():
     ap = argparse.ArgumentParser(description="一次CSV出整组图")
     ap.add_argument("csv", help="record_experiment 或 relative_error_monitor 的 CSV")
@@ -210,6 +230,11 @@ def main():
         print("[plot_experiment] 无法识别 CSV 格式（缺 cmd_qL0 / teleop_err_norm 列）")
         return 1
 
+    # recorder 首帧绝对 sim 秒 —— 必须在 start/end 过滤前取, 作为 ref 层绝对时间->t_rel 的锚点
+    sim0 = None
+    if "t_sim" in df.columns and pd.to_numeric(df["t_sim"], errors="coerce").notna().any():
+        sim0 = float(pd.to_numeric(df["t_sim"], errors="coerce").iloc[0])
+
     t, _ = t_of(df)
     m0 = np.ones(len(t), dtype=bool)
     if args.start is not None:
@@ -219,14 +244,43 @@ def main():
     t = t[m0]
     df = df[m0].reset_index(drop=True)
 
-    out_dir = args.out or (os.path.splitext(args.csv)[0] + "_plots")
+    # 布局自动发现: 新布局 data/mprc/<exp>/<exp>.csv 时, 同目录自动找
+    # <exp>_relative_error.csv (--rel) 与 robot{1,2}_reference_<exp>.csv (--refL/R)
+    if mode == "full":
+        exp_stub = os.path.splitext(os.path.basename(args.csv))[0]
+        cdir = os.path.dirname(os.path.abspath(args.csv))
+        if args.rel is None:
+            cand = os.path.join(cdir, exp_stub + "_relative_error.csv")
+            if os.path.isfile(cand):
+                args.rel = cand
+                print("[plot_experiment] 自动发现 --rel: %s" % cand)
+        if args.refL is None:
+            cand = os.path.join(cdir, "robot1_reference_%s.csv" % exp_stub)
+            if os.path.isfile(cand):
+                args.refL = cand
+                print("[plot_experiment] 自动发现 --refL: %s" % cand)
+        if args.refR is None:
+            cand = os.path.join(cdir, "robot2_reference_%s.csv" % exp_stub)
+            if os.path.isfile(cand):
+                args.refR = cand
+                print("[plot_experiment] 自动发现 --refR: %s" % cand)
+
+    out_dir = args.out or _layout_out_dir(args.csv)
     os.makedirs(out_dir, exist_ok=True)
+
+    def load_ref_with_time(path):
+        """robot{1,2}_reference_*.csv: 列0=绝对 sim 秒, 列1..7=q_r。
+        返回 (t_rel_aligned, q7) —— 减 recorder 首帧绝对 sim 秒; 无 t_sim 时退回首行对齐。"""
+        arr = pd.read_csv(path, header=None).to_numpy(dtype=float)
+        t_ref = arr[:, 0].copy()
+        t_al = t_ref - sim0 if sim0 is not None else t_ref - t_ref[0]
+        return t_al, arr[:, 1:8]
 
     refL = refR = None
     if args.refL:
-        refL = pd.read_csv(args.refL, header=None).to_numpy()[:, 1:8]
+        refL = load_ref_with_time(args.refL)
     if args.refR:
-        refR = pd.read_csv(args.refR, header=None).to_numpy()[:, 1:8]
+        refR = load_ref_with_time(args.refR)
 
     rel_df = pd.read_csv(args.rel) if args.rel else None
 

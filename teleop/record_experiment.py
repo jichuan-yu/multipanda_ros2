@@ -21,8 +21,13 @@ record_experiment.py — 一次实验一条 CSV 的全链数据录制器（零�
 
 用法（仿真启动后、实验开始前运行，Ctrl+C 停止）:
     source ~/myenv/bin/activate
-    python3 src/multipanda_ros2/teleop/record_experiment.py -o data/mprc/exp02
-    # -> data/mprc/exp02.csv
+    python3 src/multipanda_ros2/teleop/record_experiment.py -o data/mprc/exp02/exp02
+    # -> data/mprc/exp02/exp02.csv
+    # ① 同终端自动拉起 relative_error_monitor（Ctrl+C 一起结束, 不用再开监控终端）
+    # ② 停止后自动 plot_all 出全套图进 data/mprc/exp02_figs/（不用再开绘图终端）
+    # 关闭: 加 --no-monitor（不启监控） / 加 --no-plot（不出图）
+    # （新布局: 每次实验的所有 CSV 集中在 data/mprc/<exp>/ 一个文件夹,
+    #   与 controller data_record 及 relative_error_monitor 的输出在同一目录）
 建议与 controller data_record_ON 和 relative_error_monitor 同时跑，事后按 sim 时间对齐。
 
 说明:
@@ -35,6 +40,9 @@ record_experiment.py — 一次实验一条 CSV 的全链数据录制器（零�
 import argparse
 import csv
 import os
+import subprocess
+import sys
+import time
 
 import numpy as np
 import rclpy
@@ -88,7 +96,8 @@ def parse_js_pos_vel_eff(msg):
             qR[j], dqR[j], tR[j] = q, dq, tau
     return normalize_joint(qL), normalize_joint(qR), dqL, dqR, tL, tR
 class ExperimentRecorder(Node):
-    def __init__(self, out_path, rate=100, verbose=False):
+    def __init__(self, out_path, rate=100, verbose=False,
+                 with_monitor=True, auto_plot=True):
         super().__init__("experiment_recorder")
         self.set_parameters([rclpy.Parameter("use_sim_time", rclpy.Parameter.Type.BOOL, True)])
 
@@ -97,6 +106,7 @@ class ExperimentRecorder(Node):
             self.out_path += ".csv"
         os.makedirs(os.path.dirname(self.out_path), exist_ok=True)
         self.verbose = verbose
+        self.auto_plot = auto_plot
         self.period = 1.0 / rate
 
         # 最新消息缓存（按话题）
@@ -139,6 +149,41 @@ class ExperimentRecorder(Node):
 
         self.create_timer(self.period, self.tick)
         self.get_logger().info(f"record_experiment -> {self.out_path} @ {rate:.0f}Hz")
+
+        # 同终端自动拉起 relative_error_monitor（Ctrl+C 随 recorder 一起结束, 省一个终端）
+        self.monitor_proc = None
+        if with_monitor:
+            proc = subprocess.Popen(self._monitor_args())
+            time.sleep(0.8)
+            if proc.poll() is not None:
+                self.get_logger().warning(
+                    "relative_error_monitor 启动失败 (exit=%s)，请确认包已 build / ROS 环境已 source"
+                    % proc.returncode)
+            else:
+                self.monitor_proc = proc
+                self.get_logger().info(
+                    f"monitor 已在本终端启动 -> {self._monitor_csv()} (准备就绪后即可运行 D 遥操作)")
+
+    # ---------- 自动 monitor ----------
+    def _monitor_args(self):
+        d = os.path.dirname(self.out_path)               # .../data/mprc/<exp>
+        prefix = os.path.basename(self.out_path)[:-4] + "_relative_error"
+        return ["ros2", "run", "dual_arm_reactive_control", "relative_error_monitor_node",
+                "--ros-args", "-p", f"output_path:={d}/",
+                "-p", f"output_prefix:={prefix}"]
+
+    def _monitor_csv(self):
+        return os.path.join(os.path.dirname(self.out_path),
+                            os.path.basename(self.out_path)[:-4] + "_relative_error.csv")
+
+    def _stop_monitor(self):
+        if self.monitor_proc is not None:
+            self.monitor_proc.terminate()
+            try:
+                self.monitor_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.monitor_proc.kill()
+            self.monitor_proc = None
 
     # ---------- 回调 ----------
     def cb_teleop(self, msg):
@@ -253,19 +298,45 @@ class ExperimentRecorder(Node):
     def stop(self):
         self.f.flush()
         self.f.close()
+        self._stop_monitor()
         self.get_logger().info(f"record_experiment done: {self._rows} rows -> {self.out_path}")
+        if self.auto_plot:
+            self._auto_plot()
+
+    def _auto_plot(self):
+        """停止后自动出全套图（F1 fk + F2 经典 + F3 monitor 快照），失败不阻塞退出。"""
+        plot_all = os.path.join(os.path.dirname(os.path.abspath(__file__)), "plot_all.py")
+        try:
+            import pandas as pd
+            df = pd.read_csv(self.out_path, usecols=["tel_type"])
+            n_tel = int(df["tel_type"].notna().sum())
+        except Exception:
+            n_tel = 0
+        if n_tel == 0:
+            self.get_logger().warning(
+                "整链 CSV 中没有 teleop 命令段 (tel_type 全空)，跳过自动出图；"
+                f"如需补图: python3 {plot_all} {self.out_path}")
+            return
+        self.get_logger().info("自动出图 plot_all ...")
+        subprocess.call([sys.executable, plot_all, self.out_path])
 
 
 def main():
     ap = argparse.ArgumentParser(description="全链实验录制: teleop/safe命令/底层执行 一次一张CSV")
-    ap.add_argument("-o", "--out", default="data/mprc/experiment",
-                    help="输出前缀 (默认 data/mprc/experiment，会自动补 .csv)")
+    ap.add_argument("-o", "--out", default="data/mprc/experiment/experiment",
+                    help="输出前缀 (建议 data/mprc/<exp>/<exp>，会自动补 .csv，默认 data/mprc/experiment/experiment)")
     ap.add_argument("--rate", type=float, default=100.0, help="归并采样率 Hz (默认 100)")
     ap.add_argument("--verbose", action="store_true")
+    ap.add_argument("--no-monitor", action="store_true",
+                    help="不自动拉起 relative_error_monitor (默认同终端自动启动 monitor, 节省一个终端)")
+    ap.add_argument("--no-plot", action="store_true",
+                    help="停止时不自动出图 (默认 Ctrl+C 后自动 plot_all 出全套图进 <exp>_figs/)")
     args = ap.parse_args()
 
     rclpy.init(args=None)
-    node = ExperimentRecorder(args.out, args.rate, args.verbose)
+    node = ExperimentRecorder(args.out, args.rate, args.verbose,
+                              with_monitor=not args.no_monitor,
+                              auto_plot=not args.no_plot)
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

@@ -3,10 +3,29 @@
 Plot teleop_err_norm and safe_err_norm from relative_error_monitor CSV data.
 """
 
-import pandas as pd
-import matplotlib.pyplot as plt
-import numpy as np
 import argparse
+import os
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+def _default_plot_path(csv_file):
+    """布局感知的默认 PNG 路径:
+    新布局 data/mprc/<exp>/<exp>_relative_error.csv -> data/mprc/<exp>_figs/<exp>_relative_error_plot.png
+    旧布局 data/mprc/<exp>_relative_error.csv        -> data/mprc/<exp>_relative_error_plot.png
+    """
+    apath = os.path.abspath(csv_file)
+    d = os.path.dirname(apath)
+    stub = os.path.splitext(os.path.basename(apath))[0]
+    exp = stub[:-len("_relative_error")] if stub.endswith("_relative_error") else None
+    if exp and os.path.basename(d) == exp:
+        figs = os.path.join(os.path.dirname(d), exp + "_figs")
+        os.makedirs(figs, exist_ok=True)
+        return os.path.join(figs, stub + "_plot.png")
+    return os.path.join(d, stub + "_plot.png")
+
 
 def plot_relative_errors(csv_file, output_image=None, start_time=0):
     """Plot teleop_err_norm and safe_err_norm from CSV file.
@@ -80,7 +99,9 @@ def main():
 
     args = parser.parse_args()
 
-    plot_relative_errors(args.csv_file, args.output if not args.show else None, args.start_time)
+    # 未显式指定输出且不是 --show 时, 自动落位到该实验的 figs 目录
+    out = None if args.show else (args.output or _default_plot_path(args.csv_file))
+    plot_relative_errors(args.csv_file, out, args.start_time)
 
 if __name__ == '__main__':
     main()

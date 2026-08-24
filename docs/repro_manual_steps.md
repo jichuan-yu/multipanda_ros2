@@ -21,6 +21,24 @@
 >
 > 这批结果输出到 **`data/mprc/`** 下，前缀统一用 `exp01_…` ~ `exp06_…`。
 > 注意：`data/mprc/20260813_*.csv`（约 24MB / 17MB）是失败/NaN 的旧数据，请忽略。
+>（全链 CSV `exp0X.csv` 是 2026-08 之后新增的记录方式；早期只录了
+>  `*_relative_error.csv`，请以本手册步骤 C/F 的新方式为准。）
+
+> **记录方式速览（布局：一次实验的所有 CSV 集中在 `data/mprc/<exp>/` 一个文件夹，所有图集中在 `data/mprc/<exp>_figs/`）**
+> - `data/mprc/exp0X/exp0X.csv` —— **全链 CSV**（步骤 C1 `record_experiment.py`，100 Hz 一张表，
+>   按列名前缀分 teleop / safe / low-level / actual 四层：`tel_raw/tel_type`（teleop 原始命令）、
+>   `cmd_q/cmd_dq`（safe 命令）、`fql/fdq`（low-level 滤波）、`act_q/act_dq/act_tau/acc`（实际执行），
+>   另有 `eeL/R` 位姿与距离列）。⚠️ 必须与步骤 D 遥操作**并发运行**，否则 teleop 列全 NaN。
+> - `data/mprc/exp0X/exp0X_relative_error.csv` —— 相对误差（步骤 C2 `relative_error_monitor`）。
+> - `data/mprc/exp0X/robot{1,2}_reference_exp0X.csv` —— controller 的 q_r 参考轨迹（步骤 B 开
+>   `data_record_ON:=true` 生成，绘制 FK 图时叠加 ref 层用）。controller 的所有中间结果
+>   （`HQP_result_*.csv`、`computation_time_*.csv` 等）也写进同一目录 `data/mprc/exp0X/`。
+> - **所有图**统一出到 `data/mprc/exp0X_figs/`：步骤 F1/F2/F3 三个绘图脚本的 `-o` 都可省
+>   （默认按新布局自动落位；`--refL/--refR/--rel` 也在同目录自动发现，无需手填）。
+> - **一键出图（无需 source、不另开终端）**：`./mkfigs exp0X` 一条命令跑完
+>   F1(fk 10图)+F2(经典7图)+F3(monitor快照)，全部落 `data/mprc/exp0X_figs/`；
+>   recorder 停止时也默认自动出图（见步骤 C），只有手动补图时才用 mkfigs。
+> - 绘图首选 **步骤 F1 `plot_experiment_fk.py`**（对全链 CSV 出 10 张 FK 分层图）。
 
 > **可选用（底层隔离）**：如果只想看“底层阻抗控制器本身”的跟踪误差（不想经过
 > `dual_joint_impedance` 上游的 Safe 层），**不起 `main_sim_node`**，改跑
@@ -32,7 +50,7 @@
 
 ## 0. 前置（每个终端都执行一次）
 
-在**桌面终端**里打开 4 个标签页（sim 需要图形显示，不要在纯 SSH 无头会话里起 sim）：
+在**桌面终端**里打开 **4 个标签页**（A:1 sim、B:2 控制器、C1:3 全链记录器（**自动拉起相对误差 monitor，Ctrl+C 停止后自动出全套图**）、D:4 遥操作；sim 需要图形显示，不要在纯 SSH 无头会话里起 sim）：
 
 ```bash
 cd ~/dual_panda_ws
@@ -45,6 +63,7 @@ source install/setup.bash
 
 ```bash
 pkill -f my_task_sim.launch.py; pkill -f main_sim_node; pkill -f relative_error_monitor_node
+pkill -f record_experiment
 pkill -f auto_absolute_teleop; pkill -f key_teleop_cartesian_absolute.py; pkill -f key_teleop_cartesian.py
 pkill -f replay_teleop_cmd; pkill -f record_teleop_cmd; pkill -f record_ee_pose
 pkill -f csv_teleop_cartesian_absolute; pkill -f gen_anchored_sweep; sleep 2
@@ -92,20 +111,34 @@ ros2 topic hz /joint_states
 
 ### 步骤 B（终端 2）启动安全控制器 main_sim_node
 
+> 下面每组命令都追加三行 `data_record_*` 参数：记录 q_r 参考轨迹（供步骤 F1 的 FK 图叠加
+> ref 层），输出 **`data/mprc/exp0X/robot1_reference_exp0X.csv`** / `robot2_reference_exp0X.csv`
+> （controller 在 `data_record_path` 下再开 `data_record_prefix` 同名子目录，中间结果
+> `HQP_result_*.csv`、`computation_time_*.csv` 等也都在里面；`data_record_path` 末尾必须带 `/`）。
+> `data_record_prefix:=exp0X`，每组换成当前组前缀（exp01…exp06）。
+
 Safe 组（开 QP + 协同约束，默认也是这组值）：
 
 ```bash
 cd ~/dual_panda_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
 ros2 run dual_arm_reactive_control main_sim_node --ros-args \
   -p bypass_qp_safety_for_debug:=false \
-  -p relative_pose_constraint_enabled:=false
+  -p relative_pose_constraint_enabled:=false \
+  -p data_record_ON:=true \
+  -p data_record_path:=/home/botao/dual_panda_ws/data/mprc/ \
+  -p data_record_prefix:=exp0X
 ```
 
+```bash
 cd ~/dual_panda_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
 ros2 run dual_arm_reactive_control main_sim_node --ros-args \
   -p bypass_qp_safety_for_debug:=false \
   -p relative_pose_constraint_enabled:=true \
-  -p cmd_alpha:=1.0
+  -p cmd_alpha:=0.0 \
+  -p data_record_ON:=true \
+  -p data_record_path:=/home/botao/dual_panda_ws/data/mprc/ \
+  -p data_record_prefix:=exp0X
+```
 
 
 Bypass 组：
@@ -114,7 +147,8 @@ Bypass 组：
 cd ~/dual_panda_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
 ros2 run dual_arm_reactive_control main_sim_node --ros-args \
   -p bypass_qp_safety_for_debug:=true \
-  -p relative_pose_constraint_enabled:=false
+  -p relative_pose_constraint_enabled:=false 
+
 ```
 
 等待期望关节命令话题就绪：
@@ -125,20 +159,39 @@ ros2 topic hz /mj_left/joints_desired
 ros2 topic hz /mj_right/joints_desired
 ```
 
-### 步骤 C（终端 3）启动 relative_error_monitor（写 CSV）
+### 步骤 C（终端 3）启动记录器（全链 CSV + 自动 monitor + 停止后自动出图）
+
+**C1 — 全链记录器 `record_experiment.py`（终端 3，新记录方式）**
 
 ```bash
 cd ~/dual_panda_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
-ros2 run dual_arm_reactive_control relative_error_monitor_node --ros-args \
-  -p output_path:=/home/botao/dual_panda_ws/data/mprc/ \
-  -p output_prefix:=exp01_relative_error
+python3 src/multipanda_ros2/teleop/record_experiment.py -o data/mprc/exp0X/exp0X
 ```
 
-- 输出文件：`data/mprc/exp01_relative_error.csv`（`output_path + output_prefix + ".csv"`）。
-- 启动日志里应看到 **"Initial relative position baseline set"** 以及左右 EE 坐标、
-  相对距离（一致构型 ≈ 0.52）。这行出现后再做步骤 D。
+- 输出文件：`data/mprc/exp0X/exp0X.csv`（一表四层：`tel_raw/tel_type`（teleop 原始命令）、
+  `cmd_q/cmd_dq`（safe 命令）、`fql/fdq`（low-level 滤波）、`act_q/act_dq/act_tau/acc`（实际执行），
+  另有 `eeL/R` 位姿与距离列）。注意 `-o` 用 `data/mprc/<exp>/<exp>`（自动建目录），
+  保证 recorder / monitor / controller 三类 CSV 都在 `data/mprc/<exp>/` 同一个文件夹。
+- ⚠️ **必须与步骤 D 的遥操作并发运行**：先把这个 recorder 跑起来，保持到步骤 D 的
+  「前移 → 回程」序列全部发完、最后 Ctrl+C 才停。先跑 teleop 或提前停 recorder，
+  `tel_*` 列会全 NaN，FK 图就没有 teleop 层。
+- recorder 是纯 python（依赖 rclpy）；若报 `No module named 'rclpy'`，用步骤 D 里的两行
+  `export` 显式注入 `/opt/ros/humble/*` 路径。
 
-### 步骤 D（终端 4）自动绝对任务空间遥操作（唯一驱动方式，六组 exp01–06 通用）
+**C2 — 相对误差 monitor `relative_error_monitor_node`（自动并入终端 3，不再单独开终端）**
+
+上面的 recorder 启动后会自动在**同一终端**后台拉起 monitor，参数自动推导
+（`output_path` = `data/mprc/exp0X/`、`output_prefix` = `exp0X_relative_error`），
+启动日志里同样应看到 **"Initial relative position baseline set"** 以及左右 EE 坐标、
+相对距离（一致构型 ≈ 0.52），这行出现后再做步骤 D。
+- 输出文件：`data/mprc/exp0X/exp0X_relative_error.csv`（与 recorder / controller 的 CSV 同目录）。
+- Ctrl+C 停 recorder 时 monitor 随之一并结束（文件已写完整），随后 recorder **自动跑 `plot_all`
+  出全套图**进 `data/mprc/exp0X_figs/`（等价于步骤 F 的 `./mkfigs exp0X`；整链无 teleop 数据时会
+  跳过并打印补图命令）。不想自动拉 monitor / 自动出图时，分别加 `--no-monitor` / `--no-plot`。
+- 个别需要单独跑 monitor 的场景，手动命令仍可用：
+  `ros2 run dual_arm_reactive_control relative_error_monitor_node --ros-args -p output_path:=/home/botao/dual_panda_ws/data/mprc/exp0X/ -p output_prefix:=exp0X_relative_error`。
+
+### 步骤 D（终端 5）自动绝对任务空间遥操作（唯一驱动方式，六组 exp01–06 通用）
 
 
 ```bash
@@ -149,214 +202,120 @@ python3 src/multipanda_ros2/teleop/auto_absolute_teleop_ik.py \
   --target safety --arm both --step 0.01 --steps 10 --interval 0.1 --hold 5.0
 ```
 
+> 组前预置（可选）：每次实验开始前让双臂初始构型不同——一键把左臂向后 15cm、
+> 向下 15cm、向左（远离右臂）15cm，跑完自动退出，无需键盘精调：
+
+```bash
+cd /home/botao/dual_panda_ws
+source /opt/ros/humble/setup.bash
+python3 src/multipanda_ros2/teleop/auto_absolute_teleop_preset_ik.py \
+  --seq -x:15,-z:15,+y:15 --step 0.01 --interval 0.1 --hold 2.0
+```
+
+> 方向按 world 系：`-x` 向后、`-z` 向下、`+y` 向左（远离右臂）；若某方向实际
+> 运动反了，改 `--seq` 里对应符号（如 `+y`→`-y`）。结束时打印 left-EE 净位移，
+> 与期望 `[x:-0.150, y:+0.150, z:-0.150]` 对照即可确认。
+
+> 备选（键盘手动驱动，一次只动一臂；需要双臂同步时仍用上面的自动脚本）：
+
+```bash
  cd /home/botao/dual_panda_ws
 source /opt/ros/humble/setup.bash
 python3 src/multipanda_ros2/teleop/key_teleop_cartesian_absolute_ik.py --arm left \
     --step-position 0.01
+```
 
 ### 步骤 E（收尾）检查 CSV，准备下一组
 
 ```bash
 cd ~/dual_panda_ws
-head -5 data/mprc/exp01_relative_error.csv
-wc -l data/mprc/exp01_relative_error.csv
+head -5 data/mprc/exp0X/exp0X_relative_error.csv
+wc -l data/mprc/exp0X/exp0X_relative_error.csv
+# 全链 CSV：确认有行、且 teleop 命令确实被录到了（tel_type 非空比例 > 0）
+head -3 data/mprc/exp0X/exp0X.csv
+wc -l data/mprc/exp0X/exp0X.csv
+python3 -c "import pandas as pd; d=pd.read_csv('data/mprc/exp0X/exp0X.csv'); print('tel_type non-NaN:', round(100*d['tel_type'].notna().mean(),1), '%')"
 ```
 
+`tel_type non-NaN` 应 > 0（录制期间步骤 D 确实在发 `/dualarm_teleop_cmd`）；若为 0，
+说明 recorder 与遥操作没并发，删掉本组 `data/mprc/exp0X/exp0X.csv` 重录。
 
 
-### 步骤 F（后处理）绘图
+
+### 步骤 F（后处理）绘图 —— 一键全套（无需 source、不另开终端）
+
+**默认方案：一条命令跑完 F1+F2+F3**（`./mkfigs` 自动 `cd` 到 workspace，无需环境变量）：
+
+```bash
+cd ~/dual_panda_ws
+./mkfigs exp0X
+```
+
+- 等价于分开跑 **F1**（`plot_experiment_fk.py` → 10 张 FK 图，`01–03_fk_pos_{x,y,z}.png`、
+  `04–06_fk_rel_{x,y,z}.png`、`07–08_fk_vel_{L,R}.png`、`09–10_fk_acc_{L,R}.png`）、
+  **F2**（`plot_experiment.py` → 经典 7 张）、**F3**（`plot_relative_error.py` →
+  `exp0X_relative_error_plot.png`）。
+- `--refL/--refR/--rel` 与 `-o` 全部自动发现，图统一落 `data/mprc/exp0X_figs/`。
+- recorder 停止时也会自动执行这一步（见步骤 C），这里用于补图/重画。
+- 自定义图目录用 `-o`，只想跑某一步用 `--skip-fk/--skip-classic/--skip-rel`。
+
+**底层拆分（需要单独重跑某一步时）**：
 
 ```bash
 cd ~/dual_panda_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
-python3 src/multipanda_ros2/teleop/plot_relative_error.py \
-  data/mprc/exp01_relative_error.csv -o data/mprc/exp01_relative_error_plot.png
+python3 src/multipanda_ros2/teleop/plot_experiment_fk.py data/mprc/exp0X/exp0X.csv
+python3 src/multipanda_ros2/teleop/plot_experiment.py data/mprc/exp0X/exp0X.csv
+python3 src/multipanda_ros2/teleop/plot_relative_error.py data/mprc/exp0X/exp0X_relative_error.csv
 ```
+
+
+说明：本手册用 `type=5`（TASK_SPACE_POSE）驱动，FK 图的 teleop 层只对 `type=4` 绝对关节目标做 FK，
+**图上不出现 teleop target 层属正常**；链路完整度用 safe cmd → actual + ref 层判断。
+若步骤 B 没开 `data_record_ON`，ref 层自动跳过（不报错）。
 
 ---
 
-## 2. 六组实验对照表
+## 附录：removefix（`096ba14`）与原版 fine（`4cadedd`）的具体区别
 
-| # | 构型 | interval(s) | bypass | RELATIVE_POSE | 输出前缀 |
-|---|------|------------|--------|--------------|----------|
-| 1 | 一致 | 2.0 | false | true | exp01 |
-| 2 | 一致 | 0.1 | false | true | exp02 |
-| 3 | 不一致 | 0.1 | false | true | exp03 |
-| 4 | 一致 | 2.0 | true | false | exp04 |
-| 5 | 一致 | 0.1 | true | false | exp05 |
-| 6 | 不一致 | 0.1 | true | false | exp06 |
+> **版本指认**
+> - **fine（原版）** = good 控制器状态 = git `4cadedd`
+>   （`fix(control): 恢复 good 控制器状态（8-17 baseline + cmd_alpha 参数化 + Fix A.3 开环代价
+>   + 位置级钳位，移除 A.2 速度钳位 / A.4 加速度斜坡）`），对应备份
+>   `backups/restore_good_20260823/`。
+> - **removefix** = 在 fine 基础上移除开环代价（Fix A.3）与位置级钳位 = git `096ba14`
+>   （`fix(control): 移除 Fix A.3 开环代价与位置级钳位（8.17 closed-loop 行为）`），对应备份
+>   `backups/openloop_removed_20260824/dual_arm_safe_controller_sim.cpp`。
+> - 两者**只差 `dual_arm_safe_controller_sim.cpp` 一个文件**，共 3 类差异（14+/21-）。
 
-> `interval(s)` 是步骤 D 自动脚本的步进间隔（缓速 2.0 / 快速 0.1），直接作为
-> `--interval` 参数；六组之间只改这个值和 A/B 里的开关参数。
-
-每组按第 1 节的 A→B→C→D→E→F 走一遍，把步骤 C 里的 `exp0X` 前缀、A/B 里的参数、
-步骤 D 里的 `--interval` 都换成表内值。
-预计每组 2~3 分钟，6 组共 15~20 分钟。
-
-## 3. 汇总（跑完第 2 节全部实验之后）
-
-一键统计 6 组 CSV 的峰值误差，复制到终端：
-
-```bash
-cd ~/dual_panda_ws && python3 - <<'PY'
-import pandas as pd, glob, os, numpy as np
-files = sorted(glob.glob('data/mprc/exp0*_relative_error.csv'))
-print(f"{'file':38s} {'rows':>7s} {'NaN%':>6s} {'teleop_max_mm':>13s} {'safe_max_mm':>12s}")
-for f in files:
-    df = pd.read_csv(f)
-    n_nan = int(df[['teleop_err_norm','safe_err_norm']].isna().sum().sum())
-    tot = df[['teleop_err_norm','safe_err_norm']].size
-    print(f"{os.path.basename(f):38s} {len(df):7d} {100*n_nan/tot:5.1f}% "
-          f"{np.nanmax(df['teleop_err_norm'])*1e3:10.3f} {np.nanmax(df['safe_err_norm'])*1e3:10.3f}")
-PY
-```
-
-画六合一对比图（可选）：
-
-```bash
-cd ~/dual_panda_ws && python3 - <<'PY'
-import pandas as pd, matplotlib.pyplot as plt, glob, os
-fig, axes = plt.subplots(2,3, figsize=(18,8), sharex=True)
-for ax, f in zip(axes.ravel(), sorted(glob.glob('data/mprc/exp0*_relative_error.csv'))):
-    df = pd.read_csv(f)
-    df['time'] = df['timestamp'] - df['timestamp'].iloc[0]
-    ax.plot(df['time'], df['teleop_err_norm']*1e3, label='teleop', lw=1.2)
-    ax.plot(df['time'], df['safe_err_norm']*1e3, label='safe', lw=1.2)
-    ax.set_title(os.path.basename(f)[:8]); ax.legend(); ax.grid(alpha=.3)
-    ax.set_xlabel('t(s)'); ax.set_ylabel('mm')
-plt.tight_layout(); plt.savefig('data/mprc/exp01-06_compare.png', dpi=130); print('saved exp01-06_compare.png')
-PY
-```
-
----
-
-## 4. 常见问题
-
-| 现象 | 原因 / 处理 |
-|------|------------|
-| 在 `~` 或其他目录复制命令，报找不到包 / `YAML::BadFile` / 找不到 yaml | 控制器按相对路径读 ./src/... 配置，必须先 `cd ~/dual_panda_ws`。本手册每段命令已内置 cd，整段复制即可 |
-| teleop 报 `ModuleNotFoundError: No module named 'rclpy'` | 漏了 ROS 底层环境。先 `source /opt/ros/humble/setup.bash` 再 `source install/setup.bash`。本手册窗口型命令块已统一内置两步 source，整段复制即可 |
-| 已带双 source 仍报 `No module named 'rclpy'`（终端不加载环境变量） | 你的终端没有真正载入 humble。用步骤 D 命令块里的两行 `export` 显式注入 `/opt/ros/humble/*` 路径（保底写法，已验证），随后手动注入后可先跑 `python3 -c "import rclpy"` 自检 |
-| launch 报 `xacro: error: no such option: -0` | initial_positions 传参丢引号。按本手册写：外层单引号 + 值内双引号 |
-| mujoco 报 `Failed to initialize GLFW` | 在无图形终端（纯 SSH）起 sim。改用桌面终端，或 `xvfb-run -a ros2 launch ...` |
-| teleop 打印 `FAIL: no /joint_states within 20s` | sim 还没就绪，先确认 `ros2 topic hz /joint_states` 有输出再跑 |
-| teleop 一直收不到目标/手臂不动 | 步骤 A/B 的话题都就绪后再跑 C/D；顺序别反 |
-| CSV 前 1-2 行 NaN | 正常（monitor 等第一条 teleop/safe 命令），建议从第 3 行起统计 |
-| 旧掉线后 monitor 不再写 | Ctrl-C 该组 monitor 进程，下组用新前缀重新起 |
-| 遥操作脚本报 `ModuleNotFoundError: No module named 'rclpy'` | 用步骤 D 命令块里两行 `export` 显式注入 `/opt/ros/humble/*` 路径（已验证） |
-| 自动脚本开跑时手臂先「跳」一段 / 猛冲 | 锚点 ≠ 真实 EE（多半 sim 尚未稳定到初始构型就起了脚本，或旧进程残留）。按第 0 节清理重启 sim，等 `joint_states` 稳定、`[AUTO_TELEOP] anchor` 的值与真实 EE 一致后再跑 |
-| bypass 组一开就失控/猛冲 | 绝对命令 bypass 下速度=`Jᶜⁱ·(T_target−T_current)/0.01`、无任何限幅，锚点必须等于真实 EE。务必等 `[AUTO_TELEOP] anchor` 打印（且锚定值 == 真实 EE）后再移动；锚定要在机器人稳定到初始构型后 |
-| exp03/06（非一致构型）驱动不正常 | 自动绝对脚本启动时锚定真实 EE，非一致构型同样适用，直接跑即可；不要用增量版 `key_teleop_cartesian.py` / `auto_increment_teleop.py`（command_type=2，monitor 会误当关节增量，`teleop_err` 无意义） |
----
-
-## 5. 2026-08-17 · Fix A：safe 模式慢速遥操作修复（命令积分）
-
-### 现象（复现确认）
-
-safe 模式（QP 开）比 bypass 明显拖沓：3 s×0.03 m 前移在数据里只有 ~0.02 rad/s，
-回程尾段只剩 ~0.0002 rad/s 蠕动；而 bypass 同命令 ~0.1+ rad/s 跟手。
-
-### 根因（诊断已排除 QP/clipping）
-
-- QP 输出一直是**有效且未裁剪**的：`x=-f`、`|x|=|f|`，`f = -(dq_r + K·(q_r−q))`
-  每帧存在（复现目标下 `|f|≈0.44`）。
-- 但命令生成处旧实现是**每帧锚定实际**：
-
-  ```cpp
-  double alpha = 1.0;
-  q1_c_ = (1.0-alpha)*q1_c_ + alpha*q1_ + q1_dot_c_*control_period_;
-  // = q + q_dot_c*T（alpha=1 ⇒ 无记忆，命令永远只领先实际 ~0.0025 rad）
-  ```
-
-  内环位置跟踪项只看到 `k·0.0025 ≈ 1.5 N·m` 的微推力 → 整个 safe 链路变成蠕动。
-  与内环 `alpha_filt=0.01`、悬停时 sim 被暂停等**无关**（bypass/safe 对比已排除）。
-
-### 修复（Fix A：命令真正积分）
-
-文件与内容（备份见文末）：
-
-1. `src/dualarm_mprc/dualarm_reactive_control/src/dual_arm_safe_controller_sim.cpp:727-736`
-
-   ```cpp
-   // 命令位置 = QP 输出的有界速度的积分，不再每帧锚定到实际状态 q_1/q_2。
-   q1_c_ += q1_dot_c_ * control_period_;
-   q2_c_ += q2_dot_c_ * control_period_;
-   // 位置级 clamp 到关节限位，防止命令积分越限。
-   q1_c_ = q1_c_.cwiseMax(robot1_.q_lb).cwiseMin(robot1_.q_ub);
-   q2_c_ = q2_c_.cwiseMax(robot2_.q_lb).cwiseMin(robot2_.q_ub);
-   ```
-
-2. `config/control_parameters_sim.yaml`：`K_joint_tracking: 4.0 → 8.0`
-   （命令推进速度 ≈ `K·(q_r−q)`；K=8 时 0.03–0.09 rad 误差 → 0.25–0.7 rad/s）
-
-语义不变：`q_dot_c` 仍是受 CBF/限位/相对姿态约束裁剪后的 QP 输出，
-积分后约束**直接作用于命令位置**；STOPPING/TRACKING 已有 `q_c = q` 重新锚定，
-`dev = q−q_c` 稳态 ≈ −0.03…−0.08 rad，远低于 0.3 阈值，`LARGE_DEVIATION` 兜底保留。
-
-### 预期效果（以本次实测内环带宽 ~0.1–0.18 rad/s 估算）
-
-| 指标 | 修复前（实测） | 修复后（预期） |
+### 1) Fix A.3 开环代价（HQP / HardSoftQP 两个分支）
+| | HQP 分支 | HardSoftQP 分支 |
 |---|---|---|
-| 前向命令推进 | 0.013–0.022 rad/s | ≈0.25–0.7 rad/s |
-| 0.03 m（≈0.09 rad）到位 | 4–7 s 仍爬不到 | ≈0.5–1.5 s |
-| 回程尾段 | 0.0002 rad/s、>10 s 蠕动 | <0.001 rad@1.5–2 s |
-| 与 bypass 差距 | 5–10× 慢 | ≈1.2–2× |
+| fine | `generateCost(q_c, q_r, q_dot_r, H, f)`<br>`generateConstraints2HQP(q_c, dq_c_last, constraints)` | `generateCost(q_c, ...)`<br>`generateConstraints2HardSoftQP(q_c, ...)` |
+| removefix | `generateCost(q, q_r, q_dot_r, H, f)`（closed loop）<br>`generateConstraints2HQP(q, ...)` | `generateCost(q, ...)`<br>`generateConstraints2HardSoftQP(q, ...)` |
 
-### 复测步骤
+- 语义：fine 在 **INTEGRATED COMMAND `q_c`**（open loop）上评估跟踪误差与约束；removefix 改用实际关节 `q`（closed loop，8.17 行为）。
+- 背景：Fix A.3 的动机是闭环误差 `(q_r - q_actual)` 驱动命令积分器后经内环滞后（τ≈0.5 s）回馈，形成失稳共轭对 `s² + (1/τ)s + K/τ`（K=4, τ≈0.5 → roots -0.5, -2），配合限幅非线性出现逐步放大的 head-shake 极限环；open loop 使命令自身一阶收敛（根 s=-K），内环只跟随。移除后回到 8.17 的闭环振荡表现。
 
-沿用本手册第 0–2 节（safe 组 exp01–03；bypass 组 exp04–06 应无回退），
-重点看 `act` 命令/实际速度是否提升到 0.1+ rad/s、到位后是否停在 <0.001 rad，
-`<dir>/ctrl.log` 无 `LARGE_DEVIATION` / `QP_SOLVER_ERROR`。
+### 2) 命令位置级钳位
+- fine（有）：
+  ```cpp
+  q1_c_ = q1_c_.cwiseMax(robot1_.q_lb).cwiseMin(robot1_.q_ub);
+  q2_c_ = q2_c_.cwiseMax(robot2_.q_lb).cwiseMin(robot2_.q_ub);
+  ```
+- removefix（删掉这两行）：命令积分后不再做位置级限位保护。
 
-### Fix A.2（2026-08-17）：命令速度限幅 —— 修复“只过去不回来”回归
+### 3) 记录时间戳基准（⚠️ 额外差异，非用户要求的两项改动）
+| | 时间戳 |
+|---|---|
+| fine（及 8.17 / 017078d 等全部历史版本） | **相对** `node_->now().seconds() - start_time_`（从数据记录开始计时） |
+| removefix | **绝对** `node_->now().seconds()`（绝对 sim 时钟秒） |
 
-首次实跑 `--step 0.01 --steps 10 --interval 0.1 --hold 5.0` 发现问题：**前移正常、回程只动一点就停**。
+- 涉及 6 处：`recordData`、`recordHQPResult`、`recordHardSoftQPResult`、`recordComputationTime`、`recordTeleopTrackingData`、`recordTaskSpaceError`。
+- 影响：绝对时间戳与 `record_experiment.py` 的 `t_sim` / teleop / monitor 同基准，`robot*_reference_*.csv` 可按绝对时间与其它 CSV/bag 精确对齐。
+- ⚠️ **恢复到 fine 后时间戳回到相对**。若实验需要绝对时间对齐，需把上述 6 处重新改回 `node_->now().seconds()`（无 `- start_time_`）。
 
-**根因**：Fix A 后命令以 QP 速度 `K·(q_r−q)` 积分，上限可达 `dq_ub=2.5 rad/s`。回程掉头瞬间
-命令大幅往回推进，而实际（内环带宽实测 ~0.1–0.18 rad/s）跟不上 → `dev = q−q_c` 冲破 0.3 阈值
-→ `LARGE_DEVIATION`（cpp:762）→ 命令停发、走 `TELEOPERATING → REACTING → STOPPING`，机械臂停在半途。
+### 不变项（fine 与 removefix 相同）
+- constraint_manager 的 Fix #1（世界系相对位置约束：两参数 `setRelativePose(T, p_rel_world)` + `e_rp_world` 分支）—— 两者都含，与 8.17 相比是后来补齐的实现端。
+- `cmd_alpha` 参数化（online-tunable command mixing coefficient）。
+- 恢复/保留的 `relative_error_monitor.cpp`（工作区未提交改动仅为文件头注释，与本次无关）。
 
-**修复**：命令积分前对 `q_dot_c` 每关节限幅。新增可调参数 `cmd_velocity_limit`（默认 **0.2 rad/s**，sim/exp yaml 已同步）：
-
-```cpp
-q1_dot_c_ = q1_dot_c_.cwiseMax(-cmd_velocity_limit_).cwiseMin(cmd_velocity_limit_);
-q2_dot_c_ = q2_dot_c_.cwiseMax(-cmd_velocity_limit_).cwiseMin(cmd_velocity_limit_);
-```
-
-- 声明/读取：`cmd_velocity_limit_ = 0.2`（header）、`declare_parameter`、每个控制循环 `get_parameter`（可在线调：`ros2 param set <node> cmd_velocity_limit 0.25`）。
-- 限幅后命令始终处于内环可跟随速度范围，掉头偏差保持 ~0.05–0.1 rad；0.1 m（≈0.3 rad）回程约 1.5–2 s 完成，仍比修复前快 5–10 倍。
-- **注意**：`cmd_velocity_limit` 是 Fix A.2 新增量，之前的 `.bak` 备份仍是 Fix A 修复前原样；Fix A + A.2 的完整差异见 `git diff`。
-
-### Fix A.3（2026-08-17）：QP 代价/约束改 open-loop —— 修复“摇头晃脑幅度越来越大”（发散振荡）
-
-A.2 后复现实验出现更严重的振荡：命令来回抽搐、幅度递增直到发散。
-
-**根因**：Fix A 后命令以 QP 速度持续积分，但 QP 代价用的误差是 **`K*(q_r − q)`（实际位形闭环）**：
-命令速度由“实际”驱动，实际又去“跟随命令”——二者经内环跟踪滞后 τ 形成**二阶耦合反馈环**。
-特征方程 `s² + (1/τ)·s + K/τ`，带 K=8、τ≈0.5s → 复根 **−1 ± j3.9**（强欠阻尼），加上
-速度 clamp 的非线性 → 能量逐周期注入 → “摇头晃脑幅度越来越大”。A.2 只压了振幅、没切断反馈。
-
-**修复**：QP 代价和约束的误差/位形基点从**实际 q 改为命令位形 q_c（open-loop）**：
-
-```cpp
-constraint_manager_.generateCost(q_c, q_r, q_dot_r, H, f);              // open loop (Fix A.3)
-constraint_manager_.generateConstraints2HQP(q_c, dq_c_last, constraints); // open loop (Fix A.3)
-```
-
-- 命令动力学变为 `dq_c/dt = K·(q_r − q_c)`（限幅 0.2）→ **一阶稳定**（根 −K），命令自主单调收敛到目标，
-  实际只被动跟随 —— 与 bypass/集成参考已验证稳定的“命令自洽”架构同原理；
-- 约束（关节限位、CBF 碰撞）同样基于命令位形 q_c（命令防越界；CBF 用“超前命令位形”计算 → 保守安全）；
-- `use_task_space_cost_`（TASK_SPACE_POSE 专用）分支保持不变；
-- **两种求解器都已同步**（HQP 与 HardSoftQP）。
-
-**影响与注意**：
-- 命令收敛到目标的固有耗时 = 距离/0.2（clamp），0.1 rad 步进约 0.5–0.7 s，内环随动到位共 ~1.5 s；
-- **验证时请确认控制器跑的是 QP 路径**：`ros2 param set <main_sim_node> bypass_qp_safety_for_debug false`
-  后再发复现命令（bypass=true 时不走 QP、A.3 不生效）；
-- 若目标穿过安全约束（CBF），命令会停在约束前，实际随之停稳（保守安全，不会振荡）。
-
-### 备份（修改前原样）
-
-- `dualarm_reactive_control/src/dual_arm_safe_controller_sim.cpp.bak`
-- `dualarm_reactive_control/config/control_parameters_sim.yaml.bak`
-- `dualarm_reactive_control/config/control_parameters_exp.yaml.bak`
-| 自动脚本打印 `[AUTO_TELEOP] done` 后手臂停在终点 | 正常，脚本已发完前移+回程全部序列，机器人保持末位姿；换下一组前按第 0 节清理 |

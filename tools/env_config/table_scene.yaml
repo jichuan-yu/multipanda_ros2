@@ -6,6 +6,7 @@ description: "Table workspace with multiple obstacles for manipulation tasks"
 collision_objects:
   # 工作台面
   - id: "table_surface"
+    include_in_controller_collision: true
     type: "Box"
     dimensions: [0.8, 1.0, 0.05]      # 80cm x 100cm x 5cm
     pose:
@@ -15,6 +16,7 @@ collision_objects:
 
   # 前方中央圆柱
   - id: "front_cylinder"
+    include_in_controller_collision: true
     type: "Cylinder"
     dimensions: [0.04, 0.3]          # r=4cm, h=30cm
     pose:
@@ -24,6 +26,7 @@ collision_objects:
 
   # 左侧方块堆叠
   - id: "left_box_1"
+    include_in_controller_collision: true
     type: "Box"
     dimensions: [0.06, 0.06, 0.06]
     pose:
@@ -32,6 +35,7 @@ collision_objects:
       rgba: [0.2, 0.6, 0.8, 1.0]
 
   - id: "left_box_2"
+    include_in_controller_collision: true
     type: "Box"
     dimensions: [0.06, 0.06, 0.06]
     pose:
@@ -41,6 +45,7 @@ collision_objects:
 
   # 右侧球体
   - id: "right_ball"
+    include_in_controller_collision: true
     type: "Sphere"
     dimensions: [0.06]               # r=6cm
     pose:
@@ -50,6 +55,7 @@ collision_objects:
 
   # 中间障碍墙 (低矮)
   - id: "middle_wall"
+    include_in_controller_collision: true
     type: "Box"
     dimensions: [0.02, 0.3, 0.08]
     pose:

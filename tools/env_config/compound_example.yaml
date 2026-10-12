@@ -1,6 +1,7 @@
 description: "Rigid compound examples: a fixed frame and a movable L-shaped object"
 collision_objects:
   - id: fixed_frame
+    include_in_controller_collision: true
     type: Compound
     pose:
       position: [0.6, 0.0, 0.0]
@@ -25,6 +26,7 @@ collision_objects:
           position: [0.0, 0.0, 0.625]
 
   - id: movable_l
+    include_in_controller_collision: false
     type: Compound
     movable: true
     density: 500.0

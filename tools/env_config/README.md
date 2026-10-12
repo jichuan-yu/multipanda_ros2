@@ -2,7 +2,7 @@
 
 ## Overview
 
-This directory contains YAML configurations for primitive and rigid compound objects. The generator outputs MuJoCo XML for all objects, and MPRC / cuRobo YAML for static objects only.
+This directory contains YAML configurations for primitive and rigid compound objects. The generator outputs MuJoCo XML for all objects, and MPRC / cuRobo YAML for objects selected by `include_in_controller_collision` (default: `true`), independently of `movable`.
 
 ---
 
@@ -181,9 +181,9 @@ collision_objects:
   整体具有六个自由度。`movable` 和 `gravcomp` 的非默认值只能设在根对象。
 - 部件继承父对象的 `material` 和 `density`，也可单独覆盖；密度参与 MuJoCo 的质量和惯量计算。
   几何重叠区域不会做布尔合并，因此重叠部件的质量会重复计入。
-- 静态复合体在 MPRC / cuRobo 中展开为独立碰撞几何体，使用组合后的世界位姿。
+- 被选入控制器碰撞环境的复合体在 MPRC / cuRobo 中展开为独立碰撞几何体，使用组合后的世界位姿。
   名称为 `父id__子id`，嵌套时继续追加。重复名称及展开后的名称冲突会被拒绝。
-- 可移动复合体和可移动单体一样，不会出现在两份规划 YAML 中。
+- 单体和复合体均由 `include_in_controller_collision` 决定是否进入两份规划 YAML，与可移动性无关。
 - MuJoCo 和 MPRC 保留 Box / Cylinder / Sphere 原始形状。
   cuRobo 输出使用 `cuboid`：圆柱使用 `[2r, 2r, h]`，球体使用 `[2r, 2r, 2r]`
   的保守包围盒，可能比实际形状阻挡更多空间。
@@ -228,7 +228,7 @@ python3 -m unittest discover -s src/multipanda_ros2/tools/tests -v
 `debris_02` 移至 `[0.57, -0.23, 0.0125]` m，避开重新摆放的簸箕。
 扫帚刷毛是刚性几何体，不能模拟柔性弯曲；簸箕入口为简单薄板边缘，没有斜坡。
 这是场景和碰撞几何示例，不包含抓取、扫地或倾倒控制策略，也未验证机械臂全程可达性。
-可移动工具和碎屑不会出现在静态规划 YAML 中，工具附着和动态碰撞需要控制流程另行处理。
+本示例的可移动工具和碎屑显式设置了 `include_in_controller_collision: false`，不会出现在规划 YAML 中，工具附着和动态碰撞需要控制流程另行处理。
 
 在 `multipanda-container` 的 `myenv` 中预览：
 
@@ -344,3 +344,29 @@ ros2 launch my_task_description my_task_sim.launch.py use_rviz:=true
 `noslip_iterations="10"`，减少软接触在静态载荷下的残余滑移。
 仅增加夹持力或仅切换摩擦锥，在 120 s 回归实验中仍会滑落。
 该设置保留有限摩擦和独立自由物体，不会把托盘绑定到手指；接触求解开销会增加。
+
+
+### 是否计入控制器碰撞环境
+
+每个物体可设置布尔参数 `include_in_controller_collision`，默认 `true`：
+
+```yaml
+  - id: grasp_object
+    type: Box
+    movable: true
+    include_in_controller_collision: false
+    dimensions: [0.03, 0.03, 0.03]
+    pose:
+      position: [0.6, 0.0, 0.1]
+```
+
+- `movable` 只控制 MuJoCo 中是否可移动，不再影响碰撞环境导出。
+- `include_in_controller_collision` 同时控制 MPRC 和 cuRobo YAML，
+  不改变 MuJoCo 的几何、接触和动力学。
+- 复合物体根对象设为 `false` 会排除整个复合体；根对象为 `true` 时，
+  子部件也可用 `false` 单独排除。
+- 本目录全部基本 YAML 已显式配置该字段：原可移动物体为 `false`，
+  原固定物体为 `true`，保持原有输出语义。
+- 旧的外部配置若省略该字段，可移动物体现在也会被导出；要保持旧行为，
+  请为它们补上 `include_in_controller_collision: false`。
+- 导出的位姿是 YAML 中配置的初始世界位姿。本开关不提供运行时物体位姿跟踪。

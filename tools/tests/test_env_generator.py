@@ -44,6 +44,7 @@ class EnvGeneratorTests(unittest.TestCase):
 
     def test_movable_compound_is_one_body_with_one_joint(self):
         gen = generator([dict(id='tool', type='Compound', movable=True, gravcomp=1,
+                              include_in_controller_collision=False,
                               density=250, material={'rgba': [1, 0, 0, 1]},
                               parts=[box('a'), box('b', density=500,
                                                   material={'rgba': [0, 1, 0, 1]})])])
@@ -65,17 +66,17 @@ class EnvGeneratorTests(unittest.TestCase):
         root = ET.fromstring(gen.generate_mujoco_xml())
         self.assertEqual(len(root.findall('.//body')), 1)
         self.assertEqual(root.find('.//geom').get('pos'), '1 2 0')
-        self.assertEqual(gen._static_objects()[0].id, 'a__b__c')
+        self.assertEqual(gen._controller_objects()[0].id, 'a__b__c')
 
     def test_primitive_compatibility_and_mujoco_quaternion(self):
         gen = generator([box('static', pose={'orientation': [1, 0, 0, 0]}),
-                         box('dynamic', movable=True)])
+                         box('dynamic', movable=True, include_in_controller_collision=False)])
         root = ET.fromstring(gen.generate_mujoco_xml())
         self.assertEqual(root.find('worldbody/geom').get('quat'), '0 1 0 0')
         self.assertEqual(root.find('worldbody/geom').get('size'), '0.1 0.2 0.3')
         self.assertEqual(root.find('.//body').get('name'), 'dynamic')
         self.assertEqual(root.find('.//body/geom').get('name'), 'dynamic_geom')
-        self.assertEqual(len(gen._static_objects()), 1)
+        self.assertEqual(len(gen._controller_objects()), 1)
 
     def test_non_box_curobo_bounds(self):
         gen = generator([dict(id='c', type='Cylinder', dimensions=[0.2, 0.5]),
@@ -99,6 +100,35 @@ class EnvGeneratorTests(unittest.TestCase):
             with self.subTest(objects=objects):
                 self.assertFalse(EnvGenerator(EnvConfig.from_dict(
                     {'collision_objects': objects})).validate()[0])
+
+    def test_collision_export_is_independent_of_mobility(self):
+        for movable in [False, True]:
+            for included in [False, True]:
+                with self.subTest(movable=movable, included=included):
+                    gen = generator([box('object', movable=movable,
+                                         include_in_controller_collision=included)])
+                    self.assertEqual(len(yaml.safe_load(gen.generate_mprc_yaml())[
+                        'collision_objects']), int(included))
+                    self.assertEqual(len(yaml.safe_load(gen.generate_curobo_yaml())[
+                        'cuboid']), int(included))
+                    self.assertEqual(len(ET.fromstring(gen.generate_mujoco_xml()).findall(
+                        './/freejoint')), int(movable))
+        # Omitting the new field includes movable objects too.
+        self.assertEqual(len(generator([box(movable=True)])._controller_objects()), 1)
+
+    def test_compound_collision_selection(self):
+        gen = generator([dict(id='assembly', type='Compound', movable=True, parts=[
+            box('included'), box('excluded', include_in_controller_collision=False)])])
+        self.assertEqual([o.id for o in gen._controller_objects()], ['assembly__included'])
+        self.assertEqual(len(ET.fromstring(gen.generate_mujoco_xml()).findall('.//geom')), 2)
+        gen.config.collision_objects[0].include_in_controller_collision = False
+        self.assertEqual(gen._controller_objects(), [])
+
+    def test_collision_flag_requires_boolean(self):
+        for value in ['false', 0, 1, None]:
+            gen = EnvGenerator(EnvConfig.from_dict({'collision_objects': [
+                box(include_in_controller_collision=value)]}))
+            self.assertFalse(gen.validate()[0])
 
     def test_all_repository_examples(self):
         for path in (Path(__file__).resolve().parents[1] / 'env_config').glob('*.yaml'):

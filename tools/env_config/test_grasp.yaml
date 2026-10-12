@@ -2,6 +2,7 @@ description: "Simple test environment with a few obstacles"
 
 collision_objects:
   - id: "box_01"
+    include_in_controller_collision: true
     type: "Box"
     dimensions: [0.4, 1.0, 0.02]
     pose:
@@ -10,6 +11,7 @@ collision_objects:
       rgba: [1.0, 0.5, 0.0, 1.0]
 
   - id: "box_02"
+    include_in_controller_collision: false
     type: "Box"
     dimensions: [0.02, 0.8, 0.08]
     pose:

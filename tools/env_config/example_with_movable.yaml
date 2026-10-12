@@ -3,6 +3,7 @@ description: "Environment with static obstacles and movable objects"
 collision_objects:
   # Static obstacles (will appear in both XML and MPRC YAML)
   - id: "shelf_01"
+    include_in_controller_collision: true
     type: "Box"
     dimensions: [0.4, 1.0, 0.02]
     pose:
@@ -11,6 +12,7 @@ collision_objects:
       rgba: [1.0, 0.5, 0.0, 1.0]
 
   - id: "shelf_02"
+    include_in_controller_collision: true
     type: "Box"
     dimensions: [0.4, 1.0, 0.02]
     pose:
@@ -21,6 +23,7 @@ collision_objects:
   # Movable objects (will appear ONLY in XML, NOT in MPRC YAML)
   # These are objects that can be manipulated by the robot
   - id: "movable_box_01"
+    include_in_controller_collision: false
     type: "Box"
     dimensions: [0.05, 0.05, 0.05]
     pose:
@@ -30,6 +33,7 @@ collision_objects:
       rgba: [0.2, 0.8, 0.2, 1.0]
 
   - id: "movable_cylinder_01"
+    include_in_controller_collision: false
     type: "Cylinder"
     dimensions: [0.03, 0.10]  # [radius, height]
     pose:
@@ -39,6 +43,7 @@ collision_objects:
       rgba: [0.8, 0.2, 0.2, 1.0]
 
   - id: "movable_sphere_01"
+    include_in_controller_collision: false
     type: "Sphere"
     dimensions: [0.04]  # [radius]
     pose:

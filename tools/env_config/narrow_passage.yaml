@@ -6,6 +6,7 @@ description: "Narrow passage between obstacles for precision manipulation"
 collision_objects:
   # 左侧墙壁
   - id: "left_wall_1"
+    include_in_controller_collision: true
     type: "Box"
     dimensions: [0.3, 0.02, 0.4]
     pose:
@@ -14,6 +15,7 @@ collision_objects:
       rgba: [0.7, 0.7, 0.7, 1.0]
 
   - id: "left_wall_2"
+    include_in_controller_collision: true
     type: "Box"
     dimensions: [0.3, 0.02, 0.4]
     pose:
@@ -23,6 +25,7 @@ collision_objects:
 
   # 右侧墙壁
   - id: "right_wall_1"
+    include_in_controller_collision: true
     type: "Box"
     dimensions: [0.3, 0.02, 0.4]
     pose:
@@ -31,6 +34,7 @@ collision_objects:
       rgba: [0.7, 0.7, 0.7, 1.0]
 
   - id: "right_wall_2"
+    include_in_controller_collision: true
     type: "Box"
     dimensions: [0.3, 0.02, 0.4]
     pose:
@@ -40,6 +44,7 @@ collision_objects:
 
   # 中间悬垂圆柱 - 增加难度
   - id: "hanging_cylinder"
+    include_in_controller_collision: true
     type: "Cylinder"
     dimensions: [0.04, 0.15]
     pose:
@@ -49,6 +54,7 @@ collision_objects:
 
   # 目标物体 (小方块)
   - id: "target_box"
+    include_in_controller_collision: true
     type: "Box"
     dimensions: [0.04, 0.04, 0.04]
     pose:

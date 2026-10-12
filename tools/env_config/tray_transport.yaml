@@ -9,6 +9,7 @@
 description: 'Tray transport: two fixed stools, one movable tray and six stacked cubes'
 collision_objects:
 - id: left_stool
+  include_in_controller_collision: true
   type: Compound
   movable: false
   pose:
@@ -43,6 +44,7 @@ collision_objects:
     pose:
       position: [0.095, 0.045, 0.085]
 - id: right_stool
+  include_in_controller_collision: true
   type: Compound
   movable: false
   pose:
@@ -77,6 +79,7 @@ collision_objects:
     pose:
       position: [0.095, 0.07, 0.16]
 - id: tray
+  include_in_controller_collision: false
   type: Compound
   movable: true
   density: 500.0
@@ -113,6 +116,7 @@ collision_objects:
     pose:
       position: [0, -0.095, 0.02]
 - id: cube_01
+  include_in_controller_collision: false
   type: Box
   dimensions: [0.03, 0.03, 0.03]
   pose:
@@ -123,6 +127,7 @@ collision_objects:
     friction: [0.6, 0.005, 0.0001]
     rgba: [0.9, 0.3, 0.15, 1]
 - id: cube_02
+  include_in_controller_collision: false
   type: Box
   dimensions: [0.03, 0.03, 0.03]
   pose:
@@ -133,6 +138,7 @@ collision_objects:
     friction: [0.6, 0.005, 0.0001]
     rgba: [0.95, 0.7, 0.15, 1]
 - id: cube_03
+  include_in_controller_collision: false
   type: Box
   dimensions: [0.03, 0.03, 0.03]
   pose:
@@ -143,6 +149,7 @@ collision_objects:
     friction: [0.6, 0.005, 0.0001]
     rgba: [0.3, 0.75, 0.25, 1]
 - id: cube_04
+  include_in_controller_collision: false
   type: Box
   dimensions: [0.03, 0.03, 0.03]
   pose:
@@ -153,6 +160,7 @@ collision_objects:
     friction: [0.6, 0.005, 0.0001]
     rgba: [0.9, 0.3, 0.15, 1]
 - id: cube_05
+  include_in_controller_collision: false
   type: Box
   dimensions: [0.03, 0.03, 0.03]
   pose:
@@ -163,6 +171,7 @@ collision_objects:
     friction: [0.6, 0.005, 0.0001]
     rgba: [0.95, 0.7, 0.15, 1]
 - id: cube_06
+  include_in_controller_collision: false
   type: Box
   dimensions: [0.03, 0.03, 0.03]
   pose:

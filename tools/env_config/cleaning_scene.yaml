@@ -7,6 +7,7 @@
 description: "Floor cleaning: rigid broom, open dustpan, eight loose cubes and one narrow fixed support"
 collision_objects:
   - id: broom
+    include_in_controller_collision: false
     type: Compound
     movable: true
     density: 450.0
@@ -63,6 +64,7 @@ collision_objects:
           rgba: [0.9, 0.75, 0.25, 1.0]
 
   - id: dustpan
+    include_in_controller_collision: false
     type: Compound
     movable: true
     density: 600.0
@@ -104,6 +106,7 @@ collision_objects:
 
   # Loose debris rests on z=0: centre height is half the cube side length.
   - id: debris_01
+    include_in_controller_collision: false
     type: Box
     dimensions: [0.02, 0.02, 0.02]
     movable: true
@@ -114,6 +117,7 @@ collision_objects:
       friction: [0.35, 0.005, 0.0001]
       rgba: [0.9, 0.3, 0.15, 1.0]
   - id: debris_02
+    include_in_controller_collision: false
     type: Box
     dimensions: [0.025, 0.025, 0.025]
     movable: true
@@ -124,6 +128,7 @@ collision_objects:
       friction: [0.35, 0.005, 0.0001]
       rgba: [0.9, 0.6, 0.1, 1.0]
   - id: debris_03
+    include_in_controller_collision: false
     type: Box
     dimensions: [0.018, 0.018, 0.018]
     movable: true
@@ -134,6 +139,7 @@ collision_objects:
       friction: [0.35, 0.005, 0.0001]
       rgba: [0.3, 0.75, 0.2, 1.0]
   - id: debris_04
+    include_in_controller_collision: false
     type: Box
     dimensions: [0.02, 0.02, 0.02]
     movable: true
@@ -144,6 +150,7 @@ collision_objects:
       friction: [0.35, 0.005, 0.0001]
       rgba: [0.9, 0.3, 0.15, 1.0]
   - id: debris_05
+    include_in_controller_collision: false
     type: Box
     dimensions: [0.022, 0.022, 0.022]
     movable: true
@@ -154,6 +161,7 @@ collision_objects:
       friction: [0.35, 0.005, 0.0001]
       rgba: [0.9, 0.6, 0.1, 1.0]
   - id: debris_06
+    include_in_controller_collision: false
     type: Box
     dimensions: [0.018, 0.018, 0.018]
     movable: true
@@ -164,6 +172,7 @@ collision_objects:
       friction: [0.35, 0.005, 0.0001]
       rgba: [0.3, 0.75, 0.2, 1.0]
   - id: debris_07
+    include_in_controller_collision: false
     type: Box
     dimensions: [0.025, 0.025, 0.025]
     movable: true
@@ -174,6 +183,7 @@ collision_objects:
       friction: [0.35, 0.005, 0.0001]
       rgba: [0.9, 0.3, 0.15, 1.0]
   - id: debris_08
+    include_in_controller_collision: false
     type: Box
     dimensions: [0.02, 0.02, 0.02]
     movable: true
@@ -186,6 +196,7 @@ collision_objects:
 
   # Fixed obstacles: no free joints, and bottom faces at z=0.
   - id: fixed_block
+    include_in_controller_collision: true
     type: Box
     dimensions: [0.08, 0.08, 0.40]  # Tall support for the broom.
     pose:

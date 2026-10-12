@@ -6,6 +6,7 @@ description: "Simple test environment with a few obstacles"
 collision_objects:
   # 方块
   - id: "box_01"
+    include_in_controller_collision: true
     type: "Box"
     dimensions: [0.1, 0.1, 0.2]
     pose:
@@ -15,6 +16,7 @@ collision_objects:
 
   # 圆柱
   - id: "pillar_01"
+    include_in_controller_collision: true
     type: "Cylinder"
     dimensions: [0.05, 0.4]
     pose:
@@ -24,6 +26,7 @@ collision_objects:
 
   # 球体
   - id: "ball_01"
+    include_in_controller_collision: true
     type: "Sphere"
     dimensions: [0.08]
     pose:

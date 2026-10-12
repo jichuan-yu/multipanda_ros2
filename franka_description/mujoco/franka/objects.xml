@@ -1,56 +1,51 @@
 <mujocoinclude>
   <worldbody>
-    <!-- Floor cleaning: rigid broom, open dustpan, eight loose cubes and one narrow fixed support -->
-    <body name="broom" pos="0.443371705 0.226628295 0.0414760883" quat="0.54167522 0.454519478 -0.454519478 0.54167522">
-      <freejoint name="broom_joint" />
-      <geom name="broom__head_geom" type="box" size="0.015 0.11 0.012" pos="0 0 0" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="450.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.65 0.38 0.12 1.0" />
-      <geom name="broom__handle_geom" type="cylinder" size="0.01 0.275" pos="0.29 0 0" quat="0.707106781 0 0.707106781 0" friction="0.6 0.005 0.0001" density="450.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.65 0.38 0.12 1.0" />
-      <geom name="broom__bristles_1_geom" type="box" size="0.0125 0.02 0.007" pos="-0.0275 -0.088 -0.005" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="450.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.9 0.75 0.25 1.0" />
-      <geom name="broom__bristles_2_geom" type="box" size="0.0125 0.02 0.007" pos="-0.0275 -0.044 -0.005" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="450.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.9 0.75 0.25 1.0" />
-      <geom name="broom__bristles_3_geom" type="box" size="0.0125 0.02 0.007" pos="-0.0275 0 -0.005" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="450.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.9 0.75 0.25 1.0" />
-      <geom name="broom__bristles_4_geom" type="box" size="0.0125 0.02 0.007" pos="-0.0275 0.044 -0.005" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="450.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.9 0.75 0.25 1.0" />
-      <geom name="broom__bristles_5_geom" type="box" size="0.0125 0.02 0.007" pos="-0.0275 0.088 -0.005" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="450.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.9 0.75 0.25 1.0" />
+    <!-- Tray transport: two fixed stools, one movable tray and six stacked cubes -->
+    <body name="left_stool" pos="0.6 0.35 0" quat="0.707106781 0 0 0.707106781">
+      <geom name="left_stool__seat_geom" type="box" size="0.125 0.075 0.015" pos="0 0 0.185" quat="1 0 0 0" friction="2.0 0.005 0.0001" density="1000.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.55 0.36 0.18 1" />
+      <geom name="left_stool__leg_1_geom" type="box" size="0.02 0.02 0.085" pos="-0.095 -0.045 0.085" quat="1 0 0 0" friction="2.0 0.005 0.0001" density="1000.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.55 0.36 0.18 1" />
+      <geom name="left_stool__leg_2_geom" type="box" size="0.02 0.02 0.085" pos="-0.095 0.045 0.085" quat="1 0 0 0" friction="2.0 0.005 0.0001" density="1000.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.55 0.36 0.18 1" />
+      <geom name="left_stool__leg_3_geom" type="box" size="0.02 0.02 0.085" pos="0.095 -0.045 0.085" quat="1 0 0 0" friction="2.0 0.005 0.0001" density="1000.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.55 0.36 0.18 1" />
+      <geom name="left_stool__leg_4_geom" type="box" size="0.02 0.02 0.085" pos="0.095 0.045 0.085" quat="1 0 0 0" friction="2.0 0.005 0.0001" density="1000.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.55 0.36 0.18 1" />
     </body>
-    <body name="dustpan" pos="0.307 -0.255 0" quat="0.707106781 0 0 -0.707106781">
-      <freejoint name="dustpan_joint" />
-      <geom name="dustpan__base_geom" type="box" size="0.1 0.11 0.0015" pos="0 0 0.0015" quat="1 0 0 0" friction="0.4 0.005 0.0001" density="600.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.1 0.45 0.8 1.0" />
-      <geom name="dustpan__left_wall_geom" type="box" size="0.1 0.005 0.025" pos="0 0.115 0.025" quat="1 0 0 0" friction="0.4 0.005 0.0001" density="600.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.1 0.45 0.8 1.0" />
-      <geom name="dustpan__right_wall_geom" type="box" size="0.1 0.005 0.025" pos="0 -0.115 0.025" quat="1 0 0 0" friction="0.4 0.005 0.0001" density="600.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.1 0.45 0.8 1.0" />
-      <geom name="dustpan__rear_wall_geom" type="box" size="0.005 0.12 0.03" pos="0.105 0 0.03" quat="1 0 0 0" friction="0.4 0.005 0.0001" density="600.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.1 0.45 0.8 1.0" />
-      <geom name="dustpan__handle_geom" type="cylinder" size="0.012 0.225" pos="0.105 0 0.285" quat="1 0 0 0" friction="0.4 0.005 0.0001" density="600.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.08 0.18 0.25 1.0" />
+    <body name="right_stool" pos="0.6 -0.35 0" quat="0.707106781 0 0 0.707106781">
+      <geom name="right_stool__seat_geom" type="box" size="0.125 0.1 0.015" pos="0 0 0.335" quat="1 0 0 0" friction="2.0 0.005 0.0001" density="1000.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.35 0.42 0.52 1" />
+      <geom name="right_stool__leg_1_geom" type="box" size="0.02 0.02 0.16" pos="-0.095 -0.07 0.16" quat="1 0 0 0" friction="2.0 0.005 0.0001" density="1000.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.35 0.42 0.52 1" />
+      <geom name="right_stool__leg_2_geom" type="box" size="0.02 0.02 0.16" pos="-0.095 0.07 0.16" quat="1 0 0 0" friction="2.0 0.005 0.0001" density="1000.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.35 0.42 0.52 1" />
+      <geom name="right_stool__leg_3_geom" type="box" size="0.02 0.02 0.16" pos="0.095 -0.07 0.16" quat="1 0 0 0" friction="2.0 0.005 0.0001" density="1000.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.35 0.42 0.52 1" />
+      <geom name="right_stool__leg_4_geom" type="box" size="0.02 0.02 0.16" pos="0.095 0.07 0.16" quat="1 0 0 0" friction="2.0 0.005 0.0001" density="1000.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.35 0.42 0.52 1" />
     </body>
-    <body name="debris_01" pos="0.3 -0.12 0.01" quat="1 0 0 0">
-      <freejoint name="debris_01_joint" />
-      <geom name="debris_01_geom" type="box" size="0.01 0.01 0.01" pos="0 0 0" quat="1 0 0 0" friction="0.35 0.005 0.0001" density="400.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.9 0.3 0.15 1.0" />
+    <body name="tray" pos="0.6 0.35 0.2" quat="0.707106781 0 0 0.707106781">
+      <freejoint name="tray_joint" />
+      <geom name="tray__base_geom" type="box" size="0.15 0.1 0.005" pos="0 0 0.005" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.15 0.5 0.75 1" />
+      <geom name="tray__front_wall_geom" type="box" size="0.005 0.09 0.01" pos="-0.145 0 0.02" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.15 0.5 0.75 1" />
+      <geom name="tray__back_wall_geom" type="box" size="0.005 0.09 0.01" pos="0.145 0 0.02" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.15 0.5 0.75 1" />
+      <geom name="tray__left_wall_geom" type="box" size="0.15 0.005 0.01" pos="0 0.095 0.02" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.15 0.5 0.75 1" />
+      <geom name="tray__right_wall_geom" type="box" size="0.15 0.005 0.01" pos="0 -0.095 0.02" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.15 0.5 0.75 1" />
     </body>
-    <body name="debris_02" pos="0.57 -0.23 0.0125" quat="1 0 0 0">
-      <freejoint name="debris_02_joint" />
-      <geom name="debris_02_geom" type="box" size="0.0125 0.0125 0.0125" pos="0 0 0" quat="1 0 0 0" friction="0.35 0.005 0.0001" density="400.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.9 0.6 0.1 1.0" />
+    <body name="cube_01" pos="0.6 0.35 0.225" quat="1 0 0 0">
+      <freejoint name="cube_01_joint" />
+      <geom name="cube_01_geom" type="box" size="0.015 0.015 0.015" pos="0 0 0" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.9 0.3 0.15 1" />
     </body>
-    <body name="debris_03" pos="0.57 0.08 0.009" quat="1 0 0 0">
-      <freejoint name="debris_03_joint" />
-      <geom name="debris_03_geom" type="box" size="0.009 0.009 0.009" pos="0 0 0" quat="1 0 0 0" friction="0.35 0.005 0.0001" density="400.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.3 0.75 0.2 1.0" />
+    <body name="cube_02" pos="0.6 0.35 0.255" quat="1 0 0 0">
+      <freejoint name="cube_02_joint" />
+      <geom name="cube_02_geom" type="box" size="0.015 0.015 0.015" pos="0 0 0" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.95 0.7 0.15 1" />
     </body>
-    <body name="debris_04" pos="0.74 0.03 0.01" quat="1 0 0 0">
-      <freejoint name="debris_04_joint" />
-      <geom name="debris_04_geom" type="box" size="0.01 0.01 0.01" pos="0 0 0" quat="1 0 0 0" friction="0.35 0.005 0.0001" density="400.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.9 0.3 0.15 1.0" />
+    <body name="cube_03" pos="0.6 0.35 0.285" quat="1 0 0 0">
+      <freejoint name="cube_03_joint" />
+      <geom name="cube_03_geom" type="box" size="0.015 0.015 0.015" pos="0 0 0" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.3 0.75 0.25 1" />
     </body>
-    <body name="debris_05" pos="0.37 0.12 0.011" quat="1 0 0 0">
-      <freejoint name="debris_05_joint" />
-      <geom name="debris_05_geom" type="box" size="0.011 0.011 0.011" pos="0 0 0" quat="1 0 0 0" friction="0.35 0.005 0.0001" density="400.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.9 0.6 0.1 1.0" />
+    <body name="cube_04" pos="0.6 0.35 0.315" quat="1 0 0 0">
+      <freejoint name="cube_04_joint" />
+      <geom name="cube_04_geom" type="box" size="0.015 0.015 0.015" pos="0 0 0" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.9 0.3 0.15 1" />
     </body>
-    <body name="debris_06" pos="0.52 -0.02 0.009" quat="1 0 0 0">
-      <freejoint name="debris_06_joint" />
-      <geom name="debris_06_geom" type="box" size="0.009 0.009 0.009" pos="0 0 0" quat="1 0 0 0" friction="0.35 0.005 0.0001" density="400.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.3 0.75 0.2 1.0" />
+    <body name="cube_05" pos="0.6 0.35 0.345" quat="1 0 0 0">
+      <freejoint name="cube_05_joint" />
+      <geom name="cube_05_geom" type="box" size="0.015 0.015 0.015" pos="0 0 0" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.95 0.7 0.15 1" />
     </body>
-    <body name="debris_07" pos="0.68 0.18 0.0125" quat="1 0 0 0">
-      <freejoint name="debris_07_joint" />
-      <geom name="debris_07_geom" type="box" size="0.0125 0.0125 0.0125" pos="0 0 0" quat="1 0 0 0" friction="0.35 0.005 0.0001" density="400.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.9 0.3 0.15 1.0" />
+    <body name="cube_06" pos="0.6 0.35 0.375" quat="1 0 0 0">
+      <freejoint name="cube_06_joint" />
+      <geom name="cube_06_geom" type="box" size="0.015 0.015 0.015" pos="0 0 0" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.3 0.75 0.25 1" />
     </body>
-    <body name="debris_08" pos="0.82 -0.32 0.01" quat="1 0 0 0">
-      <freejoint name="debris_08_joint" />
-      <geom name="debris_08_geom" type="box" size="0.01 0.01 0.01" pos="0 0 0" quat="1 0 0 0" friction="0.35 0.005 0.0001" density="400.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.9 0.6 0.1 1.0" />
-    </body>
-    <geom name="fixed_block" type="box" size="0.04 0.04 0.2" pos="0.443371705 0.34 0.2" quat="1 0 0 0" friction="2.0 0.005 0.0001" density="1000.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.4 0.45 0.5 1.0" />
   </worldbody>
 </mujocoinclude>

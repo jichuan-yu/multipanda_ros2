@@ -111,6 +111,71 @@ class MuJoCoEnvironmentTests(unittest.TestCase):
             if any(name.startswith(('broom', 'dustpan', 'fixed_', 'debris_')) for name in names):
                 self.assertGreaterEqual(contact.dist, -1e-5, names)
 
+    def test_tray_transport_stack_stays_supported(self):
+        root = model_xml(CONFIG_DIR / 'tray_transport.yaml')
+        ET.SubElement(root.find('worldbody'), 'geom', name='floor', type='plane', size='2 2 0.05')
+        ET.SubElement(root, 'option', timestep='0.002')
+        model = mujoco.MjModel.from_xml_string(ET.tostring(root, encoding='unicode'))
+        data = mujoco.MjData(model)
+        mujoco.mj_forward(model, data)
+        self.assertEqual(model.njnt, 7)  # Tray and six independent cubes.
+        self.assertTrue(all(c.dist >= -1e-6 for c in data.contact))
+        def geom(name):
+            return mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, name)
+        for name, size, height in [('left_stool', [.25, .15, .03], .2),
+                                   ('right_stool', [.25, .2, .03], .35)]:
+            seat = geom(name + '__seat_geom')
+            np.testing.assert_allclose(2 * model.geom_size[seat], size)
+            self.assertAlmostEqual(data.geom_xpos[seat, 2] + model.geom_size[seat, 2], height)
+            body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, name)
+            self.assertEqual(model.body_jntnum[body], 0)
+        for name in ['left_stool__seat_geom', 'right_stool__seat_geom', 'tray__base_geom']:
+            np.testing.assert_allclose(data.geom_xmat[geom(name)].reshape(3, 3)[:, 0],
+                                       [0, 1, 0], atol=1e-8)
+        base = geom('tray__base_geom')
+        np.testing.assert_allclose(2 * model.geom_size[base], [.3, .2, .01])
+        self.assertAlmostEqual(data.geom_xpos[base, 2] - model.geom_size[base, 2], .2)
+        for wall in ['front', 'back', 'left', 'right']:
+            self.assertAlmostEqual(2 * model.geom_size[geom('tray__' + wall + '_wall_geom'), 2], .02)
+        for i in range(1, 7):
+            cube = geom(f'cube_{i:02}_geom')
+            np.testing.assert_allclose(2 * model.geom_size[cube], [.03, .03, .03])
+            np.testing.assert_allclose(data.geom_xpos[cube], [.6, .35, .225 + (i - 1) * .03])
+        initial = data.xpos.copy()
+        # Match SimPausedPhysics: pause-time forward calls must not warm-start
+        # the first integrated step with their constraint solution (MuJoCo 3.2).
+        for _ in range(100):
+            data.qacc_warmstart[:] = 0
+            mujoco.mj_forward(model, data)
+            data.qacc_warmstart[:] = 0
+        for _ in range(15000):
+            mujoco.mj_step(model, data)
+        self.assertTrue(np.isfinite(data.qpos).all())
+        self.assertFalse(any(w.number for w in data.warning))
+        self.assertLess(np.max(np.linalg.norm(data.xpos - initial, axis=1)), .002)
+        contact_pairs = [{c.geom1, c.geom2} for c in data.contact]
+        self.assertIn({geom('cube_01_geom'), base}, contact_pairs)
+        for i in range(1, 6):
+            self.assertIn({geom(f'cube_{i:02}_geom'), geom(f'cube_{i+1:02}_geom')}, contact_pairs)
+
+    def test_tray_transport_clear_robot_home_pose(self):
+        assets = CONFIG_DIR.parents[1] / 'franka_description/mujoco/franka'
+        root = ET.parse(assets / 'mj_dual.xml').getroot()
+        root.find('compiler').set('meshdir', str(assets / 'assets'))
+        root.find('worldbody').extend(model_xml(CONFIG_DIR / 'tray_transport.yaml').find('worldbody'))
+        model = mujoco.MjModel.from_xml_string(ET.tostring(root, encoding='unicode'))
+        data = mujoco.MjData(model)
+        for side in ['left', 'right']:
+            for i, value in enumerate([0, -.785, 0, -2.356, 0, 1.571, .785], 1):
+                joint = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f'mj_{side}_joint{i}')
+                data.qpos[model.jnt_qposadr[joint]] = value
+        mujoco.mj_forward(model, data)
+        for contact in data.contact:
+            names = [mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, g) or ''
+                     for g in (contact.geom1, contact.geom2)]
+            if any(name.startswith(('left_stool', 'right_stool', 'tray', 'cube_')) for name in names):
+                self.assertGreaterEqual(contact.dist, -1e-5, names)
+
 
 if __name__ == '__main__':
     unittest.main()

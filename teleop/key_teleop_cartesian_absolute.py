@@ -21,6 +21,9 @@ Arm Selection:
 Gripper Control:
   N: Open gripper (0.08m)
   M: Close gripper (0.0m)
+Cooperative Constraint:
+  ,: Enable (capture current relative pose)
+  .: Disable
 Step Size:
   [: Decrease step
   ]: Increase step
@@ -38,6 +41,8 @@ Usage:
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float64MultiArray
+from rcl_interfaces.msg import Parameter, ParameterValue, ParameterType
+from rcl_interfaces.srv import ListParameters, SetParameters
 import sys
 import select
 import termios
@@ -47,6 +52,7 @@ import numpy as np
 import argparse
 import time
 import os
+from pathlib import Path
 
 # Add parent directory to path for imports (for direct execution)
 if __name__ == '__main__':
@@ -100,7 +106,7 @@ class KeyCartesianAbsoluteTeleop(BaseTeleopNode):
     # Command type constants
     TASK_SPACE_POSE = 5
 
-    def __init__(self, step_position: float = 0.001, step_rotation: float = 0.01):
+    def __init__(self, step_position: float = 0.001, step_rotation: float = 0.01, controller_node: str = None):
         """Initialize key Cartesian absolute teleop node."""
         super().__init__('key_cartesian_absolute_teleop', publish_rate=100.0)
 
@@ -145,6 +151,14 @@ class KeyCartesianAbsoluteTeleop(BaseTeleopNode):
             10
         )
 
+        # Serialize parameter requests; a rapid comma/period sequence keeps
+        # the latest requested state without blocking keyboard input.
+        self.controller_node = controller_node
+        self.coordination_lock = threading.RLock()
+        self.coordination_busy = False
+        self.coordination_requested = None
+
+        print(f"[Teleop runtime-switch v2] 脚本：{Path(__file__).resolve()}", flush=True)
         self.print_usage()
         self.target_ee_poses = {
             'left': {
@@ -181,6 +195,10 @@ Arm Selection:
 Gripper Control:
   N : Open gripper (0.08m)
   M : Close gripper (0.0m)
+
+Cooperative Constraint (both arms):
+  , : Enable and capture current relative pose
+  . : Disable
 
 Step Size:
   [ : Decrease step
@@ -233,6 +251,10 @@ Ctrl-C to quit
 
     def update_from_key(self, key: str) -> bool:
         """Update pose based on key input, using LAST COMMAND position as base."""
+        if key in (',', '.'):
+            self.set_cooperative_constraint(key == ',')
+            return False
+
         # Arm selection
         if key == 'z':
             if self.selected_arm != 'left':
@@ -364,6 +386,112 @@ Ctrl-C to quit
 
         return False
 
+    def set_cooperative_constraint(self, enabled: bool):
+        """Resolve the actual controller and switch without blocking keyboard input."""
+        with self.coordination_lock:
+            self.coordination_requested = enabled
+            if self.coordination_busy:
+                return
+            self.coordination_busy = True
+        threading.Thread(target=self._cooperative_worker, daemon=True).start()
+
+    @staticmethod
+    def _wait_parameter_response(client, request, timeout=3.0):
+        if not client.wait_for_service(timeout_sec=timeout):
+            raise RuntimeError(f"参数服务未发现：{client.srv_name}")
+        future = client.call_async(request)
+        ready = threading.Event()
+        future.add_done_callback(lambda _: ready.set())
+        if not ready.wait(timeout):
+            client.remove_pending_request(future)
+            raise RuntimeError(f"参数服务响应超时：{client.srv_name}；切换结果未知")
+        return future.result()
+
+    def _find_cooperative_controller(self):
+        # Query parameter ownership instead of assuming a node name. Discovery
+        # runs on wall time, including while the simulation clock is paused.
+        deadline = time.monotonic() + 4.0
+        while rclpy.ok() and time.monotonic() < deadline:
+            if self.controller_node:
+                candidates = ['/' + self.controller_node.strip('/')]
+            else:
+                candidates = sorted({
+                    name[:-len('/list_parameters')]
+                    for name, types in self.get_service_names_and_types()
+                    if name.endswith('/list_parameters') and
+                    'rcl_interfaces/srv/ListParameters' in types
+                })
+            clients = []
+            try:
+                pending = []
+                for name in candidates:
+                    client = self.create_client(ListParameters, name + '/list_parameters')
+                    clients.append(client)
+                    if client.wait_for_service(timeout_sec=.1):
+                        request = ListParameters.Request()
+                        request.prefixes = ['relative_pose_constraint_enabled']
+                        pending.append((name, client, client.call_async(request)))
+                end = min(deadline, time.monotonic() + 1.0)
+                while any(not f.done() for _, _, f in pending) and time.monotonic() < end:
+                    time.sleep(.02)
+                matches = []
+                for name, client, future in pending:
+                    if not future.done():
+                        client.remove_pending_request(future)
+                        continue
+                    response = future.result()
+                    if 'relative_pose_constraint_enabled' in response.result.names:
+                        matches.append(name)
+                if len(matches) == 1:
+                    return matches[0]
+                if len(matches) > 1:
+                    raise RuntimeError('多个控制器具有协同参数：' + ', '.join(matches) +
+                                       '；请用 --controller-node 指定节点')
+            finally:
+                for client in clients:
+                    self.destroy_client(client)
+            time.sleep(.1)
+        raise RuntimeError('未发现声明 relative_pose_constraint_enabled 的控制器；'
+                           '请检查节点名、ROS_DOMAIN_ID，或当前控制器是否支持该参数。'
+                           '可用 --controller-node /实际节点名 指定')
+
+    def _cooperative_worker(self):
+        while rclpy.ok():
+            with self.coordination_lock:
+                enabled = self.coordination_requested
+                self.coordination_requested = None
+            client = None
+            try:
+                node_name = self._find_cooperative_controller()
+                # Apply the latest key if it changed during discovery.
+                with self.coordination_lock:
+                    if self.coordination_requested is not None:
+                        enabled = self.coordination_requested
+                        self.coordination_requested = None
+                client = self.create_client(SetParameters, node_name + '/set_parameters')
+                request = SetParameters.Request()
+                request.parameters = [Parameter(
+                    name='relative_pose_constraint_enabled',
+                    value=ParameterValue(type=ParameterType.PARAMETER_BOOL, bool_value=enabled))]
+                response = self._wait_parameter_response(client, request)
+                if len(response.results) != 1 or not response.results[0].successful:
+                    raise RuntimeError('控制器拒绝切换：' +
+                                       '; '.join(r.reason for r in response.results))
+                state = '开启' if enabled else '关闭'
+                print(f"\n[协同约束] {node_name} 已接受{state}请求，下一控制周期生效。",
+                      flush=True)
+            except Exception as exc:
+                print(f"\n[协同约束] {exc}", flush=True)
+            finally:
+                if client is not None:
+                    self.destroy_client(client)
+            with self.coordination_lock:
+                if self.coordination_requested is None:
+                    self.coordination_busy = False
+                    return
+        with self.coordination_lock:
+            self.coordination_busy = False
+
     def publish_teleop_command(self):
         """Publish absolute end-effector pose as teleop command."""
         # Format: [left_x,y,z,qx,qy,qz,qw, right_x,y,z,qx,qy,qz,qw] (14 elements)
@@ -455,12 +583,15 @@ def main(args=None):
                         help='Rotation increment per keypress (rad)')
     parser.add_argument('--arm', type=str, choices=['left', 'right', 'both'],
                         default='left', help='Initial arm selection')
+    parser.add_argument('--controller-node', default=None,
+                        help='Controller node path; default: discover by cooperative parameter')
     parser_args = parser.parse_args(args)
 
     rclpy.init(args=args)
     node = KeyCartesianAbsoluteTeleop(
         step_position=parser_args.step_position,
-        step_rotation=parser_args.step_rotation
+        step_rotation=parser_args.step_rotation,
+        controller_node=parser_args.controller_node
     )
     node.set_selected_arm(parser_args.arm)
 

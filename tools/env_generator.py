@@ -3,7 +3,7 @@
 Flexible Environment Generator for Dual Panda Simulation
 
 Generates MuJoCo XML, MPRC YAML, and cuRobo Scene YAML from user-defined config files.
-Supports Box, Cylinder, and Sphere shapes.
+Supports Box, Cylinder, Sphere, and rigid Compound objects.
 
 Usage:
     python3 env_generator.py --config env_config/my_env.yaml [OPTIONS]
@@ -18,7 +18,9 @@ Options:
 
 import argparse
 import sys
-from dataclasses import dataclass, field
+import math
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
 
@@ -47,13 +49,15 @@ class Pose:
 class CollisionObject:
     """Represents a collision object."""
     id: str
-    type: str  # "Box", "Cylinder", or "Sphere"
-    dimensions: List[float]
+    type: str  # "Box", "Cylinder", "Sphere", or "Compound"
+    dimensions: List[float] = field(default_factory=list)
     pose: Pose = field(default_factory=Pose)
     material: Material = field(default_factory=Material)
     movable: bool = False  # If True, object can be moved (only in XML, not in MPRC YAML)
     density: float = 1000.0  # Density for movable objects (kg/m^3), default 1000
     gravcomp: float = 0.0  # Gravity compensation: 0=none, 1=full compensation (disable gravity effect)
+
+    parts: List["CollisionObject"] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'CollisionObject':
@@ -72,20 +76,29 @@ class CollisionObject:
         if 'rgba' in material_data:
             material.rgba = tuple(material_data['rgba'])
 
+        parts = []
+        for part_data in data.get('parts', []):
+            # Inherit physical/render properties, but never mobility or pose.
+            part_data = dict(part_data)
+            part_data['material'] = {**material_data, **part_data.get('material', {})}
+            part_data.setdefault('density', data.get('density', 1000.0))
+            parts.append(cls.from_dict(part_data))
+
         return cls(
             id=data['id'],
             type=data['type'],
-            dimensions=data['dimensions'],
+            dimensions=data.get('dimensions', []),
             pose=pose,
             material=material,
             movable=data.get('movable', False),
             density=data.get('density', 1000.0),
-            gravcomp=data.get('gravcomp', 0.0)
+            gravcomp=data.get('gravcomp', 0.0),
+            parts=parts
         )
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dict for YAML output."""
-        return {
+        result = {
             'id': self.id,
             'type': self.type,
             'dimensions': self.dimensions,
@@ -94,6 +107,10 @@ class CollisionObject:
                 'orientation': list(self.pose.orientation)
             }
         }
+        if self.type == 'Compound':
+            result.pop('dimensions')
+            result['parts'] = [part.to_dict() for part in self.parts]
+        return result
 
 
 @dataclass
@@ -116,104 +133,99 @@ class EnvConfig:
 
 
 class EnvGenerator:
-    """Generates MuJoCo XML and MPRC YAML from config."""
+    """Generates MuJoCo XML, MPRC YAML, and cuRobo YAML from config."""
 
     def __init__(self, config: EnvConfig):
         self.config = config
 
+    @staticmethod
+    def _compose_pose(parent: Pose, local: Pose) -> Pose:
+        """Compose poses: p_world = p_parent + R_parent p_local (xyzw)."""
+        def multiply(a, b):
+            ax, ay, az, aw = a
+            bx, by, bz, bw = b
+            return (aw*bx + ax*bw + ay*bz - az*by,
+                    aw*by - ax*bz + ay*bw + az*bx,
+                    aw*bz + ax*by - ay*bx + az*bw,
+                    aw*bw - ax*bx - ay*by - az*bz)
+
+        def normalized(q):
+            norm = math.sqrt(sum(v*v for v in q))
+            return tuple(v / norm for v in q)
+
+        q = normalized(parent.orientation)
+        rotated = multiply(multiply(q, (*local.position, 0.0)),
+                           (-q[0], -q[1], -q[2], q[3]))
+        return Pose(tuple(p + r for p, r in zip(parent.position, rotated[:3])),
+                    normalized(multiply(q, normalized(local.orientation))))
+
+    def _leaves(self, obj: CollisionObject, parent: Pose = None,
+                prefix: str = '') -> List[CollisionObject]:
+        """Flatten rigid parts into primitives in the requested parent frame."""
+        pose = self._compose_pose(parent or Pose(), obj.pose)
+        name = f'{prefix}__{obj.id}' if prefix else obj.id
+        if obj.type != 'Compound':
+            return [replace(obj, id=name, pose=pose, movable=False)]
+        return [leaf for part in obj.parts
+                for leaf in self._leaves(part, pose, name)]
+
+    def _static_objects(self) -> List[CollisionObject]:
+        return [leaf for obj in self.config.collision_objects if not obj.movable
+                for leaf in self._leaves(obj)]
+
+    @staticmethod
+    def _xml_pose(pose: Pose) -> Dict[str, str]:
+        qx, qy, qz, qw = pose.orientation
+        norm = math.sqrt(qx*qx + qy*qy + qz*qz + qw*qw)
+        return {'pos': ' '.join(f'{v:.9g}' for v in pose.position),
+                'quat': ' '.join(f'{v/norm:.9g}' for v in (qw, qx, qy, qz))}
+
+    def _add_geom(self, parent, obj: CollisionObject, name: str):
+        if obj.type == 'Box':
+            size = [d / 2 for d in obj.dimensions]
+        elif obj.type == 'Cylinder':
+            size = [obj.dimensions[0], obj.dimensions[1] / 2]
+        elif obj.type == 'Sphere':
+            size = [obj.dimensions[0]]
+        else:
+            raise ValueError(f'Unknown primitive type: {obj.type}')
+        ET.SubElement(parent, 'geom', {
+            'name': name, 'type': obj.type.lower(),
+            'size': ' '.join(f'{v:.9g}' for v in size),
+            **self._xml_pose(obj.pose),
+            'friction': ' '.join(str(v) for v in obj.material.friction),
+            'density': str(obj.density),
+            'solimp': '0.998 0.998 0.001', 'solref': '0.001 1',
+            'rgba': ' '.join(str(v) for v in obj.material.rgba),
+        })
+
     def generate_mujoco_xml(self) -> str:
-        """Generate MuJoCo XML content."""
-        lines = [
-            '<mujocoinclude>',
-            '  <worldbody>',
-            '',
-        ]
-
+        """Use one body for every compound, with at most one free joint."""
+        root = ET.Element('mujocoinclude')
+        world = ET.SubElement(root, 'worldbody')
         if self.config.description:
-            lines.append(f'    <!-- {self.config.description} -->')
-            lines.append('')
-
+            description = str(self.config.description).replace('--', '- -')
+            world.append(ET.Comment(f' {description} '))
         for obj in self.config.collision_objects:
-            lines.extend(self._mujoco_geom(obj))
-            lines.append('')
-
-        lines.append('  </worldbody>')
-        lines.append('</mujocoinclude>')
-
-        return '\n'.join(lines)
-
-    def _mujoco_geom(self, obj: CollisionObject) -> List[str]:
-        """Generate MuJoCo <geom> element for an object."""
-        x, y, z = obj.pose.position
-        qx, qy, qz, qw = obj.pose.orientation
-
-        if obj.type == "Box":
-            # size = [half_length, half_width, half_height]
-            l, w, h = obj.dimensions
-            size = f"{l/2:.4f} {w/2:.4f} {h/2:.4f}"
-            geom_type = "box"
-            # Box position is center
-            pos = f"{x:.4f} {y:.4f} {z:.4f}"
-
-        elif obj.type == "Cylinder":
-            r, h = obj.dimensions
-            size = f"{r:.4f} {h/2:.4f}"
-            geom_type = "cylinder"
-            # Cylinder position is center
-            pos = f"{x:.4f} {y:.4f} {z:.4f}"
-
-        elif obj.type == "Sphere":
-            r = obj.dimensions[0]
-            size = f"{r:.4f} {r:.4f} {r:.4f}"
-            geom_type = "sphere"
-            pos = f"{x:.4f} {y:.4f} {z:.4f}"
-
-        else:
-            raise ValueError(f"Unknown object type: {obj.type}")
-
-        if obj.movable:
-            # Movable object: wrap in <body> with free joint, geom at local origin
-            body_pos = f'pos="{pos}"'
-            body_quat = f'quat="{qx:.4f} {qy:.4f} {qz:.4f} {qw:.4f}"' if obj.pose.orientation != (0.0, 0.0, 0.0, 1.0) else ''
-            gravcomp_attr = f' gravcomp="{obj.gravcomp:.1f}"' if obj.gravcomp != 0.0 else ''
-
-            lines = [
-                f'    <!-- {obj.id}: {obj.type}, dims={obj.dimensions} [MOVABLE] -->',
-                f'    <body name="{obj.id}" {body_pos} {body_quat}{gravcomp_attr}>',
-                f'      <freejoint name="{obj.id}_joint"/>',
-                f'      <geom name="{obj.id}_geom" type="{geom_type}" size="{size}"',
-            ]
-
-            # Add material properties
-            lines[-1] += f' friction="{" ".join(str(v) for v in obj.material.friction)}"'
-            lines[-1] += f' density="{obj.density}"'
-            lines[-1] += f' solimp="0.998 0.998 0.001" solref="0.001 1"'
-            lines[-1] += f' rgba="{" ".join(str(v) for v in obj.material.rgba)}"'
-            lines[-1] += '/>'
-            lines.append('    </body>')
-
-        else:
-            # Static object: simple geom at world position
-            lines = [
-                f'    <!-- {obj.id}: {obj.type}, dims={obj.dimensions} -->',
-                f'    <geom name="{obj.id}" type="{geom_type}" size="{size}" '
-                f'pos="{pos}"'
-            ]
-
-            # Add orientation if not default identity
-            if obj.pose.orientation != (0.0, 0.0, 0.0, 1.0):
-                lines[-1] += f' quat="{qx:.4f} {qy:.4f} {qz:.4f} {qw:.4f}"'
-
-            lines.append(f'          friction="{" ".join(str(v) for v in obj.material.friction)}" '
-                        f'solimp="0.998 0.998 0.001" solref="0.001 1"')
-            lines.append(f'          rgba="{" ".join(str(v) for v in obj.material.rgba)}"/>')
-
-        return lines
+            if obj.type == 'Compound' or obj.movable:
+                attrs = {'name': obj.id, **self._xml_pose(obj.pose)}
+                if obj.gravcomp:
+                    attrs['gravcomp'] = str(obj.gravcomp)
+                body = ET.SubElement(world, 'body', attrs)
+                if obj.movable:
+                    ET.SubElement(body, 'freejoint', {'name': f'{obj.id}_joint'})
+                # The body's pose already accounts for the root transform.
+                for leaf in self._leaves(replace(obj, pose=Pose())):
+                    self._add_geom(body, leaf, f'{leaf.id}_geom')
+            else:
+                self._add_geom(world, obj, obj.id)
+        ET.indent(root, space='  ')
+        return ET.tostring(root, encoding='unicode')
 
     def generate_mprc_yaml(self) -> str:
         """Generate MPRC YAML content (excludes movable objects)."""
         # Filter out movable objects - they are not static obstacles
-        static_objects = [obj for obj in self.config.collision_objects if not obj.movable]
+        static_objects = self._static_objects()
 
         lines = [
             '# Auto-generated by env_generator.py',
@@ -224,7 +236,7 @@ class EnvGenerator:
 
         lines.append(f'# Total static objects: {len(static_objects)} (movable objects excluded)')
         lines.append('')
-        lines.append('collision_objects:')
+        lines.append('collision_objects:' if static_objects else 'collision_objects: []')
         lines.append('')
 
         for obj in static_objects:
@@ -239,14 +251,14 @@ class EnvGenerator:
         qx, qy, qz, qw = obj.pose.orientation
 
         lines = [
-            f'  - id: "{obj.id}"',
+            f'  - id: {yaml.safe_dump(obj.id, default_style=chr(34)).strip()}',
             f'    type: "{obj.type}"',
             f'    dimensions: {obj.dimensions}',
         ]
 
         # Format pose
-        pos_str = f"      position: [{x:.3f}, {y:.3f}, {z:.3f}]"
-        ori_str = f"      orientation: [{qx:.3f}, {qy:.3f}, {qz:.3f}, {qw:.3f}]"
+        pos_str = f"      position: [{x:.9g}, {y:.9g}, {z:.9g}]"
+        ori_str = f"      orientation: [{qx:.9g}, {qy:.9g}, {qz:.9g}, {qw:.9g}]"
 
         lines.append('    pose:')
         lines.append(pos_str)
@@ -264,7 +276,7 @@ class EnvGenerator:
                 pose: [x, y, z, qw, qx, qy, qz]
         """
         # Filter out movable objects - they are not static obstacles
-        static_objects = [obj for obj in self.config.collision_objects if not obj.movable]
+        static_objects = self._static_objects()
 
         lines = [
             '## SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.',
@@ -280,7 +292,7 @@ class EnvGenerator:
 
         lines.append(f'## Total static objects: {len(static_objects)} (movable objects excluded)')
         lines.append('')
-        lines.append('cuboid:')
+        lines.append('cuboid:' if static_objects else 'cuboid: {}')
         lines.append('')
 
         for obj in static_objects:
@@ -299,25 +311,27 @@ class EnvGenerator:
 
         lines = [
             f'  ## {obj.id}: {obj.type}, dims={obj.dimensions}',
-            f'  {obj.id}:',
+            f'  {yaml.safe_dump(obj.id, default_style=chr(34)).strip()}:',
         ]
 
         # Dimensions - cuRobo uses 'dims' key
         if obj.type == "Box":
             dims_str = f"    dims: {obj.dimensions}  # x, y, z dimensions"
         elif obj.type == "Cylinder":
-            # For cylinder, cuRobo may use cuboid approximation or different format
-            dims_str = f"    dims: {obj.dimensions}  # radius, height"
+            # Conservative bounding box in the primitive local frame
+            r, h = obj.dimensions
+            dims_str = f"    dims: {[2*r, 2*r, h]}  # enclosing cuboid for cylinder"
         elif obj.type == "Sphere":
-            # For sphere, cuRobo may use cuboid approximation or different format
-            dims_str = f"    dims: {obj.dimensions}  # radius"
+            # Conservative bounding box in the primitive local frame
+            r = obj.dimensions[0]
+            dims_str = f"    dims: {[2*r, 2*r, 2*r]}  # enclosing cuboid for sphere"
         else:
             dims_str = f"    dims: {obj.dimensions}"
 
         lines.append(dims_str)
 
         # Pose - cuRobo uses [x, y, z, qw, qx, qy, qz] format
-        pose_str = f"    pose: [{x:.3f}, {y:.3f}, {z:.3f}, {qw:.3f}, {qx:.3f}, {qy:.3f}, {qz:.3f}]"
+        pose_str = f"    pose: [{x:.9g}, {y:.9g}, {z:.9g}, {qw:.9g}, {qx:.9g}, {qy:.9g}, {qz:.9g}]"
         lines.append(pose_str)
 
         return lines
@@ -326,23 +340,69 @@ class EnvGenerator:
         """Validate configuration."""
         errors = []
 
-        for obj in self.config.collision_objects:
-            # Check type
-            if obj.type not in ["Box", "Cylinder", "Sphere"]:
-                errors.append(f"{obj.id}: Unknown type '{obj.type}'")
+        def finite_vector(values, length):
+            return (isinstance(values, (list, tuple)) and len(values) == length
+                    and all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                            and math.isfinite(v) for v in values))
 
-            # Check dimensions
-            if obj.type == "Box" and len(obj.dimensions) != 3:
-                errors.append(f"{obj.id}: Box requires 3 dimensions [length, width, height]")
-            elif obj.type == "Cylinder" and len(obj.dimensions) != 2:
-                errors.append(f"{obj.id}: Cylinder requires 2 dimensions [radius, height]")
-            elif obj.type == "Sphere" and len(obj.dimensions) != 1:
-                errors.append(f"{obj.id}: Sphere requires 1 dimension [radius]")
+        def check(obj, path, child=False):
+            if not isinstance(obj.id, str) or not obj.id.strip():
+                errors.append(f'{path}: id must be a non-empty string')
+            if not finite_vector(obj.pose.position, 3):
+                errors.append(f'{path}: position requires 3 finite numbers')
+            if not finite_vector(obj.pose.orientation, 4):
+                errors.append(f'{path}: orientation requires 4 finite numbers [x,y,z,w]')
+            elif not math.isclose(sum(v*v for v in obj.pose.orientation), 1.0, abs_tol=1e-3):
+                errors.append(f'{path}: orientation must be a unit quaternion')
+            if child and (obj.movable or obj.gravcomp != 0):
+                errors.append(f'{path}: movable/gravcomp must be set on the root object only')
+            if not isinstance(obj.movable, bool):
+                errors.append(f'{path}: movable must be a boolean')
+            if not finite_vector([obj.density], 1) or obj.density <= 0:
+                errors.append(f'{path}: density must be finite and positive')
+            if not finite_vector([obj.gravcomp], 1):
+                errors.append(f'{path}: gravcomp must be finite')
+            for key, length in [('friction', 3), ('rgba', 4)]:
+                if not finite_vector(getattr(obj.material, key), length):
+                    errors.append(f'{path}: {key} requires {length} finite numbers')
+            if obj.type == 'Compound':
+                if not obj.parts:
+                    errors.append(f'{path}: Compound requires non-empty parts')
+                if obj.dimensions:
+                    errors.append(f'{path}: Compound uses parts, not dimensions')
+                check_siblings(obj.parts, path)
+            else:
+                lengths = {'Box': 3, 'Cylinder': 2, 'Sphere': 1}
+                if obj.type not in lengths:
+                    errors.append(f'{path}: Unknown type {obj.type!r}')
+                elif not finite_vector(obj.dimensions, lengths[obj.type]):
+                    errors.append(f'{path}: {obj.type} requires {lengths[obj.type]} finite dimensions')
+                elif any(d <= 0 for d in obj.dimensions):
+                    errors.append(f'{path}: dimensions must be positive')
+                if obj.parts:
+                    errors.append(f'{path}: only Compound may contain parts')
 
-            # Check for positive dimensions
-            for i, d in enumerate(obj.dimensions):
-                if d <= 0:
-                    errors.append(f"{obj.id}: Dimension {i} must be positive, got {d}")
+        def check_siblings(objects, prefix=''):
+            names = set()
+            for obj in objects:
+                path = f'{prefix}/{obj.id}'
+                if str(obj.id) in names:
+                    errors.append(f'{path}: duplicate id')
+                names.add(str(obj.id))
+                check(obj, path, child=bool(prefix))
+
+        check_siblings(self.config.collision_objects)
+        if not errors:
+            # Also catch collisions introduced by flattening or the _geom suffix.
+            leaf_names, geom_names = set(), set()
+            for obj in self.config.collision_objects:
+                for leaf in self._leaves(obj):
+                    geom_name = (f'{leaf.id}_geom'
+                                 if obj.type == 'Compound' or obj.movable else leaf.id)
+                    if leaf.id in leaf_names or geom_name in geom_names:
+                        errors.append(f'{leaf.id}: generated name collision')
+                    leaf_names.add(leaf.id)
+                    geom_names.add(geom_name)
 
         return len(errors) == 0, errors
 

@@ -1,0 +1,44 @@
+description: "Rigid compound examples: a fixed frame and a movable L-shaped object"
+collision_objects:
+  - id: fixed_frame
+    type: Compound
+    pose:
+      position: [0.6, 0.0, 0.0]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    material:
+      rgba: [0.3, 0.4, 0.7, 1.0]
+    parts:
+      - id: left_post
+        type: Box
+        dimensions: [0.05, 0.05, 0.6]
+        pose:
+          position: [0.0, -0.25, 0.3]
+      - id: right_post
+        type: Box
+        dimensions: [0.05, 0.05, 0.6]
+        pose:
+          position: [0.0, 0.25, 0.3]
+      - id: top_bar
+        type: Box
+        dimensions: [0.05, 0.55, 0.05]
+        pose:
+          position: [0.0, 0.0, 0.625]
+
+  - id: movable_l
+    type: Compound
+    movable: true
+    density: 500.0
+    gravcomp: 0.0
+    pose:
+      position: [0.4, 0.0, 0.15]
+    material:
+      rgba: [0.9, 0.5, 0.1, 1.0]
+    parts:
+      - id: horizontal
+        type: Box
+        dimensions: [0.2, 0.04, 0.04]
+      - id: vertical
+        type: Box
+        dimensions: [0.04, 0.04, 0.16]
+        pose:
+          position: [0.08, 0.0, 0.1]

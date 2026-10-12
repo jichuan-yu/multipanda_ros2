@@ -35,7 +35,7 @@ teleop (遥操作命令) → safe (安全控制器) → impedance (阻抗控制�
 
 ### 实验 1：缓速移动 + Safe + 关节角度一致
 
-![实验1](../data/mprc/20260806_090244_relative_error_plot.png)
+![实验1](../../../data/mprc/20260806_090244_relative_error_plot.png)
 
 - `teleop_err_norm ≈ 0 mm`
 - `safe_err_norm ≈ 0 mm`
@@ -44,7 +44,7 @@ teleop (遥操作命令) → safe (安全控制器) → impedance (阻抗控制�
 
 ### 实验 2：快速移动 + Safe + 关节角度一致
 
-![实验2](../data/mprc/20260806_091128_relative_error_plot.png)
+![实验2](../../../data/mprc/20260806_091128_relative_error_plot.png)
 
 - `teleop_err_norm ≈ 0 mm`
 - `safe_err_norm < 1 mm`（亚毫米级误差）
@@ -53,7 +53,7 @@ teleop (遥操作命令) → safe (安全控制器) → impedance (阻抗控制�
 
 ### 实验 3：快速移动 + Safe + 关节角度不一致
 
-![实验3](../data/mprc/20260806_091731_relative_error_plot.png)
+![实验3](../../../data/mprc/20260806_091731_relative_error_plot.png)
 
 - `teleop_err_norm ≈ 0 mm`
 - `safe_err_norm` 出现显著误差
@@ -62,7 +62,7 @@ teleop (遥操作命令) → safe (安全控制器) → impedance (阻抗控制�
 
 ### 实验 4：缓速移动 + 绕过 Safe + 关节角度一致
 
-![实验4](../data/mprc/20260806_093148_relative_error_plot.png)
+![实验4](../../../data/mprc/20260806_093148_relative_error_plot.png)
 
 - `teleop_err_norm ≈ 0 mm`
 - `safe_err_norm ≈ 0 mm`（无 safe 修改）
@@ -71,7 +71,7 @@ teleop (遥操作命令) → safe (安全控制器) → impedance (阻抗控制�
 
 ### 实验 5：快速移动 + 绕过 Safe + 关节角度一致
 
-![实验5](../data/mprc/20260806_093916_relative_error_plot.png)
+![实验5](../../../data/mprc/20260806_093916_relative_error_plot.png)
 
 - `teleop_err_norm ≈ 0 mm`
 - `safe_err_norm ≈ 0 mm`（无 safe 修改）
@@ -80,7 +80,7 @@ teleop (遥操作命令) → safe (安全控制器) → impedance (阻抗控制�
 
 ### 实验 6：快速移动 + 绕过 Safe + 关节角度不一致
 
-![实验6](../data/mprc/20260806_094210_relative_error_plot.png)
+![实验6](../../../data/mprc/20260806_094210_relative_error_plot.png)
 
 - `teleop_err_norm ≈ 0 mm`
 - `safe_err_norm ≈ 0 mm`（无 safe 修改）

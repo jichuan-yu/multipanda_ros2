@@ -139,7 +139,7 @@ ros2 run dual_arm_reactive_control main_sim_node
 或
 ros2 run dual_arm_reactive_control main_sim_node \
   --ros-args \
-  -p bypass_qp_safety_for_debug:=true \
+  -p bypass_qp_safety_for_debug:=false \
   -p relative_pose_constraint_enabled:=false \
   -p data_record_ON:=true \
   -p data_record_path:=/home/xiaozy24/dual_panda_ws/data/ \

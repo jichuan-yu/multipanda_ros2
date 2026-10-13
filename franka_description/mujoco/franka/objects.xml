@@ -1,6 +1,6 @@
 <mujocoinclude>
   <worldbody>
-    <!-- Tray transport: two fixed stools, one movable tray and six stacked cubes -->
+    <!-- Tray transport: two fixed stools, a tray, six stacked cubes and a floating sphere -->
     <body name="left_stool" pos="0.6 0.35 0" quat="0.707106781 0 0 0.707106781">
       <geom name="left_stool__seat_geom" type="box" size="0.125 0.075 0.015" pos="0 0 0.185" quat="1 0 0 0" friction="2.0 0.005 0.0001" density="1000.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.55 0.36 0.18 1" />
       <geom name="left_stool__leg_1_geom" type="box" size="0.02 0.02 0.085" pos="-0.095 -0.045 0.085" quat="1 0 0 0" friction="2.0 0.005 0.0001" density="1000.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.55 0.36 0.18 1" />
@@ -46,6 +46,10 @@
     <body name="cube_06" pos="0.6 0.35 0.375" quat="1 0 0 0">
       <freejoint name="cube_06_joint" />
       <geom name="cube_06_geom" type="box" size="0.015 0.015 0.015" pos="0 0 0" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.3 0.75 0.25 1" />
+    </body>
+    <body name="floating_sphere" pos="0.8 0 0.45" quat="1 0 0 0" gravcomp="1.0">
+      <freejoint name="floating_sphere_joint" />
+      <geom name="floating_sphere_geom" type="sphere" size="0.05" pos="0 0 0" quat="1 0 0 0" friction="2.0 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.8 0.2 0.8 1.0" />
     </body>
   </worldbody>
 </mujocoinclude>

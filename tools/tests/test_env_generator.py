@@ -130,6 +130,27 @@ class EnvGeneratorTests(unittest.TestCase):
                 box(include_in_controller_collision=value)]}))
             self.assertFalse(gen.validate()[0])
 
+    def test_dynamic_sync_rate_validation(self):
+        for rate in [0, -1, float('nan'), True, '100']:
+            gen = EnvGenerator(EnvConfig.from_dict({'dynamic_collision_publish_rate': rate}))
+            self.assertFalse(gen.validate()[0])
+        gen = EnvGenerator(EnvConfig.from_dict({'dynamic_collision_publish_rate': 25}))
+        self.assertEqual(yaml.safe_load(gen.generate_sync_yaml())['publish_rate'], 25.0)
+
+    def test_dynamic_sync_manifest(self):
+        gen = generator([
+            box('fixed'), box('excluded', movable=True, include_in_controller_collision=False),
+            dict(id='ball', type='Sphere', dimensions=[.05], movable=True),
+            dict(id='tool', type='Compound', movable=True, parts=[box('tip'),
+                 box('hidden', include_in_controller_collision=False),
+                 dict(id='nested', type='Compound', parts=[box('end')])])])
+        manifest = yaml.safe_load(gen.generate_sync_yaml())
+        self.assertEqual(manifest['objects'], [
+            {'id': 'ball', 'geom': 'ball_geom'},
+            {'id': 'tool__tip', 'geom': 'tool__tip_geom'},
+            {'id': 'tool__nested__end', 'geom': 'tool__nested__end_geom'}])
+        self.assertEqual(yaml.safe_load(generator([]).generate_sync_yaml())['objects'], [])
+
     def test_all_repository_examples(self):
         for path in (Path(__file__).resolve().parents[1] / 'env_config').glob('*.yaml'):
             with self.subTest(path=path.name):

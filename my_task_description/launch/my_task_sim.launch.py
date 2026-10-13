@@ -150,6 +150,22 @@ def generate_launch_description():
         'right_arm_cam': {'stream_type': 1, 'frequency': 30.0, 'width': 320, 'height': 240}
     }
     
+    # Generated alongside objects.xml: keep dynamic collision selection in the
+    # basic scene YAML, not in a manually maintained plugin configuration.
+    sync_path = os.path.splitext(objects_path)[0] + '.sync.yaml'
+    sync_config = {'objects': [], 'publish_rate': 100.0}
+    if os.path.isfile(sync_path):
+        with open(sync_path, 'r') as f:
+            sync_config = yaml.safe_load(f)
+    else:
+        print(f'WARNING: missing {sync_path}; regenerate the environment to enable dynamic collision sync.')
+    sync_objects = sync_config.get('objects', [])
+    sync_params = {'publish_rate': float(sync_config.get('publish_rate', 100.0))}
+    if sync_objects:  # Empty ROS YAML arrays have no reliable string-array type.
+        sync_params['object_ids'] = [obj['id'] for obj in sync_objects]
+        sync_params['geom_names'] = [obj['geom'] for obj in sync_objects]
+    merged_config['dynamic_obstacles'] = {'ros__parameters': sync_params}
+
     merged_mjros_config_file = os.path.join(task_run_dir, 'merged_sim_controllers.yaml')
     with open(merged_mjros_config_file, 'w') as f:
         yaml.dump(merged_config, f)

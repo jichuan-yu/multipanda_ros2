@@ -1,0 +1,9 @@
+<mujoco><option timestep="0.002"/>
+<worldbody>
+ <body name="ball" pos="0 0 1" gravcomp="1"><freejoint/>
+  <geom type="sphere" size=".05"/>
+  <body name="ball_child"><geom type="sphere" size=".01" mass="0" contype="0" conaffinity="0"/></body>
+ </body>
+ <body name="falling" pos="3 0 1"><freejoint/><geom type="sphere" size=".05"/></body>
+ <body name="robot" pos="6 0 1"><joint type="hinge"/><geom type="sphere" size=".05"/></body>
+</worldbody></mujoco>

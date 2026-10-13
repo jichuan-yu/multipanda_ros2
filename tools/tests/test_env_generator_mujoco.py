@@ -118,7 +118,10 @@ class MuJoCoEnvironmentTests(unittest.TestCase):
         model = mujoco.MjModel.from_xml_string(ET.tostring(root, encoding='unicode'))
         data = mujoco.MjData(model)
         mujoco.mj_forward(model, data)
-        self.assertEqual(model.njnt, 7)  # Tray and six independent cubes.
+        self.assertEqual(model.njnt, 8)  # Tray, six cubes and a free floating sphere.
+        sphere = model.body("floating_sphere").id
+        self.assertEqual(model.body_gravcomp[sphere], 1.0)
+        self.assertEqual(model.geom_size[model.geom("floating_sphere_geom").id, 0], .05)
         self.assertTrue(all(c.dist >= -1e-6 for c in data.contact))
         def geom(name):
             return mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, name)
@@ -173,7 +176,7 @@ class MuJoCoEnvironmentTests(unittest.TestCase):
         for contact in data.contact:
             names = [mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, g) or ''
                      for g in (contact.geom1, contact.geom2)]
-            if any(name.startswith(('left_stool', 'right_stool', 'tray', 'cube_')) for name in names):
+            if any(name.startswith(('left_stool', 'right_stool', 'tray', 'cube_', 'floating_sphere')) for name in names):
                 self.assertGreaterEqual(contact.dist, -1e-5, names)
 
 

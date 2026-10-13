@@ -282,7 +282,9 @@ docker exec multipanda-container /home/developer/myenv/bin/python -m unittest di
 逐层直接叠放，最上层顶部离地 0.39 m。托盘及六个方块分别拥有自由关节，
 未将方块固定在托盘上。托盘大于凳面，放置时有对称悬伸。
 
-MPRC/cuRobo 的静态规划环境仅包含两个板凳展开后的 10 个几何体。
+MPRC/cuRobo 的规划环境包含两个板凳展开后的 10 个几何体，以及 `floating_sphere`。
+球体半径 5 cm，初始位置 `[0.8, 0.0, 0.45]`，可移动且 `gravcomp: 1.0` 完全补偿重力；
+省略 `gravcomp` 时默认值为 `0.0`，物体受重力影响。
 托盘和方块的抓取、附着碰撞及搬运控制需由任务控制流程处理。
 已通过尺寸检查、30 秒静置堆叠接触检查和双臂启动默认姿态下的初始碰撞检查；
 未执行完整搬运轨迹。
@@ -369,4 +371,41 @@ ros2 launch my_task_description my_task_sim.launch.py use_rviz:=true
   原固定物体为 `true`，保持原有输出语义。
 - 旧的外部配置若省略该字段，可移动物体现在也会被导出；要保持旧行为，
   请为它们补上 `include_in_controller_collision: false`。
-- 导出的位姿是 YAML 中配置的初始世界位姿。本开关不提供运行时物体位姿跟踪。
+- 导出的 YAML 位姿是初始世界位姿；MuJoCo → MPRC/RViz 的运行时位姿由下述同步插件更新。cuRobo 的离线 YAML 不会自动跟踪运动。
+
+
+### 可移动碰撞物体实时同步
+
+生成器额外生成 `objects.sync.yaml`，默认与输出 XML 同目录（`--sync-output` 可覆盖）。
+清单来自基本 YAML：只同步 `movable: true` 且 `include_in_controller_collision: true`
+的物体或复合部件。不要手改此生成文件。`my_task_sim.launch.py` 自动读取安装后的清单。
+基本配置顶层可选 `dynamic_collision_publish_rate: 100.0`（Hz，默认 100）。
+
+`mujoco_ros::DynamicObstaclesPlugin` 只读取真实 geom 世界位姿、线速度和角速度，
+通过 `/dynamic_obstacle` 更新 MPRC 与 RViz；它不驱动物体，不覆盖 qpos/qvel，
+不依赖 `dyn_sphere_` 名称。复合部件沿用生成的 `根__部件` ID，保留局部位姿和旋转。
+暂停时支持位姿编辑反馈，并以低频重复状态供后启动的订阅者接收。
+
+新增/移除动态物体后重新运行生成器，构建 `franka_description`，重启仿真。
+首次使用此功能还需构建 `mujoco_ros2_dummy_plugin`、`my_task_description` 和
+`dual_arm_reactive_control`（扩大多物体反馈接收队列），并重启控制器和可视化节点。
+不要同时运行旧的随机移动障碍物发布器来更新相同 ID。
+
+集成回归测试（在容器内 source ROS 和工作区后，选择未使用的 ROS_DOMAIN_ID）：
+
+```bash
+export LD_LIBRARY_PATH=/home/xiaozy24/dual_panda_ws/src/dualarm_mprc/coal/build/lib:$LD_LIBRARY_PATH
+ROS_DOMAIN_ID=99 python3 src/multipanda_ros2/tools/tests/dynamic_sync/check_sync.py
+```
+
+测试会在独立域启动临时 MuJoCo、真实 MPRC 控制器和标记发布节点，验证暂停位置修改、
+运行中位姿/速度、复合部件旋转、控制器最近碰撞点、RViz 标记和重置后的反馈。
+无界面 GLFW 仿真的 ROS 回调执行器也已补齐，确保该模式能够响应物体状态服务。
+
+### 运行中拖动后停止
+
+MuJoCo 查看器 `Option → Stop on release` 默认开启。左键双击选择自由物体，
+按住 Ctrl + 右键拖动，松开鼠标后清零该自由刚体的线速度、角速度和对应求解预热状态。
+Ctrl + 左键旋转同样支持松手停止。取消勾选可恢复原来的惯性拖动。
+该操作不暂停仿真、不改变松手时的位置、不锁定物体，也不会清零机器人关节速度。
+`gravcomp: 1.0` 的无重力球在无其他外力时会停留；普通物体仍会下落，碰撞仍可使其运动。

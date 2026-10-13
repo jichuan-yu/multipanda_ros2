@@ -18,34 +18,34 @@
     <body name="tray" pos="0.6 0.35 0.2" quat="0.707106781 0 0 0.707106781">
       <freejoint name="tray_joint" />
       <geom name="tray__base_geom" type="box" size="0.15 0.1 0.005" pos="0 0 0.005" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.15 0.5 0.75 1" />
-      <geom name="tray__front_wall_geom" type="box" size="0.005 0.09 0.01" pos="-0.145 0 0.02" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.15 0.5 0.75 1" />
-      <geom name="tray__back_wall_geom" type="box" size="0.005 0.09 0.01" pos="0.145 0 0.02" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.15 0.5 0.75 1" />
-      <geom name="tray__left_wall_geom" type="box" size="0.15 0.005 0.01" pos="0 0.095 0.02" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.15 0.5 0.75 1" />
-      <geom name="tray__right_wall_geom" type="box" size="0.15 0.005 0.01" pos="0 -0.095 0.02" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.15 0.5 0.75 1" />
+      <geom name="tray__front_wall_geom" type="box" size="0.005 0.09 0.02" pos="-0.145 0 0.03" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.15 0.5 0.75 1" />
+      <geom name="tray__back_wall_geom" type="box" size="0.005 0.09 0.02" pos="0.145 0 0.03" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.15 0.5 0.75 1" />
+      <geom name="tray__left_wall_geom" type="box" size="0.15 0.005 0.02" pos="0 0.095 0.03" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.15 0.5 0.75 1" />
+      <geom name="tray__right_wall_geom" type="box" size="0.15 0.005 0.02" pos="0 -0.095 0.03" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.15 0.5 0.75 1" />
     </body>
     <body name="cube_01" pos="0.6 0.35 0.225" quat="1 0 0 0">
       <freejoint name="cube_01_joint" />
-      <geom name="cube_01_geom" type="box" size="0.015 0.015 0.015" pos="0 0 0" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.9 0.3 0.15 1" />
+      <geom name="cube_01_geom" type="box" size="0.015 0.015 0.015" pos="0 0 0" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.95 0.99 0.001" solref="0.01 1" rgba="0.9 0.3 0.15 1" />
     </body>
     <body name="cube_02" pos="0.6 0.35 0.255" quat="1 0 0 0">
       <freejoint name="cube_02_joint" />
-      <geom name="cube_02_geom" type="box" size="0.015 0.015 0.015" pos="0 0 0" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.95 0.7 0.15 1" />
+      <geom name="cube_02_geom" type="box" size="0.015 0.015 0.015" pos="0 0 0" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.95 0.99 0.001" solref="0.01 1" rgba="0.95 0.7 0.15 1" />
     </body>
     <body name="cube_03" pos="0.6 0.35 0.285" quat="1 0 0 0">
       <freejoint name="cube_03_joint" />
-      <geom name="cube_03_geom" type="box" size="0.015 0.015 0.015" pos="0 0 0" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.3 0.75 0.25 1" />
+      <geom name="cube_03_geom" type="box" size="0.015 0.015 0.015" pos="0 0 0" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.95 0.99 0.001" solref="0.01 1" rgba="0.3 0.75 0.25 1" />
     </body>
     <body name="cube_04" pos="0.6 0.35 0.315" quat="1 0 0 0">
       <freejoint name="cube_04_joint" />
-      <geom name="cube_04_geom" type="box" size="0.015 0.015 0.015" pos="0 0 0" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.9 0.3 0.15 1" />
+      <geom name="cube_04_geom" type="box" size="0.015 0.015 0.015" pos="0 0 0" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.95 0.99 0.001" solref="0.01 1" rgba="0.9 0.3 0.15 1" />
     </body>
     <body name="cube_05" pos="0.6 0.35 0.345" quat="1 0 0 0">
       <freejoint name="cube_05_joint" />
-      <geom name="cube_05_geom" type="box" size="0.015 0.015 0.015" pos="0 0 0" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.95 0.7 0.15 1" />
+      <geom name="cube_05_geom" type="box" size="0.015 0.015 0.015" pos="0 0 0" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.95 0.99 0.001" solref="0.01 1" rgba="0.95 0.7 0.15 1" />
     </body>
     <body name="cube_06" pos="0.6 0.35 0.375" quat="1 0 0 0">
       <freejoint name="cube_06_joint" />
-      <geom name="cube_06_geom" type="box" size="0.015 0.015 0.015" pos="0 0 0" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.998 0.998 0.001" solref="0.001 1" rgba="0.3 0.75 0.25 1" />
+      <geom name="cube_06_geom" type="box" size="0.015 0.015 0.015" pos="0 0 0" quat="1 0 0 0" friction="0.6 0.005 0.0001" density="500.0" solimp="0.95 0.99 0.001" solref="0.01 1" rgba="0.3 0.75 0.25 1" />
     </body>
     <body name="floating_sphere" pos="0.8 0 0.45" quat="1 0 0 0" gravcomp="1.0">
       <freejoint name="floating_sphere_joint" />

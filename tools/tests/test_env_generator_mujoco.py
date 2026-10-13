@@ -114,7 +114,9 @@ class MuJoCoEnvironmentTests(unittest.TestCase):
     def test_tray_transport_stack_stays_supported(self):
         root = model_xml(CONFIG_DIR / 'tray_transport.yaml')
         ET.SubElement(root.find('worldbody'), 'geom', name='floor', type='plane', size='2 2 0.05')
-        ET.SubElement(root, 'option', timestep='0.002')
+        # Use the robot's actual integrator/friction solver, not MuJoCo defaults.
+        robot = CONFIG_DIR.parents[1] / 'franka_description/mujoco/franka/mj_dual.xml'
+        root.append(ET.parse(robot).getroot().find('option'))
         model = mujoco.MjModel.from_xml_string(ET.tostring(root, encoding='unicode'))
         data = mujoco.MjData(model)
         mujoco.mj_forward(model, data)
@@ -139,7 +141,7 @@ class MuJoCoEnvironmentTests(unittest.TestCase):
         np.testing.assert_allclose(2 * model.geom_size[base], [.3, .2, .01])
         self.assertAlmostEqual(data.geom_xpos[base, 2] - model.geom_size[base, 2], .2)
         for wall in ['front', 'back', 'left', 'right']:
-            self.assertAlmostEqual(2 * model.geom_size[geom('tray__' + wall + '_wall_geom'), 2], .02)
+            self.assertAlmostEqual(2 * model.geom_size[geom('tray__' + wall + '_wall_geom'), 2], .04)
         for i in range(1, 7):
             cube = geom(f'cube_{i:02}_geom')
             np.testing.assert_allclose(2 * model.geom_size[cube], [.03, .03, .03])
@@ -147,15 +149,19 @@ class MuJoCoEnvironmentTests(unittest.TestCase):
         initial = data.xpos.copy()
         # Match SimPausedPhysics: pause-time forward calls must not warm-start
         # the first integrated step with their constraint solution (MuJoCo 3.2).
-        for _ in range(100):
-            data.qacc_warmstart[:] = 0
-            mujoco.mj_forward(model, data)
-            data.qacc_warmstart[:] = 0
-        for _ in range(15000):
-            mujoco.mj_step(model, data)
+        maximum_displacement = 0.
+        for cycle in range(3):
+            for _ in range(100):
+                data.qacc_warmstart[:] = 0
+                mujoco.mj_forward(model, data)
+                data.qacc_warmstart[:] = 0
+            for _ in range(5000):
+                mujoco.mj_step(model, data)
+                maximum_displacement = max(maximum_displacement,
+                    float(np.max(np.linalg.norm(data.xpos-initial, axis=1))))
         self.assertTrue(np.isfinite(data.qpos).all())
         self.assertFalse(any(w.number for w in data.warning))
-        self.assertLess(np.max(np.linalg.norm(data.xpos - initial, axis=1)), .002)
+        self.assertLess(maximum_displacement, .002)
         contact_pairs = [{c.geom1, c.geom2} for c in data.contact]
         self.assertIn({geom('cube_01_geom'), base}, contact_pairs)
         for i in range(1, 6):

@@ -24,6 +24,22 @@ def generator(objects):
 
 
 class EnvGeneratorTests(unittest.TestCase):
+    def test_contact_parameters_inherit_and_validate(self):
+        gen = generator([dict(id='assembly', type='Compound',
+            material={'solref': [.008, 1.], 'solimp': [.9, .95, .001]},
+            parts=[box('inherited'), box('override', material={'solref': [.01, 1.]})]),
+            box('default')])
+        geoms = {g.get('name'): g for g in ET.fromstring(gen.generate_mujoco_xml()).iter('geom')}
+        self.assertEqual(geoms['assembly__inherited_geom'].get('solref'), '0.008 1')
+        self.assertEqual(geoms['assembly__override_geom'].get('solref'), '0.01 1')
+        self.assertEqual(geoms['assembly__override_geom'].get('solimp'), '0.9 0.95 0.001')
+        self.assertEqual(geoms['default'].get('solref'), '0.001 1')
+        for material in [{'solref': [0., 1.]}, {'solref': [.01]},
+                         {'solref': [float('nan'), 1.]}, {'solimp': [.99, .9, .001]},
+                         {'solimp': [.9, 1., .001]}, {'solimp': [.9, .95, 0.]}]:
+            invalid = EnvGenerator(EnvConfig.from_dict({'collision_objects': [box(material=material)]}))
+            self.assertFalse(invalid.validate()[0], material)
+
     def test_rotated_compound_world_pose_and_xml_local_pose(self):
         q = math.sqrt(0.5)
         gen = generator([dict(id='assembly', type='Compound',

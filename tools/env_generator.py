@@ -36,6 +36,8 @@ class Material:
     """Material properties for collision objects."""
     friction: Tuple[float, float, float] = (2.0, 0.005, 0.0001)
     rgba: Tuple[float, float, float, float] = (0.2, 0.4, 0.8, 1.0)
+    solref: Tuple[float, float] = (0.001, 1.0)
+    solimp: Tuple[float, float, float] = (0.998, 0.998, 0.001)
 
 
 @dataclass
@@ -76,6 +78,9 @@ class CollisionObject:
             material.friction = tuple(material_data['friction'])
         if 'rgba' in material_data:
             material.rgba = tuple(material_data['rgba'])
+        for key in ['solref', 'solimp']:
+            if key in material_data:
+                setattr(material, key, tuple(material_data[key]))
 
         parts = []
         for part_data in data.get('parts', []):
@@ -201,7 +206,8 @@ class EnvGenerator:
             **self._xml_pose(obj.pose),
             'friction': ' '.join(str(v) for v in obj.material.friction),
             'density': str(obj.density),
-            'solimp': '0.998 0.998 0.001', 'solref': '0.001 1',
+            'solimp': ' '.join(f'{v:.9g}' for v in obj.material.solimp),
+            'solref': ' '.join(f'{v:.9g}' for v in obj.material.solref),
             'rgba': ' '.join(str(v) for v in obj.material.rgba),
         })
 
@@ -378,9 +384,15 @@ class EnvGenerator:
                 errors.append(f'{path}: density must be finite and positive')
             if not finite_vector([obj.gravcomp], 1):
                 errors.append(f'{path}: gravcomp must be finite')
-            for key, length in [('friction', 3), ('rgba', 4)]:
+            for key, length in [('friction', 3), ('rgba', 4), ('solref', 2), ('solimp', 3)]:
                 if not finite_vector(getattr(obj.material, key), length):
                     errors.append(f'{path}: {key} requires {length} finite numbers')
+            if finite_vector(obj.material.solref, 2) and min(obj.material.solref) <= 0:
+                errors.append(f'{path}: solref time constant and damping ratio must be positive')
+            if finite_vector(obj.material.solimp, 3):
+                lo, hi, width = obj.material.solimp
+                if not 0 < lo <= hi < 1 or width <= 0:
+                    errors.append(f'{path}: solimp requires 0 < min <= max < 1 and positive width')
             if obj.type == 'Compound':
                 if not obj.parts:
                     errors.append(f'{path}: Compound requires non-empty parts')

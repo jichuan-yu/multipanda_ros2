@@ -2,7 +2,7 @@
 
   <include file="mj_dual_ng.xml"/>
   
-  <include file="objects.xml"/>
+  <!-- Task objects are supplied by dualarm_task_bringup. -->
 
   <statistic center="0.3 0 0.4" extent="1"/>
 

@@ -48,7 +48,7 @@ def generate_launch_description():
     rviz_file = os.path.join(get_package_share_directory('franka_description'), 'rviz',
                              'visualize_franka.rviz')
 
-    franka_controllers = PathJoinSubstitution(
+    default_controllers = PathJoinSubstitution(
         [
             FindPackageShare('franka_bringup'),
             'config',
@@ -57,7 +57,10 @@ def generate_launch_description():
         ]
     )
 
+    franka_controllers = LaunchConfiguration('controllers_file')
+
     return LaunchDescription([
+        DeclareLaunchArgument('controllers_file', default_value=default_controllers),
         DeclareLaunchArgument(
             robot_ip_parameter_name,
             description='Hostname or IP address of the robot.'),

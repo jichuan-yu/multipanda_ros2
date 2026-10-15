@@ -1,5 +1,9 @@
 # multipanda_ros2 — 仿真与底层控制提供者
 
+`tmp/tray-repro-no-curobo` 是从 `srt_xzy` 建立的临时复现分支。配合
+`dualarm_mprc` 同名分支的 [托盘复现指南](https://github.com/jichuan-yu/dualarm_mprc/blob/tmp/tray-repro-no-curobo/docs/TRAY_REPRODUCTION.md)
+使用；`tools/install_tray_libraries.sh` 安装固定版本 CPU 库，不需要 cuRobo/CUDA。
+
 本仓库维护 Franka 硬件接口、机器人模型、MuJoCo 集成、通用 ros2_control 控制器与夹爪桥接。
 任务场景、遥操作、环境生成和实验记录已迁入相邻的 `dualarm_mprc` 仓库。
 

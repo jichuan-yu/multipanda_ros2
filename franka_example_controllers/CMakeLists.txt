@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.5)
 project(franka_example_controllers)
 
-# Default to C++14
+# Default to C++17
 if(NOT CMAKE_CXX_STANDARD)
-    set(CMAKE_CXX_STANDARD 14)
+    set(CMAKE_CXX_STANDARD 17)
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -79,6 +79,11 @@ generate_parameter_library(franka_example_controllers_parameters src/comless/mod
 add_executable(gripper_action_bridge src/subscriber/gripper_action_bridge.cpp)
 ament_target_dependencies(gripper_action_bridge rclcpp rclcpp_action franka_msgs std_msgs std_srvs)
 install(TARGETS gripper_action_bridge DESTINATION lib/${PROJECT_NAME})
+
+# Preserve the simulation bridge ABI; real bringup uses the dev-jichuan bridge.
+add_executable(gripper_action_bridge_real src/subscriber/gripper_action_bridge_real.cpp)
+ament_target_dependencies(gripper_action_bridge_real rclcpp rclcpp_action franka_msgs std_msgs std_srvs)
+install(TARGETS gripper_action_bridge_real DESTINATION lib/${PROJECT_NAME})
 
 pluginlib_export_plugin_description_file(
        controller_interface franka_example_controllers.xml)

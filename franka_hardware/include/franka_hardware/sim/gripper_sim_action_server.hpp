@@ -90,6 +90,11 @@ class GripperSimActionServer : public rclcpp::Node {
   const int k_default_state_publish_rate = 30;     // default gripper state publish rate
   const int k_default_feedback_publish_rate = 10;  // default action feedback publish rate
 
+  // Contact detection parameters
+  static constexpr double kForceThreshold = 5.0;      // 5N force threshold for contact
+  static constexpr double kForceHysteresis = 2.0;      // 2N hysteresis for stable state transitions
+  static constexpr double kWidthThreshold = 0.07;      // 7cm width threshold (below max_width 8cm)
+
   std::shared_ptr<std::array<double, 3>> gripper_states_ptr_; // cmd, width, force
 
   rclcpp_action::Server<Homing>::SharedPtr homing_server_;
@@ -103,6 +108,7 @@ class GripperSimActionServer : public rclcpp::Node {
   rclcpp::TimerBase::SharedPtr timer_;
   std::shared_ptr<rclcpp::Rate> cmd_rate_;
   bool is_canceled_;
+  bool is_contact_detected_ = false;  // Track contact state for is_grasped
 
   double default_speed_;          // default gripper speed parameter value in m/s
   double default_epsilon_inner_;  // default gripper inner epsilon parameter value in m

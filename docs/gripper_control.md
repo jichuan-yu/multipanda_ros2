@@ -1,3 +1,17 @@
+## Bridge executables after merging the simulation branch
+
+Real-robot launch files use `gripper_action_bridge_real`. Its implementation and
+command defaults are retained from `dev-jichuan`: pass the full arm ID (for
+example, `panda`, `panda_left`, or `panda_right`); command topics are
+`/<arm_id>_gripper/{width,grasp,homing,stop}_desired` and actions/services are
+under `/<arm_id>_gripper/`.
+
+Simulation keeps the existing `gripper_action_bridge` executable unchanged.
+Pass `arm_id:=left` or `arm_id:=right`; commands use
+`/mj_<arm_id>_gripper/*_desired`, actions/services use
+`/mj_<arm_id>_gripper_sim_node/`, and grasp status is published on
+`/mj_<arm_id>_gripper/grasp_status`. Existing task launch files remain compatible.
+
 # 双臂/单臂夹爪 (Franka Gripper) 控制说明
 
 为了方便在外部宿主机（例如 ROS 2 Jazzy 环境）控制仿真容器内（Humble）的机械臂夹爪，且**无需在宿主机端编译和安装任何自定义的 `franka_msgs`**，本项目在控制层实现了一个高级动作桥接节点 (`gripper_action_bridge`)。

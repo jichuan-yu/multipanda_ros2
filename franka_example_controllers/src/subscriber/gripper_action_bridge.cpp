@@ -24,13 +24,13 @@ public:
         this->declare_parameter<std::string>("arm_id", "left");
         std::string arm_id_ = this->get_parameter("arm_id").as_string();
 
-        auto node_prefix = arm_id_ + "_gripper";
+        auto node_prefix = "/mj_" + arm_id_ + "_gripper_sim_node";
         
         // Topic Names
-        auto sub_topic_move = arm_id_ + "_gripper/width_desired";
-        auto sub_topic_grasp = arm_id_ + "_gripper/grasp_desired";
-        auto sub_topic_homing = arm_id_ + "_gripper/homing_desired";
-        auto sub_topic_stop = arm_id_ + "_gripper/stop_desired";
+        auto sub_topic_move = "/mj_" + arm_id_ + "_gripper/width_desired";
+        auto sub_topic_grasp = "/mj_" + arm_id_ + "_gripper/grasp_desired";
+        auto sub_topic_homing = "/mj_" + arm_id_ + "_gripper/homing_desired";
+        auto sub_topic_stop = "/mj_" + arm_id_ + "_gripper/stop_desired";
 
         // Action / Service Names
         auto action_move = node_prefix + "/move";
@@ -54,6 +54,9 @@ public:
         stop_sub_ = this->create_subscription<std_msgs::msg::Bool>(
             sub_topic_stop, 10,
             std::bind(&GripperActionBridge::stop_callback, this, std::placeholders::_1));
+
+        grasp_status_pub_ = this->create_publisher<std_msgs::msg::Float64MultiArray>(
+            "/mj_" + arm_id_ + "_gripper/grasp_status", 10);
 
         // Action Clients
         move_client_ = rclcpp_action::create_client<MoveAction>(this, action_move);
@@ -81,10 +84,21 @@ private:
         RCLCPP_INFO(this->get_logger(), "Forwarded Move command. width: %f", goal_msg.width);
     }
 
+    void publish_grasp_status(double request_id, double state)
+    {
+        std_msgs::msg::Float64MultiArray status;
+        status.data = {request_id, state};
+        grasp_status_pub_->publish(status);
+    }
+
     void grasp_callback(const std_msgs::msg::Float64MultiArray::SharedPtr msg)
     {
+        // Optional sixth element correlates automation requests. Legacy five-
+        // element teleop commands remain compatible and report request_id=0.
+        const double request_id = msg->data.size() > 5 ? msg->data[5] : 0.0;
         if (!grasp_client_->wait_for_action_server(std::chrono::milliseconds(500))) {
             RCLCPP_WARN(this->get_logger(), "Grasp action server not available.");
+            publish_grasp_status(request_id, -1.0);
             return;
         }
         
@@ -104,6 +118,16 @@ private:
         if (msg->data.size() > 4) goal_msg.epsilon.outer = msg->data[4];
 
         auto send_goal_options = rclcpp_action::Client<GraspAction>::SendGoalOptions();
+        send_goal_options.goal_response_callback =
+            [this, request_id](rclcpp_action::ClientGoalHandle<GraspAction>::SharedPtr handle) {
+                publish_grasp_status(request_id, handle ? 1.0 : -1.0);
+            };
+        send_goal_options.result_callback =
+            [this, request_id](const rclcpp_action::ClientGoalHandle<GraspAction>::WrappedResult& result) {
+                const bool success = result.code == rclcpp_action::ResultCode::SUCCEEDED &&
+                                     result.result && result.result->success;
+                publish_grasp_status(request_id, success ? 2.0 : -2.0);
+            };
         grasp_client_->async_send_goal(goal_msg, send_goal_options);
         RCLCPP_INFO(this->get_logger(), "Forwarded Grasp command. width: %f, force: %f", goal_msg.width, goal_msg.force);
     }
@@ -134,6 +158,8 @@ private:
             RCLCPP_INFO(this->get_logger(), "Forwarded Stop command.");
         }
     }
+
+    rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr grasp_status_pub_;
 
     // Standard ROS2 Subscribers
     rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr move_sub_;

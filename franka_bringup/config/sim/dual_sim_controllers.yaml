@@ -3,7 +3,6 @@ mujoco_server:
     MujocoPlugins:
       names:
         - mujoco_ros2_control
-        - dynamic_obstacles
       mujoco_ros2_control:
         type: mujoco_ros2_control::MujocoRos2ControlPlugin
         hardware:
@@ -13,8 +12,6 @@ mujoco_server:
           namespace: ""
           robot_description_node: "robot_state_publisher"
           robot_description: "robot_description"
-      dynamic_obstacles:
-        type: mujoco_ros::DynamicObstaclesPlugin
 
 controller_manager:
   ros__parameters:

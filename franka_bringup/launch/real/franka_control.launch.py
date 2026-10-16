@@ -68,7 +68,7 @@ def generate_launch_description():
 
     gripper_bridge = Node(
         package='franka_example_controllers',
-        executable='gripper_action_bridge',
+        executable='gripper_action_bridge_real',
         name=[arm_id, '_gripper_action_bridge'],
         output='screen',
         parameters=[{'arm_id': arm_id}],

@@ -11,3 +11,6 @@ install/
 test/
 instruction.md
 MUJOCO_LOG.TXT
+
+# Local research notes; intentionally not versioned
+/research_log/

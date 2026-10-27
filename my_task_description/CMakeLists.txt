@@ -7,7 +7,7 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 
-install(DIRECTORY mujoco launch urdf scenes
+install(DIRECTORY config mujoco launch urdf scenes
   DESTINATION share/${PROJECT_NAME}
 )
 

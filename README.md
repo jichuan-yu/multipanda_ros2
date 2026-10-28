@@ -3,7 +3,7 @@
 本仓库维护 Franka 硬件接口、机器人模型、MuJoCo 集成、通用 ros2_control 控制器与夹爪桥接。
 任务场景、遥操作、环境生成和实验记录已迁入相邻的 `dualarm_mprc` 仓库。
 
-- 项目工作流与迁移入口：[dualarm_mprc 工作区指南](../dualarm_mprc/docs/WORKSPACE.md)
+- 项目工作流与迁移入口：[dualarm_mprc 工作区指南](../dualarm_mprc/docs/setup/WORKSPACE.md)
 - 上游安装和通用功能：[README_ORIGIN.md](README_ORIGIN.md)
 - 底层架构：[docs/main.md](docs/main.md)
 - 中文上游说明：[README_ZH.md](README_ZH.md)

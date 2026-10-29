@@ -3,7 +3,6 @@ mujoco_server:
     MujocoPlugins:
       names:
         - mujoco_ros2_control
-        - dynamic_obstacles
       mujoco_ros2_control:
         type: mujoco_ros2_control::MujocoRos2ControlPlugin
         hardware:
@@ -13,8 +12,6 @@ mujoco_server:
           namespace: ""
           robot_description_node: "robot_state_publisher"
           robot_description: "robot_description"
-      dynamic_obstacles:
-        type: mujoco_ros::DynamicObstaclesPlugin
 
 controller_manager:
   ros__parameters:
@@ -32,8 +29,6 @@ controller_manager:
       type: franka_example_controllers/MultiCartesianImpedanceController
     dual_joint_impedance_controller:
       type: franka_example_controllers/MultiJointImpedanceController
-    dualarm_mprc_controller:
-      type: franka_example_controllers/DualArmMprcController
     franka_right_robot_model_broadcaster:
       type: franka_robot_state_broadcaster/FrankaRobotModelBroadcaster
     dual_joint_impedance_example_controller:
@@ -137,6 +132,8 @@ sim_multi_mode_controller:
 dual_joint_impedance_controller:
   ros__parameters:
     arm_count: 2
+    control_frequency: 1000.0
+    publish_rate: 100.0
     arm_1:
       arm_id: mj_left
       k_gains:
@@ -146,15 +143,24 @@ dual_joint_impedance_controller:
         - 600.0
         - 250.0
         - 150.0
-        - 50.0
+        - 100.0
       d_gains:
         - 30.0
         - 30.0
         - 30.0
+        - 15.0
         - 12.0
         - 12.0
-        - 12.0
-        - 6.0
+        - 9.0
+      e_q_max:
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+      alpha_filt: 0.01
     arm_2:
       arm_id: mj_right
       k_gains:
@@ -164,15 +170,24 @@ dual_joint_impedance_controller:
         - 600.0
         - 250.0
         - 150.0
-        - 50.0
+        - 100.0
       d_gains:
         - 30.0
         - 30.0
         - 30.0
+        - 15.0
         - 12.0
         - 12.0
-        - 12.0
-        - 6.0
+        - 9.0
+      e_q_max:
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+        - 0.4
+      alpha_filt: 0.01
 
 multi_cartesian_impedance_controller:
   ros__parameters:
@@ -184,12 +199,3 @@ multi_cartesian_impedance_controller:
       arm_id: mj_right
       pos_stiff: [100.0, 100.0, 100.0, 10.0, 10.0, 10.0]
 
-dualarm_mprc_controller:
-  ros__parameters:
-    arm_count: 2
-    arm_1:
-      arm_id: mj_left
-      pos_stiff: [400.0, 400.0, 400.0, 15.0, 15.0, 15.0]
-    arm_2:
-      arm_id: mj_right
-      pos_stiff: [400.0, 400.0, 400.0, 15.0, 15.0, 15.0]

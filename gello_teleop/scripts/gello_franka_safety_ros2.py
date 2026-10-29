@@ -1,39 +1,32 @@
 #!/usr/bin/env python3
-"""
-GELLO dual-arm bridge routed THROUGH the dual-arm safety controller.
+"""GELLO 双臂遥操作桥接（经双手臂安全控制器 main_sim_node）。
 
-Sibling of ``gello_franka_ros2.py`` (which publishes raw 14-DOF absolute joints
-straight to the low-level joint impedance topic, bypassing any safety layer).
-This version reuses the exact same GELLO I/O (agents, smoothers, grippers) but
-publishes absolute joint positions as ``command_type=4`` (JOINT_POSITION) on
-``/dualarm_teleop_cmd`` so that ``main_sim_node`` (dualarm_mprc safety
-controller) runs clamping, collision avoidance, relative-pose constraints and
-QP before the joint impedance controller is fed.
+与 ``gello_franka_ros2.py``（直接把绝对关节位置发给双臂阻抗控制器，绕过安全层）的区别：
+本脚本复用完全相同的 GELLO I/O（agent、平滑器、夹爪），但把绝对关节位置以
+``command_type=4``（JOINT_POSITION）发到 ``/dualarm_teleop_cmd``，由
+``main_sim_node``（dualarm_mprc 安全控制器）完成限幅、碰撞规避、相对位姿约束和
+QP 后再下发给关节阻抗控制器。
 
-Topic flow (sim):
+仿真下的数据流：
 
-    GELLO -> smoother -> /dualarm_teleop_cmd (type=4, arm_selector)
-           -> main_sim_node (safety controller)
+    GELLO -> 平滑器 -> /dualarm_teleop_cmd (type=4, arm_selector)
+           -> main_sim_node（安全控制器）
            -> /mj_{left,right}/joints_desired
-           -> dual_joint_impedance_controller (MuJoCo sim)
+           -> dual_joint_impedance_controller（MuJoCo 仿真）
 
-Message format (Float64MultiArray, see teleop/base_teleop.py):
+消息格式（Float64MultiArray，见 dualarm_task_tools/base_teleop.py）：
     [left_q(7), right_q(7), command_type=4, arm_selector, allow_safety_violation]
 
-Requirements:
-    - ``main_sim_node`` running (start it from the workspace root, it reads
-      config YAMLs via relative paths)
-    - ``/joint_states`` streaming (used to initialize the smoothers)
+运行要求：
+    - ``main_sim_node`` 已启动（推荐用 dualarm_task_bringup 的 tray_transport.launch.py，
+      它会同时拉起 MuJoCo、dual_joint_impedance_controller 和 main_sim_node）；
+    - ``/joint_states``（或 ``/mj_left/joint_states``）正在发布，用于初始化平滑器。
 
-Usage:
+用法：
     python3 src/multipanda_ros2/gello_teleop/scripts/gello_franka_safety_ros2.py --control-mode 3
-
-    (No virtualenv activation needed on this host: ``gello`` / ``dynamixel-sdk`` are
-     installed into the system Python via ``pip install -e ~/gello_software``.)
 """
 
 from dataclasses import dataclass, field
-import os
 import sys
 from pathlib import Path
 
@@ -43,18 +36,23 @@ import rclpy
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64
 
-# Add parent directory to path for imports (for direct execution)
-if __name__ == '__main__':
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
 
-# Teleop-style base node (publishes /dualarm_teleop_cmd, has create_teleop_command)
+# 遥操作基类（发布 /dualarm_teleop_cmd，提供 create_teleop_command）
 try:
-    from teleop.base_teleop import BaseTeleopNode
+    from dualarm_task_tools.base_teleop import BaseTeleopNode
 except ImportError:
-    from base_teleop import BaseTeleopNode
+    # 源码树直接运行时（未 source install/setup.bash）回退到工作空间源码路径
+    _SRC_DIR = SCRIPT_DIR.parents[2]
+    _TASK_TOOLS_DIR = _SRC_DIR / 'dualarm_mprc' / 'dualarm_task_tools'
+    if _TASK_TOOLS_DIR.exists() and str(_TASK_TOOLS_DIR) not in sys.path:
+        sys.path.insert(0, str(_TASK_TOOLS_DIR))
+    from dualarm_task_tools.base_teleop import BaseTeleopNode
 
-# Shared GELLO I/O helpers / constants from the original bridge script
-from gello_franka_ros2 import (
+# 与原桥接脚本共享的 GELLO I/O 助手与常量
+from gello_franka_ros2 import (  # noqa: E402
     load_gello_config,
     MAX_GRIPPER_OPEN,
     LEFT_ARM,
@@ -63,18 +61,20 @@ from gello_franka_ros2 import (
     SIM_MODE,
     REAL_MODE,
 )
-from gello_smoother import Smoother
+from gello_smoother import Smoother  # noqa: E402
 
 
 @dataclass
 class GelloFrankaSafetyConfig:
     """Configuration for the safety-routed GELLO dual-arm bridge."""
 
-    arm_id: str = 'mj'
+    # 关节名前缀：仿真臂名 mj_left/mj_right -> 'mj'；真机 panda_left/panda_right -> 'panda'
+    # 留空时由 hardware_mode 推导（见 main()）
+    arm_id: str = ''
     joint_state_topic: str = '/joint_states'
     teleop_cmd_topic: str = '/dualarm_teleop_cmd'
-    left_gripper_topic: str = '/mj_left_gripper/width_desired'
-    right_gripper_topic: str = '/mj_right_gripper/width_desired'
+    left_gripper_topic: str = ''   # 留空：仿真 /mj_left_gripper/width_desired
+    right_gripper_topic: str = ''  # 留空：仿真 /mj_right_gripper/width_desired
     left_gello_config_path: str = ''
     right_gello_config_path: str = ''
     publish_hz: float = 50.0
@@ -102,8 +102,10 @@ class GelloFrankaSafetyConfig:
             0.785398,
         ], dtype=float)
     )
+
+
 class GelloFrankaSafetyNode(BaseTeleopNode):
-    """GELLO dual-arm bridge publishing absolute joints to the safety controller."""
+    """GELLO 双臂桥接：向安全控制器发布绝对关节位置。"""
 
     def __init__(self, config: GelloFrankaSafetyConfig = None):
         self.config = config if config is not None else GelloFrankaSafetyConfig()
@@ -115,7 +117,6 @@ class GelloFrankaSafetyNode(BaseTeleopNode):
         )
 
         self.arm_id = self.config.arm_id
-        self.joint_state_topic = self.config.joint_state_topic
         self.control_mode = self.config.control_mode
         self.hardware_mode = self.config.hardware_mode
         self.publish_hz = float(self.config.publish_hz)
@@ -128,7 +129,9 @@ class GelloFrankaSafetyNode(BaseTeleopNode):
         self.q_left_current = None
         self.q_right_current = None
         self.joint_states_received = False
-        self._missing_joint_state_logged = False
+        # 缺帧告警只打印一次（每个聚合话题都会包含另一侧臂缺失的关节名，避免刷屏）
+        self._missing_left_joint_state_logged = False
+        self._missing_right_joint_state_logged = False
 
         # 两个独立的平滑器（与原始桥接脚本一致）
         self.left_smoother = Smoother(
@@ -155,24 +158,28 @@ class GelloFrankaSafetyNode(BaseTeleopNode):
         self.latest_right_smoothed = None
 
         # 订阅当前关节状态（用于平滑器初始化和保持）
-        self.joint_state_sub = self.create_subscription(
-            JointState,
-            self.joint_state_topic,
-            self.joint_state_callback,
-            10,
-        )
+        # 聚合话题 + 各臂控制器自己的 joint_states 话题，任一存在即可
+        feedback_topics = [self.config.joint_state_topic]
+        for candidate in (f'/{self.arm_id}_left/joint_states',
+                          f'/{self.arm_id}_right/joint_states'):
+            if candidate not in feedback_topics:
+                feedback_topics.append(candidate)
+        self.joint_state_subs = [
+            self.create_subscription(JointState, topic, self.joint_state_callback, 10)
+            for topic in feedback_topics
+        ]
 
-        # 夹爪发布器（与原始桥接脚本一致）
-        if self.hardware_mode == SIM_MODE:
-            self.left_gripper_publisher = self.create_publisher(
-                Float64, self.config.left_gripper_topic, 10)
-            self.right_gripper_publisher = self.create_publisher(
-                Float64, self.config.right_gripper_topic, 10)
-        else:
-            self.left_gripper_publisher = self.create_publisher(
-                Float64, '/left_gripper/width_desired', 10)
-            self.right_gripper_publisher = self.create_publisher(
-                Float64, '/right_gripper/width_desired', 10)
+        # 夹爪发布器（仿真：/mj_<left|right>_gripper/width_desired；
+        # 真机：/panda_<left|right>_gripper/width_desired）
+        default_left = f'/{self.arm_id}_left_gripper/width_desired'
+        default_right = f'/{self.arm_id}_right_gripper/width_desired'
+        self.left_gripper_topic = self.config.left_gripper_topic or default_left
+        self.right_gripper_topic = self.config.right_gripper_topic or default_right
+        self.left_gripper_publisher = self.create_publisher(
+            Float64, self.left_gripper_topic, 10)
+        self.right_gripper_publisher = self.create_publisher(
+            Float64, self.right_gripper_topic, 10)
+
         # 加载 GELLO 配置（默认 config/ 目录，可命令行覆盖）
         script_dir = Path(__file__).resolve().parent
         left_config_path = (
@@ -250,25 +257,32 @@ class GelloFrankaSafetyNode(BaseTeleopNode):
         self.joint_print_timer = self.create_timer(1.0, self.joint_print_callback)
 
         self.get_logger().info(
-            f'Gello Franka safety bridge initialized '
+            'Gello Franka safety bridge initialized '
             f'(control_mode={self.control_mode}, publish_hz={self.publish_hz}, '
             f'topic={self.config.teleop_cmd_topic})'
         )
+        self.get_logger().info(
+            f'Gripper topics: {self.left_gripper_topic} | {self.right_gripper_topic}'
+        )
+
+
+
     # ------------------------------------------------------------------ #
-    # 关节状态回调：初始化平滑器（起点锚定到真实机器人关节位置）
+    # 关节状态回调：初始化平滑器（起点锚定到实际机器人关节位置）
     # ------------------------------------------------------------------ #
     def joint_state_callback(self, msg: JointState):
         try:
             name_to_pos = dict(zip(msg.name, msg.position))
 
-            left_indices = [name_to_pos.get(n) for n in self.left_joint_names]
-            right_indices = [name_to_pos.get(n) for n in self.right_joint_names]
+            left_positions = [name_to_pos.get(name) for name in self.left_joint_names]
+            right_positions = [name_to_pos.get(name) for name in self.right_joint_names]
 
             # 更新左臂状态
-            if all(idx is not None for idx in left_indices):
-                self.q_left_current = np.array(left_indices, dtype=float)
+            if all(pos is not None for pos in left_positions):
+                self.q_left_current = np.array(left_positions, dtype=float)
+                self._missing_left_joint_state_logged = False
 
-                if self.q_left_current is not None and not self.left_smoother_initialized:
+                if not self.left_smoother_initialized:
                     self.left_smoother.set_actual_position(self.q_left_current)
                     self.left_smoother.set_initial_position(self.q_left_current)
                     initial_target = (
@@ -281,14 +295,16 @@ class GelloFrankaSafetyNode(BaseTeleopNode):
                     self.left_smoother_initialized = True
                     self.get_logger().info(
                         'Left arm smoother initialized from actual robot joint positions.')
-            elif not self._missing_joint_state_logged:
+            elif not self._missing_left_joint_state_logged:
                 self.get_logger().warn(f'Left arm joint state missing: {self.left_joint_names}')
+                self._missing_left_joint_state_logged = True
 
             # 更新右臂状态
-            if all(idx is not None for idx in right_indices):
-                self.q_right_current = np.array(right_indices, dtype=float)
+            if all(pos is not None for pos in right_positions):
+                self.q_right_current = np.array(right_positions, dtype=float)
+                self._missing_right_joint_state_logged = False
 
-                if self.q_right_current is not None and not self.right_smoother_initialized:
+                if not self.right_smoother_initialized:
                     self.right_smoother.set_actual_position(self.q_right_current)
                     self.right_smoother.set_initial_position(self.q_right_current)
                     initial_target = (
@@ -301,8 +317,9 @@ class GelloFrankaSafetyNode(BaseTeleopNode):
                     self.right_smoother_initialized = True
                     self.get_logger().info(
                         'Right arm smoother initialized from actual robot joint positions.')
-            elif not self._missing_joint_state_logged:
+            elif not self._missing_right_joint_state_logged:
                 self.get_logger().warn(f'Right arm joint state missing: {self.right_joint_names}')
+                self._missing_right_joint_state_logged = True
 
             # 设置初始化完成标志
             if not self.joint_states_received:
@@ -314,14 +331,14 @@ class GelloFrankaSafetyNode(BaseTeleopNode):
 
         except Exception as exc:
             self.get_logger().warn(f'Failed to parse joint_states: {exc}')
+
+
     # ------------------------------------------------------------------ #
     # 主循环：读 GELLO -> 平滑 -> 发 /dualarm_teleop_cmd (type=4)
     # ------------------------------------------------------------------ #
     def timer_callback(self):
         try:
-            # 读取左臂数据
             left_gello_joints = self.left_gello_agent.act({})
-            # 读取右臂数据
             right_gello_joints = self.right_gello_agent.act({})
 
             left_smoothed = None
@@ -329,9 +346,8 @@ class GelloFrankaSafetyNode(BaseTeleopNode):
             left_gripper_val = None
             right_gripper_val = None
 
-            # 处理左臂数据
+            # 处理左臂数据（不做 joint_limits 限幅：交安全控制器处理）
             if left_gello_joints is not None and len(left_gello_joints) >= 7:
-                # 不做 joint_limits 限幅：直接使用 GELLO 标定后的关节读数
                 left_q_target_raw = np.asarray(left_gello_joints[:7], dtype=float)
                 self.latest_left_raw_target = left_q_target_raw
 
@@ -341,16 +357,14 @@ class GelloFrankaSafetyNode(BaseTeleopNode):
                     left_smoothed = self.left_smoother.update()
                     self.latest_left_smoothed = left_smoothed
 
-                # 处理夹爪数据
                 if len(left_gello_joints) >= 8:
                     left_gripper_val = left_gello_joints[7]
             else:
                 # 读取失败：保持上一拍平滑输出，避免控制器超时或目标跳变
                 left_smoothed = self.latest_left_smoothed
 
-            # 处理右臂数据
+            # 处理右臂数据（不做 joint_limits 限幅：交安全控制器处理）
             if right_gello_joints is not None and len(right_gello_joints) >= 7:
-                # 不做 joint_limits 限幅：直接使用 GELLO 标定后的关节读数
                 right_q_target_raw = np.asarray(right_gello_joints[:7], dtype=float)
                 self.latest_right_raw_target = right_q_target_raw
 
@@ -360,12 +374,12 @@ class GelloFrankaSafetyNode(BaseTeleopNode):
                     right_smoothed = self.right_smoother.update()
                     self.latest_right_smoothed = right_smoothed
 
-                # 处理夹爪数据
                 if len(right_gello_joints) >= 8:
                     right_gripper_val = right_gello_joints[7]
             else:
                 # 读取失败：保持上一拍平滑输出
                 right_smoothed = self.latest_right_smoothed
+
             # 尚未初始化/读取失败时的兜底：优先保持实际位置，其次默认位姿
             if left_smoothed is None:
                 left_smoothed = (
@@ -402,25 +416,27 @@ class GelloFrankaSafetyNode(BaseTeleopNode):
                 )
                 self.teleop_pub.publish(msg)
 
-            # 处理夹爪指令（与原始桥接脚本一致）
-            if left_gripper_val is not None and (self.control_mode == LEFT_ARM or self.control_mode == BOTH_ARMS):
+            # 处理夹爪指令（width_desired，单位：米）
+            if left_gripper_val is not None and (
+                    self.control_mode == LEFT_ARM or self.control_mode == BOTH_ARMS):
                 left_gripper_width = MAX_GRIPPER_OPEN * (1 - left_gripper_val)
                 left_gripper_width = np.clip(left_gripper_width, 0.0, MAX_GRIPPER_OPEN)
                 msg_gripper = Float64()
                 msg_gripper.data = float(left_gripper_width)
-                if self.left_gripper_publisher:
-                    self.left_gripper_publisher.publish(msg_gripper)
+                self.left_gripper_publisher.publish(msg_gripper)
 
-            if right_gripper_val is not None and (self.control_mode == RIGHT_ARM or self.control_mode == BOTH_ARMS):
+            if right_gripper_val is not None and (
+                    self.control_mode == RIGHT_ARM or self.control_mode == BOTH_ARMS):
                 right_gripper_width = MAX_GRIPPER_OPEN * (1 - right_gripper_val)
                 right_gripper_width = np.clip(right_gripper_width, 0.0, MAX_GRIPPER_OPEN)
                 msg_gripper = Float64()
                 msg_gripper.data = float(right_gripper_width)
-                if self.right_gripper_publisher:
-                    self.right_gripper_publisher.publish(msg_gripper)
+                self.right_gripper_publisher.publish(msg_gripper)
 
         except Exception as exc:
             self.get_logger().error(f'Error publishing joint command: {exc}')
+
+
     # ------------------------------------------------------------------ #
     # 1Hz 调试打印
     # ------------------------------------------------------------------ #
@@ -475,6 +491,9 @@ def main(args=None):
                         help='Hardware mode: 0=SIM_MODE (simulation), 1=REAL_MODE (real hardware)')
     parser.add_argument('--publish-hz', type=float, default=50.0,
                         help='Command publish rate in Hz (default: 50.0)')
+    parser.add_argument('--arm-id', type=str, default=None,
+                        help='Arm id prefix used in joint names/topics '
+                             '(default: mj for sim, panda for real)')
     parser_args = parser.parse_args(args)
 
     rclpy.init(args=args)
@@ -487,6 +506,8 @@ def main(args=None):
         if parser_args.hardware_mode in [SIM_MODE, REAL_MODE]:
             config_kwargs['hardware_mode'] = parser_args.hardware_mode
         config_kwargs['publish_hz'] = parser_args.publish_hz
+        config_kwargs['arm_id'] = parser_args.arm_id or (
+            'panda' if parser_args.hardware_mode == REAL_MODE else 'mj')
         if parser_args.left_config:
             config_kwargs['left_gello_config_path'] = parser_args.left_config
         if parser_args.right_config:
@@ -500,6 +521,9 @@ def main(args=None):
     except FileNotFoundError as e:
         print(f'Error: {e}')
         sys.exit(1)
+    except RuntimeError as e:
+        print(f'Error: {e}')
+        sys.exit(1)
     finally:
         if node is not None:
             node.destroy_node()
@@ -509,9 +533,4 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-
-
-
-
-
 

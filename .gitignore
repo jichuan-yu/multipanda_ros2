@@ -1,5 +1,6 @@
 .idea
 .vscode
+.claude
 *.pyc
 COLCON_IGNORE
 AMENT_IGNORE
@@ -11,3 +12,4 @@ install/*
 test/*
 instruction.md
 __pycache__/
+CLAUDE.md

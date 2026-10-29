@@ -55,19 +55,21 @@ def _get_urdf_from_xacro(xacro_path: str, arm_id: str, hand: bool = True) -> str
 class SpacemouseConfig:
     arm_id: str = 'panda'
     joint_state_topic: str = '/panda/joint_states'
-    target_joint_topic: str = '/joint_impedance/joints_desired'
+    target_joint_topic: str = '/panda/joints_desired'
+    gripper_width_topic: str = '/panda_gripper/width_desired'
+    gripper_grasp_topic: str = '/panda_gripper/grasp_desired'
     ee_frame: str = 'panda_hand_tcp'
     base_frame: str = 'panda_link0'
     xacro_path: str = 'src/multipanda_ros2/franka_description/robots/real/panda_arm.urdf.xacro'
     xacro_hand: bool = True
-    publish_hz: float = 100.0
-    scale_pos: float = 0.1
-    scale_rot: float = 0.2
+    publish_hz: float = 10.0
+    scale_pos: float = 0.05
+    scale_rot: float = 0.1
     deadzone: float = 0.05
     gripper_open_width: float = 0.08
-    gripper_close_width: float = 0.0
+    gripper_close_width: float = 0.03
     gripper_speed: float = 0.1
-    gripper_force: float = 10.0
+    gripper_force: float = 20.0
     motion_mapping: np.ndarray = field(
         default_factory=lambda: np.array(
             [
@@ -94,6 +96,8 @@ class SpaceMouseJointTeleopNode(Node):
         self.arm_id = self.config.arm_id
         self.joint_state_topic = self.config.joint_state_topic
         self.target_joint_topic = self.config.target_joint_topic
+        self.gripper_width_topic = self.config.gripper_width_topic
+        self.gripper_grasp_topic = self.config.gripper_grasp_topic
         self.ee_frame = self.config.ee_frame
         self.frame_id = self.config.base_frame
         self.publish_hz = float(self.config.publish_hz)
@@ -108,12 +112,12 @@ class SpaceMouseJointTeleopNode(Node):
         self.publisher = self.create_publisher(JointState, self.target_joint_topic, 10)
         self.width_pub = self.create_publisher(
             Float64,
-            f'/{self.arm_id}_gripper/width_desired',
+            self.gripper_width_topic,
             10,
         )
         self.grasp_pub = self.create_publisher(
             Float64MultiArray,
-            f'/{self.arm_id}_gripper/grasp_desired',
+            self.gripper_grasp_topic,
             10,
         )
 
@@ -344,8 +348,9 @@ class SpaceMouseJointTeleopNode(Node):
         
         self.ee_task.set_target(pin.SE3(target_pose[0:3, 0:3], target_pose[0:3, 3]))
         posture_target = self.configuration.q.copy()
-        for i, q_index in enumerate(self.arm_joint_q_indices):
-            posture_target[q_index] = self.posture_q_arm[i]
+        # Set posture task targets for the arm joints to maintain current posture
+        # for i, q_index in enumerate(self.arm_joint_q_indices):
+        #     posture_target[q_index] = self.posture_q_arm[i]
         self.posture_task.set_target(posture_target)
 
         velocity = pink.solve_ik(

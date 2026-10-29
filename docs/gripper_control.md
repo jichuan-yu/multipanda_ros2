@@ -1,3 +1,44 @@
+## Bridge executables after merging the simulation branch
+
+Real-robot launch files use `gripper_action_bridge_real`, which schedules gripper
+commands the way the official GELLO Panda driver does
+(`gello/robots/panda.py::command_joint_state`,
+`gripper.goto(width=..., speed=1, force=1)`): one **blocking** command at a time,
+each command carrying a force limit.
+
+- pass the full arm ID (for example `panda`, `panda_left`, or `panda_right`);
+  command topics are `/<arm_id>_gripper/{width,grasp,homing,stop}_desired` and
+  actions/services are under `/<arm_id>_gripper/`;
+- `width_desired` (the 50 Hz GELLO stream) is **latched**, not forwarded message
+  by message: the node keeps only the newest sample and sends the next `Grasp`
+  goal after the previous one has finished. `Move`/`Grasp` are one-shot
+  trajectories, so forwarding every sample asynchronously made each goal abort
+  the previous one during its acceleration phase — the fingers never moved on
+  the real robot (the simulation tolerates concurrent goals);
+- parameters (runtime settable): `speed` (m/s, default 1.0), `force` (N, default
+  10.0), `epsilon_inner`/`epsilon_outer` (m, default 0.005), `min_change` (m,
+  default 0.0005), `max_width` (m, default 0.08), `use_grasp` (default true;
+  `false` sends `Move` without force), `auto_home` (default true; homes the hand
+  before the first command), `command_timeout` (s, default 5.0), `home_timeout`
+  (s, default 10.0);
+- goal responses and results are logged, so a rejected goal, a `CommandException`
+  or a blocked motion is visible instead of silently dropped. "Stopped short of
+  the target width (object detected)" is the normal outcome of closing on an
+  object.
+
+Offline check of the scheduling logic (fake action servers, no robot needed):
+
+```bash
+python3 tools/tests/gripper_bridge_panda_style_test.py            # Grasp path (default)
+python3 tools/tests/gripper_bridge_panda_style_test.py --use-move # use_grasp:=false
+```
+
+Simulation keeps the existing `gripper_action_bridge` executable unchanged.
+Pass `arm_id:=left` or `arm_id:=right`; commands use
+`/mj_<arm_id>_gripper/*_desired`, actions/services use
+`/mj_<arm_id>_gripper_sim_node/`, and grasp status is published on
+`/mj_<arm_id>_gripper/grasp_status`. Existing task launch files remain compatible.
+
 # 双臂/单臂夹爪 (Franka Gripper) 控制说明
 
 为了方便在外部宿主机（例如 ROS 2 Jazzy 环境）控制仿真容器内（Humble）的机械臂夹爪，且**无需在宿主机端编译和安装任何自定义的 `franka_msgs`**，本项目在控制层实现了一个高级动作桥接节点 (`gripper_action_bridge`)。

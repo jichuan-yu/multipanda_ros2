@@ -93,13 +93,4 @@
         </description>
     </class>
 
-    <class name="franka_example_controllers/DualArmMprcController"
-           type="franka_example_controllers::DualArmMprcController"
-           base_class_type="controller_interface::ControllerInterface">
-        <description>
-            MPRC middle-layer: subscribes to /dualarm_mprc/pose_desired (Cartesian targets),
-            applies collision and joint-limit avoidance via redundancy_resolution,
-            and publishes joint targets to /dual_joint_impedance/joints_desired.
-        </description>
-    </class>
 </library>

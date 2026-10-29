@@ -165,9 +165,9 @@ CallbackReturn CartesianImpedanceController::on_configure(
       franka_semantic_components::FrankaRobotModel(arm_id_ + "/robot_model",
                                                    arm_id_));
   ee_pose_publisher_ = get_node()->create_publisher<geometry_msgs::msg::PoseStamped>(
-      "/cartesian_impedance/ee_pose", 1);
+      "/" + arm_id_ + "/ee_pose", 1);
   external_wrench_publisher_ = get_node()->create_publisher<geometry_msgs::msg::WrenchStamped>(
-      "/cartesian_impedance/external_wrench", 1);
+      "/" + arm_id_ + "/external_wrench", 1);
   auto parameters = get_node()->list_parameters({}, 10);
   return CallbackReturn::SUCCESS;
 }

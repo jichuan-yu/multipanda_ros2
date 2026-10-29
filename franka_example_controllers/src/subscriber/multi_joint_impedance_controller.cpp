@@ -5,6 +5,7 @@
 #include <exception>
 #include <string>
 #include <algorithm>
+#include <array>
 
 #include <Eigen/Eigen>
 #include "sensor_msgs/msg/joint_state.hpp"
@@ -43,7 +44,7 @@ MultiJointImpedanceController::state_interface_configuration() const {
 
 controller_interface::return_type MultiJointImpedanceController::update(
     const rclcpp::Time& /*time*/,
-    const rclcpp::Duration& /*period*/) {
+    const rclcpp::Duration& period) {
   updateJointStates();
   const rclcpp::Time stamp = get_node()->now();
 
@@ -53,6 +54,15 @@ controller_interface::return_type MultiJointImpedanceController::update(
     publish_allowed_ = (publish_cycle_counter_ == 0);
   }
   
+  const double dt = std::clamp(period.seconds(), 0.0001, 0.01);
+  const auto now = std::chrono::steady_clock::now();
+  bool commands_fresh = true;
+  for (auto& pair : arms_) {
+    const auto* command = pair.second.command_buffer_->readFromRT();
+    commands_fresh &= command && command->valid &&
+        (command_timeout_ <= 0. || std::chrono::duration<double>(now-command->received).count() <= command_timeout_);
+  }
+  const bool hold = command_timeout_ > 0. && !commands_fresh;
   size_t k = 0;
   for(auto& arm_container_pair : arms_){
     auto &arm = arm_container_pair.second;
@@ -60,11 +70,31 @@ controller_interface::return_type MultiJointImpedanceController::update(
     Eigen::Map<const Vector7d> coriolis_map(coriolis_array.data());
     Vector7d coriolis = coriolis_map;
 
+    const auto* command = arm.command_buffer_->readFromRT();
+    if (hold) {
+      if (!watchdog_holding_) arm.q_d_target_ = arm.q_;
+      arm.q_d_target_raw_ = arm.q_d_target_;
+      arm.dq_d_target_raw_.setZero();
+    } else if (command && command->valid) {
+      arm.q_d_target_raw_ = command->q;
+      arm.dq_d_target_raw_ = command->dq;
+    }
+    const Vector7d previous_q = arm.q_d_target_;
+    const Vector7d previous_dq = arm.dq_d_target_;
     arm.q_d_target_ =
         (1.0 - arm.alpha_filt_) * arm.q_d_target_ + arm.alpha_filt_ * arm.q_d_target_raw_;
     arm.dq_d_target_ =
         (1.0 - arm.alpha_filt_) * arm.dq_d_target_ + arm.alpha_filt_ * arm.dq_d_target_raw_;
 
+    if (max_joint_velocity_ > 0.) {
+      const double step = max_joint_velocity_ * dt;
+      arm.q_d_target_ = previous_q + (arm.q_d_target_-previous_q).cwiseMax(-step).cwiseMin(step);
+      arm.dq_d_target_ = arm.dq_d_target_.cwiseMax(-max_joint_velocity_).cwiseMin(max_joint_velocity_);
+    }
+    if (max_joint_acceleration_ > 0.) {
+      const double step = max_joint_acceleration_ * dt;
+      arm.dq_d_target_ = previous_dq + (arm.dq_d_target_-previous_dq).cwiseMax(-step).cwiseMin(step);
+    }
     const Vector7d q_error =
         (arm.q_d_target_ - arm.q_).cwiseMin(arm.e_q_max_).cwiseMax(-arm.e_q_max_);
     const Vector7d dq_error = arm.dq_d_target_ - arm.dq_;
@@ -78,11 +108,18 @@ controller_interface::return_type MultiJointImpedanceController::update(
       publishFilteredTarget(arm, stamp);
     }
     
+    if (max_torque_rate_ > 0.) {
+      const auto& previous = arm.franka_robot_model_->getRobotState()->tau_J_d;
+      const double step = max_torque_rate_ * dt;
+      for (int i = 0; i < num_joints; ++i)
+        tau_d_calculated(i) = previous[i] + std::clamp(tau_d_calculated(i)-previous[i], -step, step);
+    }
     for (int i = 0; i < num_joints; i++) {
       command_interfaces_[k].set_value(tau_d_calculated(i));
       k++;
     }
   }
+  watchdog_holding_ = hold;
   if (publish_rate_ > 0.0 && publish_cycles_ > 0) {
     publish_cycle_counter_ = (publish_cycle_counter_ + 1) % publish_cycles_;
   }
@@ -96,6 +133,10 @@ CallbackReturn MultiJointImpedanceController::on_init() {
     if(!bHas_arm_count){
       auto_declare<int>("arm_count", 0);
     }
+    auto_declare<double>("command_timeout", 0.0);
+    auto_declare<double>("max_joint_velocity", 0.0);
+    auto_declare<double>("max_joint_acceleration", 0.0);
+    auto_declare<double>("max_torque_rate", 0.0);
     auto_declare<double>("publish_rate", 100.0);
     auto_declare<double>("control_frequency", 1000.0);
   } catch (const std::exception& e) {
@@ -115,6 +156,12 @@ CallbackReturn MultiJointImpedanceController::on_configure(
     return CallbackReturn::FAILURE;
   }
 
+  command_timeout_ = get_node()->get_parameter("command_timeout").as_double();
+  max_joint_velocity_ = get_node()->get_parameter("max_joint_velocity").as_double();
+  max_joint_acceleration_ = get_node()->get_parameter("max_joint_acceleration").as_double();
+  max_torque_rate_ = get_node()->get_parameter("max_torque_rate").as_double();
+  for (double value : {command_timeout_, max_joint_velocity_, max_joint_acceleration_, max_torque_rate_})
+    if (!std::isfinite(value) || value < 0.) return CallbackReturn::FAILURE;
   publish_rate_ = get_node()->get_parameter("publish_rate").as_double();
   control_frequency_ = get_node()->get_parameter("control_frequency").as_double();
   if (publish_rate_ > 0.0 && control_frequency_ > 0.0) {
@@ -144,6 +191,7 @@ CallbackReturn MultiJointImpedanceController::on_configure(
     std::string prefix = "arm_" + std::to_string(i) + ".";
     auto &arm = arm_container_pair.second;
     arm.arm_id_ = arm_container_pair.first;
+    arm.command_buffer_ = std::make_shared<realtime_tools::RealtimeBuffer<DesiredCommand>>();
     
     arm.franka_robot_model_ = std::make_unique<franka_semantic_components::FrankaRobotModel>(
       franka_semantic_components::FrankaRobotModel(arm.arm_id_ + "/robot_model", arm.arm_id_));
@@ -224,6 +272,7 @@ CallbackReturn MultiJointImpedanceController::on_activate(
     arm.q_d_target_raw_ = arm.q_;
     arm.dq_d_target_.setZero();
     arm.dq_d_target_raw_.setZero();
+    arm.command_buffer_->initRT(DesiredCommand{});
     arm.franka_robot_model_->assign_loaned_state_interfaces(state_interfaces_);
     if (arm.realtime_joint_state_publisher_) {
       auto &msg = arm.realtime_joint_state_publisher_->msg_;
@@ -245,6 +294,7 @@ CallbackReturn MultiJointImpedanceController::on_activate(
       msg.effort.resize(num_joints);
     }
   }
+  watchdog_holding_ = true;
   start_time_ = this->get_node()->now();
   return CallbackReturn::SUCCESS;
 }
@@ -367,6 +417,7 @@ void MultiJointImpedanceController::desiredJointCallback(const sensor_msgs::msg:
     return;
   }
 
+  DesiredCommand command;
   for (int joint_index = 0; joint_index < num_joints; ++joint_index) {
     const std::string joint_name = arm.arm_id_ + "_joint" + std::to_string(joint_index + 1);
     const auto it = std::find(msg.name.begin(), msg.name.end(), joint_name);
@@ -378,9 +429,23 @@ void MultiJointImpedanceController::desiredJointCallback(const sensor_msgs::msg:
     }
 
     const size_t msg_index = static_cast<size_t>(std::distance(msg.name.begin(), it));
-    arm.q_d_target_raw_(joint_index) = msg.position.at(msg_index);
-    arm.dq_d_target_raw_(joint_index) = msg.velocity.empty() ? 0.0 : msg.velocity.at(msg_index);
+    command.q(joint_index) = msg.position.at(msg_index);
+    command.dq(joint_index) = msg.velocity.empty() ? 0.0 : msg.velocity.at(msg_index);
   }
+  if (!command.q.allFinite() || !command.dq.allFinite()) return;
+  const std::array<double, 7> lower = {-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973};
+  const std::array<double, 7> upper = {2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973};
+  for (int i = 0; i < num_joints; ++i) {
+    if (command.q(i) < lower[i] || command.q(i) > upper[i] ||
+        (max_joint_velocity_ > 0. && std::abs(command.dq(i)) > max_joint_velocity_ + 1e-6)) return;
+  }
+  if (command_timeout_ > 0.) {
+    const double age = (get_node()->now() - rclcpp::Time(msg.header.stamp)).seconds();
+    if (age < -.05 || age > command_timeout_) return;
+  }
+  command.received = std::chrono::steady_clock::now();
+  command.valid = true;
+  arm.command_buffer_->writeFromNonRT(command);
 }
 
 }  // namespace franka_example_controllers

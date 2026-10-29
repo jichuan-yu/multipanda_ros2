@@ -95,6 +95,11 @@ install(
 )
 
 if(BUILD_TESTING)
+    add_executable(test_tray_command_guard test/test_tray_command_guard.cpp)
+    target_link_libraries(test_tray_command_guard ${PROJECT_NAME})
+    ament_target_dependencies(test_tray_command_guard rclcpp controller_interface hardware_interface franka_semantic_components)
+    add_test(NAME tray_command_guard COMMAND test_tray_command_guard)
+    set_tests_properties(tray_command_guard PROPERTIES ENVIRONMENT "ROS_DOMAIN_ID=227;ROS_LOCALHOST_ONLY=1" TIMEOUT 20)
     find_package(ament_cmake_clang_format REQUIRED)
     find_package(ament_cmake_copyright REQUIRED)
     find_package(ament_cmake_cppcheck REQUIRED)

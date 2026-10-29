@@ -9,6 +9,10 @@
   <xacro:arg name="use_fake_hardware" default="false"/>
   <xacro:arg name="fake_sensor_commands" default="false"/>
   
+  <xacro:arg name="base_xyz_1" default="0 0.26 0"/>
+  <xacro:arg name="base_xyz_2" default="0 -0.26 0"/>
+  <xacro:arg name="base_rpy_1" default="0 0 0"/>
+  <xacro:arg name="base_rpy_2" default="0 0 0"/>
   <link name="base_link">
     <visual>
       <geometry>
@@ -29,8 +33,8 @@
   <xacro:panda_arm arm_id="$(arg arm_id_1)" connected_to="base_link" rpy="${-90 * pi/180} 0 ${-90 * pi/180}"  xyz="-143.26e-3 +600e-3 924.51e-3" safety_distance="0.03"/>
   <xacro:panda_arm arm_id="$(arg arm_id_2)" connected_to="base_link" rpy="${+90 * pi/180} 0 ${+90 * pi/180}"  xyz="-143.26e-3 -600e-3 924.51e-3" safety_distance="0.03"/>
   -->
-  <xacro:panda_arm arm_id="$(arg arm_id_1)" connected_to="base_link" rpy="0 0 0"  xyz="0 +0.26 0" safety_distance="0.03"/>
-  <xacro:panda_arm arm_id="$(arg arm_id_2)" connected_to="base_link" rpy="0 0 0"  xyz="0 -0.26 0" safety_distance="0.03"/>
+  <xacro:panda_arm arm_id="$(arg arm_id_1)" connected_to="base_link" rpy="$(arg base_rpy_1)"  xyz="$(arg base_xyz_1)" safety_distance="0.03"/>
+  <xacro:panda_arm arm_id="$(arg arm_id_2)" connected_to="base_link" rpy="$(arg base_rpy_2)"  xyz="$(arg base_xyz_2)" safety_distance="0.03"/>
 
   <xacro:if value="$(arg hand_1)">
     <xacro:include filename="$(find franka_description)/robots/common/hand.xacro"/>

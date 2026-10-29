@@ -12,6 +12,8 @@
 #include "geometry_msgs/msg/wrench_stamped.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include <realtime_tools/realtime_publisher.h>
+#include <realtime_tools/realtime_buffer.h>
+#include <chrono>
 
 using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 namespace franka_example_controllers {
@@ -19,6 +21,12 @@ namespace franka_example_controllers {
 class MultiJointImpedanceController : public controller_interface::ControllerInterface {
  public:
   using Vector7d = Eigen::Matrix<double, 7, 1>;
+  struct DesiredCommand {
+    Vector7d q = Vector7d::Zero();
+    Vector7d dq = Vector7d::Zero();
+    std::chrono::steady_clock::time_point received{};
+    bool valid = false;
+  };
   struct ArmContainer{
     std::string arm_id_;
     Vector7d q_;
@@ -38,6 +46,7 @@ class MultiJointImpedanceController : public controller_interface::ControllerInt
     std::shared_ptr<realtime_tools::RealtimePublisher<geometry_msgs::msg::WrenchStamped>> realtime_external_wrench_publisher_;
     std::shared_ptr<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>> realtime_joint_state_publisher_;
     std::vector<std::string> joint_names_;
+    std::shared_ptr<realtime_tools::RealtimeBuffer<DesiredCommand>> command_buffer_;
   };
 
   controller_interface::InterfaceConfiguration command_interface_configuration() const override;
@@ -49,6 +58,9 @@ class MultiJointImpedanceController : public controller_interface::ControllerInt
   CallbackReturn on_activate(const rclcpp_lifecycle::State& previous_state) override;
 
  private:
+  double command_timeout_ = 0.;
+  double max_joint_velocity_ = 0., max_joint_acceleration_ = 0., max_torque_rate_ = 0.;
+  bool watchdog_holding_ = true;
   int num_robots;
   const int num_joints = 7;
   std::map<std::string, ArmContainer> arms_;

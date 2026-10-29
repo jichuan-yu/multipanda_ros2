@@ -9,6 +9,7 @@
 #include <std_srvs/srv/trigger.hpp>
 #include <string>
 #include <vector>
+#include <cmath>
 
 using MoveAction = franka_msgs::action::Move;
 using GraspAction = franka_msgs::action::Grasp;
@@ -24,13 +25,16 @@ public:
         this->declare_parameter<std::string>("arm_id", "left");
         std::string arm_id_ = this->get_parameter("arm_id").as_string();
 
-        auto node_prefix = "/mj_" + arm_id_ + "_gripper_sim_node";
+        this->declare_parameter<std::string>("action_node", "/mj_" + arm_id_ + "_gripper_sim_node");
+        this->declare_parameter<std::string>("topic_prefix", "/mj_" + arm_id_ + "_gripper");
+        const auto node_prefix = this->get_parameter("action_node").as_string();
+        const auto topic_prefix = this->get_parameter("topic_prefix").as_string();
         
         // Topic Names
-        auto sub_topic_move = "/mj_" + arm_id_ + "_gripper/width_desired";
-        auto sub_topic_grasp = "/mj_" + arm_id_ + "_gripper/grasp_desired";
-        auto sub_topic_homing = "/mj_" + arm_id_ + "_gripper/homing_desired";
-        auto sub_topic_stop = "/mj_" + arm_id_ + "_gripper/stop_desired";
+        auto sub_topic_move = topic_prefix + "/width_desired";
+        auto sub_topic_grasp = topic_prefix + "/grasp_desired";
+        auto sub_topic_homing = topic_prefix + "/homing_desired";
+        auto sub_topic_stop = topic_prefix + "/stop_desired";
 
         // Action / Service Names
         auto action_move = node_prefix + "/move";
@@ -56,7 +60,7 @@ public:
             std::bind(&GripperActionBridge::stop_callback, this, std::placeholders::_1));
 
         grasp_status_pub_ = this->create_publisher<std_msgs::msg::Float64MultiArray>(
-            "/mj_" + arm_id_ + "_gripper/grasp_status", 10);
+            topic_prefix + "/grasp_status", 10);
 
         // Action Clients
         move_client_ = rclcpp_action::create_client<MoveAction>(this, action_move);
@@ -96,6 +100,25 @@ private:
         // Optional sixth element correlates automation requests. Legacy five-
         // element teleop commands remain compatible and report request_id=0.
         const double request_id = msg->data.size() > 5 ? msg->data[5] : 0.0;
+        // Optional seventh field requests Move with correlated completion (opening).
+        if (msg->data.size() > 6 && msg->data[6] > .5) {
+            if (msg->data.size() < 2 || !std::isfinite(msg->data[0]) || !std::isfinite(msg->data[1]) ||
+                msg->data[0] < 0. || msg->data[0] > .08 || msg->data[1] <= 0. || msg->data[1] > .1 ||
+                !move_client_->wait_for_action_server(std::chrono::milliseconds(500))) {
+                publish_grasp_status(request_id, -1.); return;
+            }
+            MoveAction::Goal goal; goal.width = msg->data[0]; goal.speed = msg->data[1];
+            auto options = rclcpp_action::Client<MoveAction>::SendGoalOptions();
+            options.goal_response_callback = [this, request_id](rclcpp_action::ClientGoalHandle<MoveAction>::SharedPtr handle) {
+                publish_grasp_status(request_id, handle ? 1. : -1.);
+            };
+            options.result_callback = [this, request_id](const rclcpp_action::ClientGoalHandle<MoveAction>::WrappedResult& result) {
+                publish_grasp_status(request_id, result.code == rclcpp_action::ResultCode::SUCCEEDED &&
+                    result.result && result.result->success ? 2. : -2.);
+            };
+            move_client_->async_send_goal(goal, options);
+            return;
+        }
         if (!grasp_client_->wait_for_action_server(std::chrono::milliseconds(500))) {
             RCLCPP_WARN(this->get_logger(), "Grasp action server not available.");
             publish_grasp_status(request_id, -1.0);

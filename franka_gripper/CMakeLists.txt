@@ -27,6 +27,7 @@ add_library(gripper_server SHARED
         src/gripper_action_server.cpp)
 
 target_link_libraries(gripper_server Franka::Franka)
+set_target_properties(gripper_server PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 target_include_directories(gripper_server PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
